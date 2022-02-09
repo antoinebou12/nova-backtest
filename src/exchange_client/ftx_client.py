@@ -226,7 +226,7 @@ class FtxClient:
     def get_pairs_list(self) -> List:
         """Get USDT pairs from FTX
 
-           @:return: list of USDT pairs
+           :return: list of USDT pairs
         """
 
         d = self.list_markets()
