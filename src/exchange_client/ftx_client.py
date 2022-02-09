@@ -8,6 +8,10 @@ from ciso8601 import parse_datetime
 
 
 class FtxClient:
+    """
+        Client to interact with the FTX Rest API.
+    """
+
     # FTX API ENDPOINT #
     _ENDPOINT = 'https://ftx.com/api/'
 
@@ -85,11 +89,16 @@ class FtxClient:
         existing_client_order_id: Optional[str] = None, price: Optional[float] = None,
         size: Optional[float] = None, client_order_id: Optional[str] = None,
     ) -> dict:
+        """
+            TODO: documentation
+        """
+
         assert (existing_order_id is None) ^ (existing_client_order_id is None), \
             'Must supply exactly one ID for the order to modify'
         assert (price is None) or (size is None), 'Must modify price or size of order'
         path = f'orders/{existing_order_id}/modify' if existing_order_id is not None else \
             f'orders/by_client_id/{existing_client_order_id}/modify'
+
         return self._post(path, {
             **({'size': size} if size is not None else {}),
             **({'price': price} if price is not None else {}),
@@ -102,6 +111,10 @@ class FtxClient:
     def place_order(self, market: str, side: str, price: float, size: float, type: str = 'limit',
                     reduce_only: bool = False, ioc: bool = False, post_only: bool = False,
                     client_id: str = None) -> dict:
+        """
+            TODO: documentation
+        """
+        
         return self._post('orders', {'market': market,
                                      'side': side,
                                      'price': price,
@@ -161,6 +174,9 @@ class FtxClient:
         return next(filter(lambda x: x['future'] == name, self.get_positions(show_avg_price)), None)
 
     def get_all_trades(self, market: str, start_time: float = None, end_time: float = None) -> List:
+        """
+            TODO: documentation
+        """
         ids = set()
         limit = 100
         results = []
