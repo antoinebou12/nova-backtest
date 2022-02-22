@@ -4,13 +4,11 @@ with open("README.md", "r") as fh:
     long_description = fh.read()
 
 setuptools.setup(
-    name="python-novalab",
+    name="python-novalabs",
     version="0.0.1",
-    author="Nova Lab",
+    author="Nova Labs",
     author_email="devteam@novalabs.ai",
-    description="Utility package for Nova Labs ressources",
-    long_description=long_description,
-    long_description_content_type="text/markdown",
+    description="Nova API & Exchange client",
     url="https://github.com/Nova-DevTeam/python-nova",
     packages=setuptools.find_packages(),
     classifiers=[
