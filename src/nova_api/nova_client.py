@@ -30,12 +30,7 @@ class NovaClient:
         return self._client.execute(GraphQuery.bots())
 
 
-client = NovaClient(api_secret='eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJfaWQiOiI2MjA2OGU2ZDg1OTQwZTI5YjZjZDMwYjMiLCJuY'
-                               'W1lIjoiYWRtaW4xMjMiLCJlbWFpbCI6ImFkbWluMTIzQG5vdmFsYWJzLmFpIiwicGFzc3dvcmQiOiIkMmIkMTAk'
-                               'V3VCaHFNaE5qTkJYU3Y4QVZReWdkLlM3VG5uR1V3eHZiNi9sWjJheHIuYncwSVU2eDNyTU8iLCJfX3YiOjAsIml'
-                               'hdCI6MTY0NDg1NDgzMH0.gghxnHzISTNuTAe5w6tS6f38AoQHy_lEBFBGDY9q3HkYWmvElFEV52HQu86KVtVfpn'
-                               '7I1GI85_wCqr2FLOUDQ9F4HNDauRXFDsAwcopMlNSGvA3JzCr62MpKE9WiPwY26V5a3ugbm3qBQwy749kBlq-OP'
-                               'CTQxXMmvUXFOLVcWGA')
+client = NovaClient(api_secret='deleted')
 
 result = client.get_all_bots()
 bot_nbr = len(result['bots'])
