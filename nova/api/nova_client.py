@@ -2,11 +2,11 @@ from gql import Client
 from gql.transport.aiohttp import AIOHTTPTransport
 import sys
 
-from src.nova_api.nova_graphql.mutation import GraphMutation
-from src.nova_api.nova_graphql.query import GraphQuery
+from nova.api.nova_graphql.mutation import GraphMutation
+from nova.api.nova_graphql.query import GraphQuery
 
-from src.nova_api.entity import Bot, Strategy
-from src.nova_api.structure import Structure
+from nova.api.entity import Bot, Strategy
+from nova.api.structure import Structure
 
 
 class NovaClient:

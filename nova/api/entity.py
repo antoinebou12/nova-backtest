@@ -1,4 +1,4 @@
-from src.nova_api.structure import Structure
+from nova.api.structure import Structure
 
 
 class Entity:

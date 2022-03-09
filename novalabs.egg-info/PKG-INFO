@@ -1,0 +1,13 @@
+Metadata-Version: 1.1
+Name: novalabs
+Version: 0.0.2
+Summary: Nova API & Exchange client
+Home-page: https://github.com/Nova-DevTeam/nova-python
+Author: Nova Labs
+Author-email: devteam@novalabs.ai
+License: UNKNOWN
+Description: UNKNOWN
+Platform: UNKNOWN
+Classifier: Programming Language :: Python :: 3
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Operating System :: OS Independent
