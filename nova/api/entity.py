@@ -28,7 +28,7 @@ class Pair(Entity):
 
 
 class Bot(Entity):
-    def __init__(self, object_id: str, name: str, exchange: str, strategy: Strategy, positions: []):
+    def __init__(self, object_id: str, name: str, exchange: str, strategy: Strategy, positions: list):
         super().__init__(object_id)
         self.exchange = exchange
         self.strategy = strategy
