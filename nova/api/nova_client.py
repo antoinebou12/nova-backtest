@@ -39,12 +39,12 @@ class NovaClient:
         return self._client.execute(query, variable_values=params)
 
         
-    def create_bot(self, name: str, exhange: str, strategy: str) -> dict:
+    def create_bot(self, name: str, exchange: str, strategy: str) -> dict:
         query = GraphMutation.create_bot_query()
         params = {
             "input": {
                 "name": name,
-                "exhange": exhange,
+                "exchange": exchange,
                 "strategy": {
                     "name": strategy
                 },
@@ -56,6 +56,7 @@ class NovaClient:
     def create_new_bot_position(self, bot_name: str, post_type: str, value: float,
                                 state: str, entry_price: float, take_profit: float, 
                                 stop_loss: float, pair: str):
+        
         query = GraphMutation.new_bot_position_query()
         params = {
             "name": bot_name,

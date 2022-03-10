@@ -70,7 +70,7 @@ class GraphMutation:
         return gql(
             """
             mutation editPosition($input: PositionInput!){
-                positions(input: $input){
+                editPosition(input: $input){
                     _id
                     state
                 }
