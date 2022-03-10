@@ -19,3 +19,8 @@ class GraphQuery:
             }
         }
         ''')
+        
+    @staticmethod
+    def positions():
+        return gql('''
+                   ''')
