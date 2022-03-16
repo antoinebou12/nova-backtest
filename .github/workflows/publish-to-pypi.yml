@@ -1,8 +1,6 @@
 name: Publish Python 🐍 distributions 📦 to PyPI
 
-on:
-  push:
-  branch_protection_rule: [ Master ]
+on: push
 
 jobs:
   build-n-publish:
