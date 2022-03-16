@@ -4,6 +4,7 @@ from gql.transport.aiohttp import AIOHTTPTransport
 from nova.api.nova_graphql.mutation import GraphMutation
 from nova.api.nova_graphql.query import GraphQuery
 
+
 class NovaClient:
 
     def __init__(self, api_secret=None) -> None:
@@ -74,7 +75,8 @@ class NovaClient:
         }
         return self._client.execute(query, variable_values=params)
     
-    def update_bot_position(self, pos_id: str, state: str, exit_price: float,
+    def update_bot_position(self, pos_id: str, state: str,
+                            entry_price: float, exit_price: float,
                             exit_type: str, profit: float, fees: float):
         
         query = GraphMutation.update_bot_position_query()
@@ -82,6 +84,7 @@ class NovaClient:
             "input": {
                 "id": pos_id,
                 "state": state,
+                "entry_price": entry_price,
                 "exit_price": exit_price,
                 "exit_type": exit_type,
                 "profit": profit,

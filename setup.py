@@ -5,7 +5,7 @@ with open("README.md", "r") as fh:
 
 setuptools.setup(
     name="novalabs",
-    version="0.0.4",
+    version="0.0.6",
     author="Nova Labs",
     author_email="devteam@novalabs.ai",
     description="Nova API & Exchange client",

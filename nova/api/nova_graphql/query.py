@@ -2,6 +2,16 @@ from gql import gql
 
 
 class GraphQuery:
+    
+    @staticmethod
+    def strategies():
+        return gql(
+        """
+            query 
+        """
+        )
+
+    
     @staticmethod
     def bots():
         return gql('''
@@ -23,4 +33,5 @@ class GraphQuery:
     @staticmethod
     def positions():
         return gql('''
+                   
                    ''')

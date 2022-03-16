@@ -53,14 +53,7 @@ class GraphMutation:
             """
             mutation newBotPosition($name: String!, $input: PositionInput!) {
                 newBotPosition(name: $name, input: $input) {
-                    name
-                    exchange
-                    strategy
-                    positions {
-                        type
-                        state
-                        value
-                    }
+                    _id
                 }
             }
             """)
