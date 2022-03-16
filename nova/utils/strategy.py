@@ -284,8 +284,7 @@ class Strategy:
                 position[pos['symbol']] = pos
         return position
 
-    def _push_backend(self, entry_tx: list, exit_tx: list, nova_tx_id: str, exit_type: str):
-
+    def _push_backend(self, entry_tx: list, exit_tx: list, nova_tx_id: str, exit_type: str):       
         commission_entry = 0
         commission_exit = 0
         entry_total = 0

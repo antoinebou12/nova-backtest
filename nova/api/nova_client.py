@@ -15,9 +15,8 @@ class NovaClient:
         self._client = Client(transport=self._transport,
                               fetch_schema_from_transport=True)
         
-    def create_pair(self, pair: str):
+    def create_pair(self, pair: str) -> dict:
         query = GraphMutation.create_pair_query()
-
         params = {
             "input": {
                 "name": pair
@@ -26,7 +25,7 @@ class NovaClient:
         
         return self._client.execute(query, variable_values=params)
     
-    def create_strategy(self, name: str, candle: str, avg_return_e: float, avg_return_r: float):
+    def create_strategy(self, name: str, candle: str, avg_return_e: float, avg_return_r: float) -> dict:
         query = GraphMutation.create_strategy_query()
         
         params = {
