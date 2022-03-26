@@ -322,17 +322,42 @@ class Strategy:
             total_fee_usd
         )
 
-    def is_max_holding(self):
+    def exit_position(self, pair, side, quantity, entry_order_id, nova_id, index_opened):
 
+        # Exit send on the market
+        order = self.client.futures_create_order(symbol=pair, side=side, type='MARKET', quantity=quantity)
+
+        time.sleep(2)
+
+        # Extract the entry and exit transactions
+        entry_tx = self.client.futures_account_trades(orderId=entry_order_id)
+        exit_tx = self.client.futures_account_trades(orderId=order.orderId)
+
+        print('Update Back end data')
+        self._push_backend(entry_tx, exit_tx, nova_id, 'MAX_HOLDING')
+
+        # remove the position from the dataframe
+        self.position_opened.drop(self.position_opened.index[index_opened], inplace=True)
+
+    def is_max_holding(self):
+        """
+        Returns:
+            This method is used to check if the maximum holding time is reached for each open positions.
+        """
+
+        # Compute the current time
         s_time = self.client.get_server_time()
         server_time = int(str(s_time['serverTime'])[:-3])
         server = datetime.fromtimestamp(server_time)
 
         for index, row in self.position_opened.iterrows():
+
+            # get the number of hours since opening
             entry_time_date = datetime.fromtimestamp(int(row.time))
             diff = server - entry_time_date
             diff_in_hours = diff.total_seconds() / 3600
 
+            # create the Exit Side
             if diff_in_hours >= self.max_holding:
 
                 if row.side == 'BUY':
@@ -340,20 +365,9 @@ class Strategy:
                 elif row.side == 'SELL':
                     exit_side = 'BUY'
 
-            order = self.client.futures_create_order(symbol=row.pair, side=exit_side, type='MARKET',
-                                                     quantity=row.quantity)
-
-            time.sleep(2)
-
-            entry_tx = self.client.futures_account_trades(orderId=row.id)
-            exit_tx = self.client.futures_account_trades(orderId=order.orderId)
-
-            print('Update Back end data')
-            self._push_backend(entry_tx, exit_tx, row.nova_id, 'MAX_HOLDING')
-
-            self.position_opened.drop(self.position_opened.index[index], inplace=True)
-
-
-
-
-
+            self.exit_position(pair=row.pair,
+                               side=exit_side,
+                               quantity=row.quantity,
+                               entry_order_id=row.id,
+                               nova_id=row.nova_id,
+                               index_opened=index)
