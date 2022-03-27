@@ -2,6 +2,7 @@ import numpy as np
 import pandas as pd
 from datetime import datetime, timedelta
 import matplotlib.pyplot as plt
+import re
 
 from nova.utils.constant import EXCEPTION_LIST_BINANCE, VAR_NEEDED_FOR_POSITION
 
@@ -195,6 +196,16 @@ class BackTest:
 
         return df
 
+    def convert_hours_to_candle_nb(self) -> int:
+        multi = int(float(re.findall(r'\d+', self.candle)[0]))
+
+        if 'm' in self.candle:
+            return int(60 / multi * self.max_holding)
+        if 'h' in self.candle:
+            return int(1 / multi * self.max_holding)
+        if 'd' in self.candle:
+            return int(1 / (multi * 24) * self.max_holding)
+
     def create_closest_tp_sl(self, df: pd.DataFrame) -> pd.DataFrame:
         """
 
@@ -212,7 +223,9 @@ class BackTest:
 
         # creating all leading variables
 
-        for i in range(1, self.max_holding + 1):
+        nb_candle = self.convert_hours_to_candle_nb()
+        
+        for i in range(1, nb_candle + 1):
             condition_sl_long = (df.low.shift(-i) <= df.all_sl) & (df.all_entry_point == 1)
             condition_sl_short = (df.high.shift(-i) >= df.all_sl) & (df.all_entry_point == -1)
             condition_tp_short = (df.low.shift(-i) <= df.all_tp) & (df.high.shift(-i) <= df.all_sl) & (
