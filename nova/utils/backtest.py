@@ -141,7 +141,7 @@ class BackTest:
             for k in klines:
                 del k[6:]
 
-            df = pd.DataFrame(klines, columns=['timeUTC', 'open', 'high', 'low', 'close', 'volume'])
+            df = pd.DataFrame(klines, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
 
             num_var = ['volume', 'open', 'high', 'low', 'close']
             for var in num_var:
