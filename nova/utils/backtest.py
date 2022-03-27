@@ -54,9 +54,18 @@ class BackTest:
         self.df_all_positions = {}
         self.df_stat = pd.DataFrame()
         self.df_pos = pd.DataFrame()
-        self.df_pos['date'] = pd.date_range(start=start, end=end, freq="min")
+
+        df_freq = self.get_freq()
+
+        self.df_pos['date'] = pd.date_range(start=start, end=end, freq=df_freq)
         for var in ['all_positions', 'total_profit_bot', 'long_profit_bot', 'short_profit_bot']:
             self.df_pos[var] = 0
+
+    def get_freq(self) -> str:
+        if 'm' in self.candle:
+            return self.candle.replace('m', 'min')
+        else:
+            return self.candle
 
     def get_list_pair(self) -> list:
         """
@@ -202,6 +211,7 @@ class BackTest:
         lead_tp = []
 
         # creating all leading variables
+
         for i in range(1, self.max_holding + 1):
             condition_sl_long = (df.low.shift(-i) <= df.all_sl) & (df.all_entry_point == 1)
             condition_sl_short = (df.high.shift(-i) >= df.all_sl) & (df.all_entry_point == -1)
@@ -234,7 +244,7 @@ class BackTest:
         """
         Args:
             df: timeseries dataframe that contains the following variables all_entry_time, all_entry_point,
-            all_entry_price, all_exit_time, all_exit_point, all_tp, all_sl, all_exit
+            all_entry_price, all_exit_time, all_exit_point, all_tp, all_sl
             pair: pair that we are currently backtesting
         Returns:
         """
@@ -363,10 +373,10 @@ class BackTest:
         self.df_pos[f'PL_amt_realized_{pair}'] = self.df_pos['PL_amt_realized'].fillna(0)
         self.df_pos[f'total_profit_{pair}'] = self.df_pos[f'PL_amt_realized_{pair}'].cumsum()
 
-        condition_long_pl = (self.df_pos[f'in_position_{pair}'] == 1) & (
-                self.df_pos[f'in_position_{pair}'].shift(1) == 0)
-        condition_short_pl = (self.df_pos[f'in_position_{pair}'] == -1) & (
-                self.df_pos[f'in_position_{pair}'].shift(1) == 0)
+        condition_long_pl = (self.df_pos[f'in_position_{pair}'] == 0) & (
+                self.df_pos[f'in_position_{pair}'].shift(1) == 1)
+        condition_short_pl = (self.df_pos[f'in_position_{pair}'] == 0) & (
+                self.df_pos[f'in_position_{pair}'].shift(1) == -1)
 
         # add the long profit and short profit for plot
         self.df_pos['Long_PL_amt_realized'] = np.where(condition_long_pl, self.df_pos['PL_amt_realized'], 0)
