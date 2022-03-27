@@ -2,7 +2,9 @@ import numpy as np
 import pandas as pd
 from datetime import datetime, timedelta
 import matplotlib.pyplot as plt
+
 from nova.utils.constant import EXCEPTION_LIST_BINANCE, VAR_NEEDED_FOR_POSITION
+
 
 class BackTest:
     """
@@ -160,7 +162,7 @@ class BackTest:
 
             return df[(df.index >= self.start) & (df.index <= self.end)]
 
-    def create_all_tp_sl(self, df: pd.DataFrame) -> pd.Dataframe:
+    def create_all_tp_sl(self, df: pd.DataFrame) -> pd.DataFrame:
         """
         Args:
             df: dataframe that contains the 'all_entry_point' with the following properties:
