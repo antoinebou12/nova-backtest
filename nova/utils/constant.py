@@ -10,14 +10,50 @@ VAR_NEEDED_FOR_POSITION = [
 ]
 
 DEFINITION_STATISTIC = {
-    'per_position' : {
-        'nb_minutes_in_position': ''
+    'per_position_per_pair' : {
+        'nb_minutes_in_position': '',
+        'tx_fees_paid': '',
+        'PL_amt_realized': '',
+        'PL_prc_realized': '',
+        'next_entry_time': '',
+        'minutes_bf_next_position': ''
     },
     'per_pair_agg': {
-
+        'total_position': '',
+        'avg_minutes_in_position':'',
+        'total_profit_amt': '',
+        'total_profit_prc': '',
+        'total_tx_fees': '',
+        'avg_minutes_before_next_position': '',
+        'max_minutes_without_position': '',
+        'min_minutes_without_position': '',
+        'perc_winning_trade': '',
+        'avg_profit': '',
+        'nb_{pos}_position': '',
+        'nb_tp_{pos}': '',
+        'nb_sl_{pos}': '',
+        'nb_exit_{pos}': '',
+        'nb_ew_{pos}': '',
+        '{pos}_profit_amt': '',
+        '{pos}_profit_prc': '',
+        'avg_minutes_in_{pos}': '',
+        'nb_{ext}': '',
+        'avg_minutes_before_{ext}': '',
     },
     'per_pair_time': {
-
+        'all_positions': '',
+        'total_profit_bot': '',
+        'long_profit_bot': '',
+        'short_profit_bot': '',
+        'in_position_{pair}': '',
+        'total_profit_{pair}': '',
+        'long_profit_{pair}': '',
+        'short_profit_{pair}': '',
+    },
+    'global_bot_statistics': {
+        'average_profit': '',
+        'max_nb_pos': '',
+        'perc_winning_trade': ''
     }
 }
 

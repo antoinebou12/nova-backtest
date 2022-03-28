@@ -460,6 +460,7 @@ class BackTest:
         perf_dict['max_minutes_without_position'] = df['minutes_bf_next_position'].max()
         perf_dict['min_minutes_without_position'] = df['minutes_bf_next_position'].min()
         perf_dict['perc_winning_trade'] = len(df[df.PL_amt_realized > 0]) / len(df)
+        perf_dict['avg_profit'] = df['PL_prc_realized'].sum() / len(df)
 
         # add statistics per type of positions
         for pos, pos_df in position_stat.items():
@@ -481,3 +482,16 @@ class BackTest:
         # add the statistics to the general stats df_stat
         stat_perf = pd.DataFrame([perf_dict], columns=list(perf_dict.keys()))
         self.df_stat = pd.concat([self.df_stat, stat_perf])
+
+    def get_bot_stats(self) -> dict:
+        """
+        Returns:
+            return a dictionary with aggregated statistics on the bot
+        """
+        bot_statistics = dict()
+
+        bot_statistics['average_profit'] = self.df_stat.total_profit_amt.sum() / self.df_stat.total_position.sum()
+        bot_statistics['max_nb_pos'] = self.df_pos.all_positions.max()
+        bot_statistics['perc_winning_trade'] = (self.df_stat.total_position * self.df_stat.perc_winning_trade).sum() / self.df_stat.total_position.sum()
+
+        return bot_statistics
