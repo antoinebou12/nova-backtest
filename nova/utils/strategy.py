@@ -1,11 +1,10 @@
-import requests
 from decouple import config
-import json
 import pandas as pd
 from datetime import datetime
 import re
 from nova.api.nova_client import NovaClient
 import time
+from nova.utils.constant import POSITION_PROD_COLUMNS
 
 
 class Strategy:
@@ -17,22 +16,15 @@ class Strategy:
         self.take_profit = take_profit
         self.window_period = window
         self.max_holding = holding
-        columns = [
-            'id', 'pair', 'status', 'quantity', 'type', 'side', 'tp_id', 'tp_side',
-            'tp_type', 'tp_stopPrice', 'sl_id', 'sl_side', 'sl_type', 'sl_stopPrice',
-            'nova_id', 'time_entry'
-        ]
-        self.position_opened = pd.DataFrame(columns=columns)
+        self.position_opened = pd.DataFrame(columns=POSITION_PROD_COLUMNS)
         self.prod_data = {}
-        self.notification_token = config("Notification")
-        self.first_run = False
         self.nova = NovaClient(config('NovaAPISecret'))
 
-    def setup_leverage(self, pair: str, lvl: int = 4):
+    def setup_leverage(self, pair: str, lvl: int = 1):
         """
         Note: this function execute n API calls with n representing the number of pair in the list
         Args:
-            list_pair: list of pair ex: ['BTCUSDT', 'XRPUSDT']
+            pair: string that represent the pair you want to setup the leverage
             lvl: integer that increase
 
         Returns: None, This function update the leverage setting
@@ -43,32 +35,10 @@ class Strategy:
         except(Exception):
             print('Setting not working')
 
-    def get_notified(self, title: str, body: str):
-        """
-        Notes: This function is used send phone messages to user. We can use Telegram
-        services for this.
-        Args:
-            title: Title of the message
-            body: Body of the message
-
-        Returns: None
-        """
-
-        data_send = {"type": "note", "title": title, "body": body}
-        resp = requests.post('https://api.pushbullet.com/v2/pushes', data=json.dumps(data_send),
-                             headers={'Authorization': f'Bearer {self.notification_token}',
-                                      'Content-Type': 'application/json'})
-        if resp.status_code != 200:
-            raise Exception('Something wrong')
-
     def get_unit_multiplier(self) -> tuple:
         """
-        Args:
-            candle_string: is a string that represent the candle needed used in the dataset
-
         Returns: a tuple that contains the unit and the multiplier needed to extract the data
         """
-
         multi = int(float(re.findall(r'\d+', self.candle)[0]))
 
         if 'm' in self.candle:
@@ -83,29 +53,24 @@ class Strategy:
         Args:
             kline: is the list returned by get_historical_klines method from binance
 
-        Returns: the formated dataframe.
+        Returns: dataframe with usable format.
         """
         for k in kline:
             k[0] = datetime.fromtimestamp(int(str(k[0])[:10]))
             del k[6:]
 
         df = pd.DataFrame(kline, columns=['timeUTC', 'open', 'high', 'low', 'close', 'volume'])
-
         for var in ["volume", "open", "high", "low", "close"]:
             df[var] = pd.to_numeric(df[var], downcast="float")
-
         df['timeUTC'] = pd.to_datetime(df['timeUTC'])
-
         return df
 
-    def get_prod_data(self, list_pair: list, ):
+    def get_prod_data(self, list_pair: list):
         """
         Note: This function is called once when the bot is instantiated.
         This function execute n API calls with n representing the number of pair in the list
         Args:
-            list_pair: list of all the pairs you want to run the bot on ex: ['BTCUSDT', 'ETHUSDT']
-            candle: the data candle stick needed for the data ex: '15min'
-            window_period: number of candle stick needed to run the backtest
+            list_pair: list of all the pairs you want to run the bot on.
 
         Returns: None, but it fills the dictionary self.prod_data that will contain all the data
         needed for the analysis.
@@ -123,33 +88,27 @@ class Strategy:
             self.prod_data[pair]['data'] = df
             print('Starting', self.prod_data[pair]['latest_update'])
 
-    def update_prod_data(self,  pair: str, window_period: int = 100):
+    def update_prod_data(self,  pair: str):
         """
         Notes: This function execute 1 API call
 
         Args:
             pair:  pairs you want to run the bot on ex: 'BTCUSDT', 'ETHUSDT'
-            candle: the data candle stick needed for the data ex: '15min'
-            window_period: number of candle stick needed to run the backtest
-
 
         Returns: None, but it updates the dictionary self.prod_data that will contain all the data
         needed for the analysis.
         """
         unit, multi = self.get_unit_multiplier()
-
-        klines = self.client.get_historical_klines(pair,
-                                                   self.candle,
-                                                   f'{multi*2} {unit} ago UTC')
+        klines = self.client.get_historical_klines(pair, self.candle, f'{multi*2} {unit} ago UTC')
 
         df = self._data_fomating(klines)
 
         df_new = pd.concat([self.prod_data[pair]['data'], df])
         df_new = df_new.drop_duplicates(subset=['timeUTC']).sort_values(by=['timeUTC'], ascending=True)
         self.prod_data[pair]['latest_update'] = df_new['timeUTC'].max()
-        self.prod_data[pair]['data'] = df_new.tail(window_period)
+        self.prod_data[pair]['data'] = df_new.tail(self.window_period)
 
-    def get_quantity_precision(self, pair: str):
+    def get_quantity_precision(self, pair: str) -> tuple:
         """
         Note: => This function execute 1 API call to binance
 
@@ -163,11 +122,21 @@ class Strategy:
             if x['pair'] == pair:
                 return x['quantityPrecision'], x['pricePrecision']
 
-    def get_price_binance(self, pair: str):
+    def get_price_binance(self, pair: str) -> float:
+        """
+        Args:
+            pair: string variable that represent the pair ex: 'BTCUSDT'
+        Returns:
+            Float of the latest price for the pair.
+        """
         prc = self.client.get_recent_trades(symbol=pair)[-1]["price"]
         return float(prc)
 
-    def get_position_size(self):
+    def get_position_size(self) -> float:
+        """
+        Returns:
+            Float that represents the final position size taken by the bot
+        """
         futures_balances = self.client.futures_account_balance()
         balances = 0
         for balance in futures_balances:
@@ -179,20 +148,40 @@ class Strategy:
         else:
             return self.size
 
-    def create_strategy_data(self, name: str,  candle: str, avg_return_e: float, avg_return_r: float):
-        self.nova.create_strategy(name, candle, avg_return_e, avg_return_r)
+    def get_actual_position(self, list_pair: list) -> dict:
+        """
+        Note: => This function execute 1 API call to binance
+        Args:
+            list_pair: list of pair that we want to run analysis on
+        Returns: a dictionary containing all the current positions on binance
+        """
+        all_pos = self.client.futures_position_information()
+        position = {}
+        for pos in all_pos:
+            if float(pos['positionAmt']) != 0 and pos['symbol'] in list_pair:
+                position[pos['symbol']] = pos
+        return position
 
-    def enter_position(self, action: int, pair: str, bot_name:str):
+    def enter_position(self, action: int, pair: str, bot_name: str):
+        """
+        Args:
+            action: this is an integer that can get the value 1 (for long) or -1 (for short)
+            pair: is a string the represent the pair we are entering in position.
+            bot_name: is the name of the bot that is trading this pair
+        Returns:
+            Send transaction to the exchange and update the backend and the class
+        """
 
+        # get the price and size of the trade in USDT
         prc = self.get_price_binance(pair)
         size = self.get_position_size()
 
+        # get the quantity and the price precision
         quantity = (size / prc)
-
         q_precision, p_precision = self.get_quantity_precision(pair)
-
         quantity = float(round(quantity, q_precision))
 
+        # build the action information needed
         if action == 1:
             side = 'BUY'
             prc_tp = float(round(prc * (1 + self.take_profit), p_precision))
@@ -207,14 +196,16 @@ class Strategy:
             type_pos = 'SHORT'
             closing_side = 'BUY'
 
+        # send the transaction to the exchange
         order = self.client.futures_create_order(symbol=pair, side=side, type='MARKET', quantity=quantity)
 
         tp_open = self.client.futures_create_order(symbol=pair, side=closing_side, type='TAKE_PROFIT_MARKET',
-                                               stopPrice=prc_tp, closePosition=True)
+                                                   stopPrice=prc_tp, closePosition=True)
 
         sl_open = self.client.futures_create_order(symbol=pair, side=closing_side, type='STOP_MARKET',
-                                         stopPrice=prc_sl, closePosition=True)
+                                                   stopPrice=prc_sl, closePosition=True)
 
+        # update the backend data
         nova_data = self.nova.create_new_bot_position(
             bot_name=bot_name,
             post_type=type_pos,
@@ -225,8 +216,7 @@ class Strategy:
             stop_loss=float(sl_open['stopPrice']),
             pair=order['symbol'])
 
-        entry_time_reg = str(order['time'])[:-3]
-
+        # update the class position
         new_position = pd.DataFrame([{
             'id': order['orderId'],
             'pair': order['symbol'],
@@ -243,14 +233,24 @@ class Strategy:
             'sl_type': sl_open['type'],
             'sl_stopPrice': sl_open['stopPrice'],
             'nova_id': nova_data['newBotPosition']['_id'],
-            'time_entry': entry_time_reg
+            'time_entry':  str(order['time'])[:-3]
         }])
 
         self.position_opened = pd.concat([self.position_opened, new_position])
 
-    def update_position(self, current_position):
+    def update_position(self, current_position: dict):
+        """
+        Args:
+            current_position: this dictionary is the output of the get_actual_position method
+        Returns:
+            This function updates the open position of the bot, checking if there is any TP or SL
+        """
+
+        # loop through all the positions
         for index, row in self.position_opened.iterrows():
+            # verify if the pair position is still open on the exchange
             if row.pair not in list(current_position.keys()):
+                # if not update the back end  by looking if it's a TP or SL
                 print('Position have been through TP or SL')
                 actual_tp = self.client.futures_get_order(symbol=row.pair, orderId=row.tp_id)
                 actual_sl = self.client.futures_get_order(symbol=row.pair, orderId=row.sl_id)
@@ -265,36 +265,31 @@ class Strategy:
                     exit_tx = self.client.futures_account_trades(orderId=row.sl_id)
                     exit_type = 'SL'
 
-                print('Update Back end data')
+                print('Update Backend and current data')
                 self._push_backend(entry_tx, exit_tx, row.nova_id, exit_type)
-
                 self.position_opened.drop(self.position_opened.index[index], inplace=True)
 
-    def get_actual_position(self, list_pair: list) -> dict:
+    def _push_backend(self, entry_tx: list, exit_tx: list, nova_id: str, exit_type: str):
         """
-        Note: => This function execute 1 API call to binance
         Args:
-            list_pair: list of pair that we want to run analysis on
-        Returns: a dictionary containing all the current positions on binance
+            entry_tx: the entry tx list coming from the client
+            exit_tx: the exit tx list coming from the client
+            nova_id: novalabs position id
+            exit_type: String that can take the 4 types TP, SL, MAX_HOLDING, EXIT_POINT
+        Returns:
+            Updates the data in novalabs backend
         """
-        all_pos = self.client.futures_position_information()
-        position = {}
-        for pos in all_pos:
-            if float(pos['positionAmt']) != 0 and pos['symbol'] in list_pair:
-                position[pos['symbol']] = pos
-        return position
 
-    def _push_backend(self, entry_tx: list, exit_tx: list, nova_tx_id: str, exit_type: str):       
+        # information needed
         commission_entry = 0
         commission_exit = 0
         entry_total = 0
         entry_quantity = 0
-
         realized_pnl = 0
-
         exit_total = 0
         exit_quantity = 0
 
+        # go through all the tx needed to get in and out of the position
         for tx_one in entry_tx:
             commission_entry += tx_one['commission']
             entry_quantity += tx_one['qty']
@@ -306,14 +301,15 @@ class Strategy:
             exit_quantity += tx_two['qty']
             exit_total += tx_two['qty'] * tx_two['price']
 
+        # compute the last information needed
         exit_price = exit_total / exit_quantity
         entry_price = entry_total / entry_quantity
         prc_bnb = self.get_price_binance('BNBUSDT')
-
         total_fee_usd = (commission_exit + commission_entry) * prc_bnb
 
+        # send updates to the backend
         self.nova.update_bot_position(
-            nova_tx_id,
+            nova_id,
             'CLOSED',
             entry_price,
             exit_price,
@@ -322,21 +318,35 @@ class Strategy:
             total_fee_usd
         )
 
-    def exit_position(self, pair, side, quantity, entry_order_id, nova_id, index_opened):
+    def exit_position(self,
+                      pair: str,
+                      side: str,
+                      quantity: float,
+                      entry_order_id: int,
+                      nova_id: str,
+                      index_opened: int,
+                      exit_type: str):
+        """
+        Args:
+            pair : string that represents the current pair analysed
+            side : the type of side to execute to exit a position
+            quantity : exact quantity of of token to exit completely the position
+            entry_order_id : entry tx id needed to complete the backend data
+            nova_id : nova position id to update the backend
+            index_opened : index at which the position is located in the position_opened dataframe
+            exit_type: String that can take the 4 types TP, SL, MAX_HOLDING, EXIT_POINT
+        """
 
         # Exit send on the market
         order = self.client.futures_create_order(symbol=pair, side=side, type='MARKET', quantity=quantity)
-
         time.sleep(2)
 
         # Extract the entry and exit transactions
         entry_tx = self.client.futures_account_trades(orderId=entry_order_id)
         exit_tx = self.client.futures_account_trades(orderId=order.orderId)
 
-        print('Update Back end data')
-        self._push_backend(entry_tx, exit_tx, nova_id, 'MAX_HOLDING')
-
-        # remove the position from the dataframe
+        # Update the position tx in backend and int the class
+        self._push_backend(entry_tx, exit_tx, nova_id, exit_type)
         self.position_opened.drop(self.position_opened.index[index_opened], inplace=True)
 
     def is_max_holding(self):
@@ -370,4 +380,5 @@ class Strategy:
                                quantity=row.quantity,
                                entry_order_id=row.id,
                                nova_id=row.nova_id,
-                               index_opened=index)
+                               index_opened=index,
+                               exit_type='MAX_HOLDING')

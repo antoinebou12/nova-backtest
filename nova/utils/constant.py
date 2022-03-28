@@ -20,3 +20,9 @@ DEFINITION_STATISTIC = {
 
     }
 }
+
+POSITION_PROD_COLUMNS = [
+    'id', 'pair', 'status', 'quantity', 'type', 'side', 'tp_id', 'tp_side',
+    'tp_type', 'tp_stopPrice', 'sl_id', 'sl_side', 'sl_type', 'sl_stopPrice',
+    'nova_id', 'time_entry'
+]
