@@ -217,12 +217,14 @@ class BackTest:
                                             np.where(condition_exit_type_tp, 20,
                                                      np.where(max_hold_date_sl, 10,
                                                               np.where(condition_exit_strat, 5, np.nan))))
+            return df.drop(all_exit_var, axis=1, inplace=True)
         else:
             df['all_exit_point'] = np.where(condition_exit_type_sl, -10,
                                             np.where(condition_exit_type_tp, 20,
                                                      np.where(max_hold_date_sl, 10, np.nan)))
+            return df.drop(all_exit_var, axis=1, inplace=True)
 
-        return df.drop(all_exit_var, axis=1, inplace=True)
+
 
     def create_all_tp_sl(self, df: pd.DataFrame) -> pd.DataFrame:
         """
