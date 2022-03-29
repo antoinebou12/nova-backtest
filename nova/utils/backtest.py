@@ -201,21 +201,23 @@ class BackTest:
             df:
         Returns:
         """
-
         all_exit_var = ['closest_sl', 'closest_tp', 'max_hold_date']
+
+        if 'exit_signal_date' in df.columns:
+            all_exit_var.append('exit_signal_date')
+
+        df['all_exit_time'] = df[all_exit_var].min(axis=1)
         condition_exit_type_sl = (df.all_entry_point.notnull()) & (df['all_exit_time'] == df['closest_sl'])
         condition_exit_type_tp = (df.all_entry_point.notnull()) & (df['all_exit_time'] == df['closest_tp'])
         max_hold_date_sl = (df.all_entry_point.notnull()) & (df['all_exit_time'] == df['max_hold_date'])
 
-        if 'exit_signal_date' in df.columns:
-            all_exit_var.append('exit_signal_date')
+        if 'exit_signal_date' in all_exit_var:
             condition_exit_strat = (df.all_entry_point.notnull()) & (df['all_exit_time'] == df['exit_signal_date'])
             df['all_exit_point'] = np.where(condition_exit_type_sl, -10,
                                             np.where(condition_exit_type_tp, 20,
                                                      np.where(max_hold_date_sl, 10,
                                                               np.where(condition_exit_strat, 5, np.nan))))
         else:
-            df['all_exit_time'] = df[all_exit_var].min(axis=1)
             df['all_exit_point'] = np.where(condition_exit_type_sl, -10,
                                             np.where(condition_exit_type_tp, 20,
                                                      np.where(max_hold_date_sl, 10, np.nan)))
@@ -545,3 +547,6 @@ class BackTest:
         bot_statistics['perc_winning_trade'] = (self.df_stat.total_position * self.df_stat.perc_winning_trade).sum() / self.df_stat.total_position.sum()
 
         return bot_statistics
+
+    def max_position_return(self):
+        pass
