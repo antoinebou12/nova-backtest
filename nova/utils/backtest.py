@@ -62,6 +62,8 @@ class BackTest:
         for var in ['all_positions', 'total_profit_bot', 'long_profit_bot', 'short_profit_bot']:
             self.df_pos[var] = 0
 
+        self.df_copy = pd.DataFrame()
+
     def get_freq(self) -> str:
         if 'm' in self.candle:
             return self.candle.replace('m', 'min')
@@ -171,6 +173,27 @@ class BackTest:
             df['date'] = df.index
 
             return df[(df.index >= self.start) & (df.index <= self.end)]
+
+    def get_exit_signals_date(self, x):
+        """
+        Note: The dataframe as to have exit_situation and index_num variable that is a boolean. It indicates when an
+        Exit Signal is located in the timeseries
+
+        Args:
+            x: is the element of the apply method on a pandas dataframe
+        Returns:
+            It returns the closest date at which an execution of the exit is made
+        """
+        try:
+            end_pt = x.index_num + self.max_holding
+            closest_exit = np.where(self.df_copy['exit_situation'][x.index_num: end_pt] == True)[0][-1]
+
+            if (closest_exit >= 0) and (self.df_copy['all_entry_point'][x.index_num] != np.nan):
+                return self.df_copy['date'][x.index_num]
+            else :
+                return np.datetime64('NaT')
+        except:
+            return np.datetime64('NaT')
 
     def create_all_tp_sl(self, df: pd.DataFrame) -> pd.DataFrame:
         """
