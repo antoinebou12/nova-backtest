@@ -10,7 +10,7 @@ class NovaClient:
     def __init__(self, api_secret=None) -> None:
         self._api_secret = api_secret
         self._headers = {"Authorization": f"Bearer {api_secret}"}
-        self._transport = AIOHTTPTransport(url='https://novalabs-api.herokuapp.com/graphql',
+        self._transport = AIOHTTPTransport(url='https://api.novalabs.ai/graphql',
                                            headers=self._headers)
         self._client = Client(transport=self._transport,
                               fetch_schema_from_transport=True)
