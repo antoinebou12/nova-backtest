@@ -6,6 +6,9 @@ from nova.api.nova_client import NovaClient
 import time
 from nova.utils.constant import POSITION_PROD_COLUMNS
 
+from warnings import simplefilter
+simplefilter(action="ignore", category=pd.errors.PerformanceWarning)
+
 
 class Strategy:
 
