@@ -212,25 +212,17 @@ class BackTest:
         max_hold_date_sl = (df.all_entry_point.notnull()) & (df['all_exit_time'] == df['max_hold_date'])
 
         if 'exit_signal_date' in all_exit_var:
-            print('in One')
             condition_exit_strat = (df.all_entry_point.notnull()) & (df['all_exit_time'] == df['exit_signal_date'])
             df['all_exit_point'] = np.where(condition_exit_type_sl, -10,
                                             np.where(condition_exit_type_tp, 20,
                                                      np.where(max_hold_date_sl, 10,
                                                               np.where(condition_exit_strat, 5, np.nan))))
         else:
-            print('in Two')
             df['all_exit_point'] = np.where(condition_exit_type_sl, -10,
                                             np.where(condition_exit_type_tp, 20,
                                                      np.where(max_hold_date_sl, 10, np.nan)))
 
-        print(df)
-
-        final = df.drop(all_exit_var, axis=1, inplace=True)
-
-        print(final)
-
-        return final
+        return df
 
     def create_all_tp_sl(self, df: pd.DataFrame) -> pd.DataFrame:
         """
