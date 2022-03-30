@@ -562,7 +562,7 @@ class BackTest:
         df['all_position_name'] = df.apply(self.get_all_name_pos, axis=1)
         df['real_pos'] = df['all_position_name']
 
-        all_var = ['real_in_positions', 'real_in_positions', 'real_long_profit', 'real_short_profit']
+        all_var = ['in_position_real', 'total_profit_real', 'long_profit_real', 'short_profit_real']
         for var in all_var:
             df[var] = 0
 
@@ -605,18 +605,18 @@ class BackTest:
 
                 df.at[index, 'real_pos'] = final_pos
 
-                df.at[index, 'real_in_positions'] = len(final_pos)
-                df.at[index, 'real_total_profit'] = float(real_total_profit)
-                df.at[index, 'real_short_profit'] = float(real_short_profit)
-                df.at[index, 'real_long_profit'] = float(real_long_profit)
+                df.at[index, 'in_position_real'] = len(final_pos)
+                df.at[index, 'total_profit_real'] = float(real_total_profit)
+                df.at[index, 'short_profit_real'] = float(real_short_profit)
+                df.at[index, 'long_profit_real'] = float(real_long_profit)
 
-        df['real_total_profit'] = np.where(df['real_total_profit'] == 0, np.nan, df['real_total_profit'])
-        df['real_short_profit'] = np.where(df['real_short_profit'] == 0, np.nan, df['real_short_profit'])
-        df['real_long_profit'] = np.where(df['real_long_profit'] == 0, np.nan, df['real_long_profit'])
+        df['total_profit_real'] = np.where(df['total_profit_real'] == 0, np.nan, df['total_profit_real'])
+        df['short_profit_real'] = np.where(df['short_profit_real'] == 0, np.nan, df['short_profit_real'])
+        df['long_profit_real'] = np.where(df['long_profit_real'] == 0, np.nan, df['long_profit_real'])
 
-        df['real_total_profit'] = df['real_total_profit'].fillna(0).cumsum()
-        df['real_short_profit'] = df['real_short_profit'].fillna(0).cumsum()
-        df['real_long_profit'] = df['real_long_profit'].fillna(0).cumsum()
+        df['total_profit_real'] = df['total_profit_real'].fillna(0).cumsum()
+        df['short_profit_real'] = df['short_profit_real'].fillna(0).cumsum()
+        df['long_profit_real'] = df['long_profit_real'].fillna(0).cumsum()
 
         self.df_pos = pd.concat([self.df_pos, df[all_var]], axis=1)
 
