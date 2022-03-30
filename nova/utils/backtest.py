@@ -563,7 +563,6 @@ class BackTest:
         df['real_pos'] = df['all_position_name']
 
         all_var = ['real_in_positions', 'real_in_positions', 'real_long_profit', 'real_short_profit']
-
         for var in all_var:
             df[var] = 0
 
@@ -590,9 +589,9 @@ class BackTest:
                     if row[pos] == 0:
                         profit_name = pos.replace('in_position_', 'total_profit_')
                         long_name = pos.replace('in_position_', 'long_profit_')
-                        shot_name = pos.replace('in_position_', 'short_profit_')
+                        short_name = pos.replace('in_position_', 'short_profit_')
                         real_total_profit += (df[profit_name][index] - df[profit_name][prev_index])
-                        real_short_profit += (df[shot_name][index] - df[shot_name][prev_index])
+                        real_short_profit += (df[short_name][index] - df[short_name][prev_index])
                         real_long_profit += (df[long_name][index] - df[long_name][prev_index])
                         final_pos.remove(pos)
 
@@ -607,8 +606,8 @@ class BackTest:
                 df.at[index, 'real_pos'] = final_pos
 
                 df.at[index, 'real_in_positions'] = len(final_pos)
-                df.at[index, 'real_total_profit'] = real_total_profit
-                df.at[index, 'real_short_profit'] = real_short_profit
-                df.at[index, 'real_long_profit'] = real_long_profit
+                df.at[index, 'real_total_profit'] = float(real_total_profit)
+                df.at[index, 'real_short_profit'] = float(real_short_profit)
+                df.at[index, 'real_long_profit'] = float(real_long_profit)
 
         self.df_pos = pd.concat(self.df_pos, df[all_var])
