@@ -3,6 +3,7 @@ import pandas as pd
 from datetime import datetime, timedelta
 import matplotlib.pyplot as plt
 import re
+import random
 
 from nova.utils.constant import EXCEPTION_LIST_BINANCE, VAR_NEEDED_FOR_POSITION
 
@@ -66,6 +67,7 @@ class BackTest:
             self.df_pos[var] = 0
 
         self.df_copy = pd.DataFrame()
+        self.position_cols = []
 
     def get_freq(self) -> str:
         if 'm' in self.candle:
@@ -543,5 +545,70 @@ class BackTest:
 
         return bot_statistics
 
-    def max_position_return(self):
-        pass
+    def get_all_name_pos(self, x):
+        in_position_list = []
+        for var in self.position_cols:
+            if x[var] != 0 and x.all_positions != 0:
+                in_position_list.append(var)
+        return in_position_list
+
+    def real_position(self):
+        df = self.df_pos.copy()
+
+        for var in self.df_pos.columns:
+            if 'in_position' in var:
+                self.position_cols.append(var)
+
+        df['all_position_name'] = df.apply(self.get_all_name_pos, axis=1)
+        df['real_pos'] = df['all_position_name']
+
+        all_var = ['real_in_positions', 'real_in_positions', 'real_long_profit', 'real_short_profit']
+
+        for var in all_var:
+            df[var] = 0
+
+        for index, row in df.iterrows():
+
+            if index == 0:
+                pass
+            else:
+                prev_index = index - 1
+
+                pre_pos = df['real_pos'][prev_index]
+
+                new_pos = [var for var in df['all_position_name'][index] if var not in df['all_position_name'][prev_index]]
+                random.shuffle(new_pos)
+
+                final_pos = pre_pos.copy()
+
+                real_total_profit = 0
+                real_short_profit = 0
+                real_long_profit = 0
+
+                # verify if exit happened
+                for pos in pre_pos:
+                    if row[pos] == 0:
+                        profit_name = pos.replace('in_position_', 'total_profit_')
+                        long_name = pos.replace('in_position_', 'long_profit_')
+                        shot_name = pos.replace('in_position_', 'short_profit_')
+                        real_total_profit += (df[profit_name][index] - df[profit_name][prev_index])
+                        real_short_profit += (df[shot_name][index] - df[shot_name][prev_index])
+                        real_long_profit += (df[long_name][index] - df[long_name][prev_index])
+                        final_pos.remove(pos)
+
+                # verify if new position possible
+                open_pos = self.max_pos - len(final_pos)
+
+                for pos_two in new_pos:
+                    if open_pos > 0:
+                        final_pos.append(pos_two)
+                        open_pos -= 1
+
+                df.at[index, 'real_pos'] = final_pos
+
+                df.at[index, 'real_in_positions'] = len(final_pos)
+                df.at[index, 'real_total_profit'] = real_total_profit
+                df.at[index, 'real_short_profit'] = real_short_profit
+                df.at[index, 'real_long_profit'] = real_long_profit
+
+        self.df_pos = pd.concat(self.df_pos, df[all_var])
