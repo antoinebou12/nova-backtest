@@ -610,4 +610,13 @@ class BackTest:
                 df.at[index, 'real_short_profit'] = float(real_short_profit)
                 df.at[index, 'real_long_profit'] = float(real_long_profit)
 
-        self.df_pos = pd.concat(self.df_pos, df[all_var])
+        df['real_total_profit'] = np.where(df['real_total_profit'] == 0, np.nan, df['real_total_profit'])
+        df['real_short_profit'] = np.where(df['real_short_profit'] == 0, np.nan, df['real_short_profit'])
+        df['real_long_profit'] = np.where(df['real_long_profit'] == 0, np.nan, df['real_long_profit'])
+
+        df['real_total_profit'] = df['real_total_profit'].fillna(0).cumsum()
+        df['real_short_profit'] = df['real_short_profit'].fillna(0).cumsum()
+        df['real_long_profit'] = df['real_long_profit'].fillna(0).cumsum()
+
+        self.df_pos = pd.concat([self.df_pos, df[all_var]], axis=1)
+
