@@ -427,15 +427,7 @@ class BackTest:
                                                       np.where(condition_exit, 0, np.nan))
         self.df_pos[f'in_position_{pair}'] = self.df_pos[f'in_position_{pair}'].fillna(method='ffill').fillna(0)
 
-        # add the profit or loss amount realized and the overlapping open positions
-        self.df_pos['PL_amt_realized'] = np.where(self.df_pos['all_positions'] + self.df_pos[f'in_position_{pair}'].abs()
-                                                  > self.max_pos,
-                                                  0,
-                                                  self.df_pos[f'PL_amt_realized'])
-        self.df_pos['all_positions'] = np.where(self.df_pos['all_positions'] + self.df_pos[f'in_position_{pair}'].abs()
-                                                > self.max_pos,
-                                                self.df_pos['all_positions'],
-                                                self.df_pos['all_positions'] + self.df_pos[f'in_position_{pair}'].abs())
+        self.df_pos['all_positions'] = self.df_pos['all_positions'] + self.df_pos[f'in_position_{pair}'].abs()
 
         # Create the cumulative total profit for the pair
         self.df_pos[f'PL_amt_realized_{pair}'] = self.df_pos['PL_amt_realized'].fillna(0)
