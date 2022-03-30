@@ -564,7 +564,7 @@ class BackTest:
 
         all_var = ['in_position_real', 'total_profit_real', 'long_profit_real', 'short_profit_real']
         for var in all_var:
-            df[var] = 0
+            df[var] = 0.0
 
         for index, row in df.iterrows():
 
@@ -605,10 +605,10 @@ class BackTest:
 
                 df.at[index, 'real_pos'] = final_pos
 
-                df.at[index, 'in_position_real'] = len(final_pos)
-                df.at[index, 'total_profit_real'] = float(real_total_profit)
-                df.at[index, 'short_profit_real'] = float(real_short_profit)
-                df.at[index, 'long_profit_real'] = float(real_long_profit)
+                df.loc[index, 'in_position_real'] = len(final_pos)
+                df.loc[index, 'total_profit_real'] = float(real_total_profit)
+                df.loc[index, 'short_profit_real'] = float(real_short_profit)
+                df.loc[index, 'long_profit_real'] = float(real_long_profit)
 
         df['total_profit_real'] = np.where(df['total_profit_real'] == 0, np.nan, df['total_profit_real'])
         df['short_profit_real'] = np.where(df['short_profit_real'] == 0, np.nan, df['short_profit_real'])
