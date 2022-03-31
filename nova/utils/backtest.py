@@ -190,11 +190,10 @@ class BackTest:
             It returns the closest date at which an execution of the exit is made
         """
         try:
-            end_pt = x.index_num + self.max_holding
+            end_pt = x.index_num + self.convert_hours_to_candle_nb()
             closest_exit = np.where(self.df_copy['exit_situation'][x.index_num: end_pt] == True)[0][-1]
-
-            if (closest_exit >= 0) and (self.df_copy['all_entry_point'][x.index_num] != np.nan):
-                return self.df_copy['date'][x.index_num]
+            if (closest_exit > 0) and (self.df_copy['all_entry_point'][x.index_num] != np.nan):
+                return self.df_copy['date'][x.index_num + closest_exit]
             else :
                 return np.datetime64('NaT')
         except:
