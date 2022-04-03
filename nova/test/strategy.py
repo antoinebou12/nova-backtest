@@ -313,10 +313,10 @@ class Strategy:
                 elif row.side == 'SELL':
                     exit_side = 'BUY'
 
-            self.exit_position(pair=row.pair,
-                               side=exit_side,
-                               quantity=row.quantity,
-                               entry_order_id=row.id,
-                               nova_id=row.nova_id,
-                               index_opened=index,
-                               exit_type='MAX_HOLDING')
+                self.exit_position(pair=row.pair,
+                                   side=exit_side,
+                                   quantity=row.quantity,
+                                   entry_order_id=row.id,
+                                   nova_id=row.nova_id,
+                                   index_opened=index,
+                                   exit_type='MAX_HOLDING')
