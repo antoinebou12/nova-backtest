@@ -301,7 +301,7 @@ class Strategy:
         for index, row in self.position_opened.iterrows():
 
             # get the number of hours since opening
-            entry_time_date = datetime.fromtimestamp(int(row.time))
+            entry_time_date = datetime.strptime(row.time, '%Y-%m-%d %H:%M:%S.%f')
             diff = server - entry_time_date
             diff_in_hours = diff.total_seconds() / 3600
 
