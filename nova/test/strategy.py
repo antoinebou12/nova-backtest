@@ -201,7 +201,7 @@ class Strategy:
             'sl_type': 'STOP_LOSS_LIMIT',
             'sl_stopPrice': prc_sl,
             'nova_id': nova_data['newBotPosition']['_id'],
-            'time_entry':  str(order['time'])[:-3]
+            'time_entry': str(datetime.now())
         }])
 
         self.position_opened = pd.concat([self.position_opened, new_position])
