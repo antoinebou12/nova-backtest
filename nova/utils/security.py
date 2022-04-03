@@ -5,46 +5,20 @@ import traceback
 
 class Security:
 
-    def __init__(self):
-        self.terminal = sys.stdout
+    def __init__(self,
+                 max_down: float = 0.2):
+        self.max_down = max_down
 
-    def exit_all_orders(self):
+    def security_close_all(self):
+        """
+        Note: this function has to be executed each time an error stops the bot
+        """
         pass
 
-    def flush(self):
-        # this flush method is needed for python 3 compatibility.
-        # this handles the flush command by doing nothing.
-        # you might want to specify some extra behavior here.
+    def request_tracking(self):
+        """
+        For Binance, the maximum number of request is 10 requests per seconds
+        """
         pass
 
 
-
-
-class Test (Security):
-
-    def __init__(self):
-        Security.__init__(self)
-
-    def loop (self):
-        a = 0
-        # while True:
-        #     print('Hello')
-        #     if a == 3 :
-        #     time.sleep(1)
-        #     a += 1
-        print('Hello')
-
-        # This line opens a log file
-        with open("log.txt", "w") as log:
-            try:
-                # some code
-                # Below line will print any print to log file as well.
-                x = 'a' + 0
-                print("Creating DB Connection", file=log)
-            except Exception:
-                traceback.print_exc(file=log)
-
-
-tes = Test()
-
-tes.loop()

@@ -127,9 +127,9 @@ class Strategy:
         """
         futures_balances = self.client.get_account()
         balances = 0
-        for balance in futures_balances:
+        for balance in futures_balances['balances']:
             if balance['asset'] == 'USDT':
-                balances = float(balance['balance'])
+                balances = float(balance['free'])
 
         if balances <= self.size:
             return balances
