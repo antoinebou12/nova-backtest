@@ -29,7 +29,18 @@ class GraphQuery:
             }
         }
         ''')
-        
+
+    @staticmethod
+    def bot(_bot_id: str):
+        return gql('''
+        {
+            bot(botId: "%s") {
+                _id
+                name
+            }
+        }
+        ''' % _bot_id)
+
     @staticmethod
     def positions():
         return gql('''

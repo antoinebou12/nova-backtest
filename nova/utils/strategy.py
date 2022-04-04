@@ -12,16 +12,25 @@ simplefilter(action="ignore", category=pd.errors.PerformanceWarning)
 
 class Strategy:
 
-    def __init__(self, candle: str, size: float, stop_loss: float, take_profit: float, window: int, holding: float):
+    def __init__(self,
+                 candle: str,
+                 size: float,
+                 window: int,
+                 holding: float,
+                 bankroll: float,
+                 max_down: float,
+                 ):
+
         self.candle = candle
         self.size = size
-        self.stop_loss = stop_loss
-        self.take_profit = take_profit
         self.window_period = window
         self.max_holding = holding
         self.position_opened = pd.DataFrame(columns=POSITION_PROD_COLUMNS)
         self.prod_data = {}
         self.nova = NovaClient(config('NovaAPISecret'))
+
+        self.bankroll = bankroll
+        self.max_down = max_down
 
     def setup_leverage(self, pair: str, lvl: int = 1):
         """
@@ -165,12 +174,19 @@ class Strategy:
                 position[pos['symbol']] = pos
         return position
 
-    def enter_position(self, action: int, pair: str, bot_name: str):
+    def enter_position(self,
+                       action: int,
+                       pair: str,
+                       bot_name: str,
+                       tp: float,
+                       sl: float):
         """
         Args:
             action: this is an integer that can get the value 1 (for long) or -1 (for short)
             pair: is a string the represent the pair we are entering in position.
             bot_name: is the name of the bot that is trading this pair
+            tp: take profit %
+            sl: stop loss %
         Returns:
             Send transaction to the exchange and update the backend and the class
         """
@@ -187,15 +203,15 @@ class Strategy:
         # build the action information needed
         if action == 1:
             side = 'BUY'
-            prc_tp = float(round(prc * (1 + self.take_profit), p_precision))
-            prc_sl = float(round(prc * (1 - self.stop_loss), p_precision))
+            prc_tp = float(round(prc * (1 + tp), p_precision))
+            prc_sl = float(round(prc * (1 - sl), p_precision))
             type_pos = 'LONG'
             closing_side = 'SELL'
 
         elif action == -1:
             side = 'SELL'
-            prc_tp = float(round(prc * (1 - self.take_profit), p_precision))
-            prc_sl = float(round(prc * (1 + self.stop_loss), p_precision))
+            prc_tp = float(round(prc * (1 - tp), p_precision))
+            prc_sl = float(round(prc * (1 + sl), p_precision))
             type_pos = 'SHORT'
             closing_side = 'BUY'
 
@@ -378,10 +394,37 @@ class Strategy:
                 elif row.side == 'SELL':
                     exit_side = 'BUY'
 
-            self.exit_position(pair=row.pair,
-                               side=exit_side,
-                               quantity=row.quantity,
-                               entry_order_id=row.id,
-                               nova_id=row.nova_id,
-                               index_opened=index,
-                               exit_type='MAX_HOLDING')
+                self.exit_position(pair=row.pair,
+                                   side=exit_side,
+                                   quantity=row.quantity,
+                                   entry_order_id=row.id,
+                                   nova_id=row.nova_id,
+                                   index_opened=index,
+                                   exit_type='MAX_HOLDING')
+
+    def security_close_all(self, exit_type: str):
+        """
+        Note: this function has to be executed each time an error stops the bot
+        """
+
+        for index, row in self.position_opened.iterrows():
+
+            exit_side = 'SELL'
+
+            if row.side == 'SELL':
+                exit_side = 'BUY'
+
+            self.exit_position(
+                pair=row.pair,
+                side=exit_side,
+                quantity=row.quantity,
+                entry_order_id=row.id,
+                nova_id=row.nova_id,
+                index_opened=index,
+                exit_type=exit_type
+            )
+
+        # ToDo : Verify if all positions are closed
+
+        exit()
+

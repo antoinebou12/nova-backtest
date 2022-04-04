@@ -91,10 +91,12 @@ class NovaClient:
             }
         }
         return self._client.execute(query, variable_values=params)    
-    
-    
+
     def get_all_bots(self) -> dict:
         return self._client.execute(GraphQuery.bots())
     
-    
+    def get_bot(self, _bot_id) -> dict:
+        return self._client.execute(GraphQuery.bot(_bot_id))
+
+
 
