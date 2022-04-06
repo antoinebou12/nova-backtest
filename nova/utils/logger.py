@@ -7,7 +7,7 @@ class ServerLog:
     def __init__(self):
 
         self.HEADER = 64
-        self.PORT = 7070
+        self.PORT = 5080
         self.SERVER = socket.gethostbyname(socket.gethostname())
         self.ADDR = (self.SERVER, self.PORT)
         self.FORMAT = 'utf-8'
