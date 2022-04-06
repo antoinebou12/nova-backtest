@@ -51,11 +51,16 @@ class NovaClient:
             }
         }
         return self._client.execute(query, variable_values=params)
-    
-    
-    def create_new_bot_position(self, bot_name: str, post_type: str, value: float,
-                                state: str, entry_price: float, take_profit: float, 
-                                stop_loss: float, pair: str):
+
+    def create_new_bot_position(self,
+                                bot_name: str,
+                                post_type: str,
+                                value: float,
+                                state: str,
+                                entry_price: float,
+                                take_profit: float,
+                                stop_loss: float,
+                                pair: str):
         
         query = GraphMutation.new_bot_position_query()
         params = {
@@ -74,20 +79,31 @@ class NovaClient:
         }
         return self._client.execute(query, variable_values=params)
     
-    def update_bot_position(self, pos_id: str, state: str,
-                            entry_price: float, exit_price: float,
-                            exit_type: str, profit: float, fees: float):
+    def update_bot_position(self,
+                            pos_id: str,
+                            pos_type: str,
+                            state: str,
+                            entry_price: float,
+                            exit_price: float,
+                            exit_type: str,
+                            profit: float,
+                            fees: float,
+                            pair: str):
         
         query = GraphMutation.update_bot_position_query()
         params = {
             "input": {
                 "id": pos_id,
+                "type": pos_type,
                 "state": state,
                 "entry_price": entry_price,
                 "exit_price": exit_price,
                 "exit_type": exit_type,
                 "profit": profit,
-                "fees": fees,   
+                "fees": fees,
+                "pair": {
+                    "name": pair
+                }
             }
         }
         return self._client.execute(query, variable_values=params)    

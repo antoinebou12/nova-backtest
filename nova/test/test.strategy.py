@@ -81,23 +81,25 @@ class RandomStrategy (Strategy):
 
     def production_run(self):
 
-        print('Nova L@bs Trading Bot Starting in 5 seconds')
         data = self.nova.get_bot(self.bot_id)
         bot_name = data['bot']['name']
+
+        self.print_log_send_msg(f'Nova L@bs {bot_name} Starting in 5 seconds')
         time.sleep(5)
 
         print('### Download Data ###')
         self.get_prod_data(self.list_pair)
 
         try:
-
             while True:
-                # Every Second Minute Monitor the Market
+                # Every Minute Monitor the Market
                 if datetime.now().second == 0:
 
                     # First we check if there is
                     self.security_check_max_down()
+
                     self.print_log_send_msg(f'Checking if Exit - m{datetime.now().minute}###')
+
                     self.exit_signals_prod()
 
                     # This code indicates that the function is called every 2 minutes
@@ -122,7 +124,7 @@ class RandomStrategy (Strategy):
 
                     time.sleep(1)
         except:
-            self.log.error("Error Occured", exc_info=True)
+            self.print_log_send_msg('Bot faced and error', True)
 
 
 random_strat = RandomStrategy(
@@ -133,10 +135,12 @@ random_strat = RandomStrategy(
     size=100.0,
     bankroll=1000.0,
     max_down=0.2,
-    is_logging=False
+    is_logging=True
 )
 
-random_strat.production_run()
+random_strat.print_log_send_msg('MESSAGE')
+
+# random_strat.production_run()
 
 
 # random_strat.get_prod_data(random_strat.list_pair)
@@ -169,3 +173,21 @@ random_strat.production_run()
 #                                                  quantity=quantity)
 # tp_open = self.client.futures_create_order(symbol=pair, side=closing_side, type='TAKE_PROFIT_MARKET',
 #                                            stopPrice=prc_tp, closePosition=True)
+
+#
+# order = random_strat.client.futures_create_order(symbol='XRPUSDT', side='BUY', type='MARKET', quantity=100.0)
+# entry_tx = random_strat.client.futures_account_trades(orderId=order['orderId'])
+
+# data = random_strat.get_actual_position(['XRPUSDT', 'BTCUSDT', 'ETHUSDT'])
+#
+# random_strat.nova.update_bot_position(
+#     pos_id='624d8575fc922c884ae6cc7a',
+#     pos_type='LONG',
+#     state='CLOSED',
+#     entry_price=0.7913,
+#     exit_price=0.8027,
+#     exit_type='MAX_HOLDING',
+#     profit=-1.42842,
+#     fees=34.944441497999996,
+#     pair='XRPUSDT'
+# )

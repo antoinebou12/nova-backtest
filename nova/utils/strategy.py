@@ -41,6 +41,7 @@ class Strategy:
 
         # Logging  and
         logging.getLogger().setLevel(logging.NOTSET)
+        # ToDo : add creation date
         logging.basicConfig(filename=f'{self.bot_id}.log', filemode='w')
         self.log = logging.getLogger(socket.gethostname())
 
@@ -278,7 +279,7 @@ class Strategy:
             'sl_type': sl_open['type'],
             'sl_stopPrice': sl_open['stopPrice'],
             'nova_id': nova_data['newBotPosition']['_id'],
-            'time_entry':  str(order['time'])[:-3]
+            'time_entry':  str(order['updateTime'])[:-3]
         }])
 
         self.position_opened = pd.concat([self.position_opened, new_position])
@@ -290,6 +291,7 @@ class Strategy:
         Returns:
             This function updates the open position of the bot, checking if there is any TP or SL
         """
+
 
         # loop through all the positions
         for index, row in self.position_opened.iterrows():
@@ -309,6 +311,8 @@ class Strategy:
                 elif actual_sl['status'] == 'FILLED':
                     exit_tx = self.client.futures_account_trades(orderId=row.sl_id)
                     exit_type = 'SL'
+                else:
+                    break
 
                 print('Update Backend and current data')
                 self._push_backend(entry_tx, exit_tx, row.nova_id, exit_type)
@@ -333,18 +337,24 @@ class Strategy:
         realized_pnl = 0
         exit_total = 0
         exit_quantity = 0
+        type_pos = ''
+        pair = entry_tx[0]['symbol']
 
         # go through all the tx needed to get in and out of the position
         for tx_one in entry_tx:
-            commission_entry += tx_one['commission']
-            entry_quantity += tx_one['qty']
-            entry_total += tx_one['qty'] * tx_one['price']
+            commission_entry += float(tx_one['commission'])
+            entry_quantity += float(tx_one['qty'])
+            entry_total += float(tx_one['qty']) * float(tx_one['price'])
+            if tx_one['side'] == 'BUY':
+                type_pos = 'LONG'
+            else:
+                type_pos = 'SHORT'
 
         for tx_two in exit_tx:
-            realized_pnl += tx_two['realizedPnl']
-            commission_exit += tx_two['commission']
-            exit_quantity += tx_two['qty']
-            exit_total += tx_two['qty'] * tx_two['price']
+            realized_pnl += float(tx_two['realizedPnl'])
+            commission_exit += float(tx_two['commission'])
+            exit_quantity += float(tx_two['qty'])
+            exit_total += float(tx_two['qty']) * float(tx_two['price'])
 
         # compute the last information needed
         exit_price = exit_total / exit_quantity
@@ -354,13 +364,15 @@ class Strategy:
 
         # send updates to the backend
         self.nova.update_bot_position(
-            nova_id,
-            'CLOSED',
-            entry_price,
-            exit_price,
-            exit_type,
-            realized_pnl,
-            total_fee_usd
+            pos_id=nova_id,
+            pos_type=type_pos,
+            state='CLOSED',
+            entry_price=entry_price,
+            exit_price=exit_price,
+            exit_type=exit_type,
+            profit=realized_pnl,
+            fees=total_fee_usd,
+            pair=pair
         )
 
         self.currentPNL += realized_pnl
@@ -390,7 +402,7 @@ class Strategy:
 
         # Extract the entry and exit transactions
         entry_tx = self.client.futures_account_trades(orderId=entry_order_id)
-        exit_tx = self.client.futures_account_trades(orderId=order.orderId)
+        exit_tx = self.client.futures_account_trades(orderId=order['orderId'])
 
         # Update the position tx in backend and int the class
         self._push_backend(entry_tx, exit_tx, nova_id, exit_type)
@@ -410,7 +422,7 @@ class Strategy:
         for index, row in self.position_opened.iterrows():
 
             # get the number of hours since opening
-            entry_time_date = datetime.fromtimestamp(int(row.time))
+            entry_time_date = datetime.fromtimestamp(int(row.time_entry))
             diff = server - entry_time_date
             diff_in_hours = diff.total_seconds() / 3600
 
@@ -453,7 +465,7 @@ class Strategy:
             )
         time.sleep(2)
 
-    def print_log_send_msg(self, msg: str):
+    def print_log_send_msg(self, msg: str, error: bool = False):
         print(msg)
         self.log.info(msg)
 
@@ -465,7 +477,13 @@ class Strategy:
             self.logger_client.send(send_length)
             self.logger_client.send(message)
 
+            if error:
+                self.log.error(msg, exc_info=True)
+
     def security_check_max_down(self):
+        """
+
+        """
         self.print_log_send_msg(f'Current bot PNL is {self.currentPNL}')
         max_down_amount = -1 * self.max_down * self.bankroll
         if self.currentPNL <= max_down_amount:
