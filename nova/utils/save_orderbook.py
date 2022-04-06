@@ -208,6 +208,8 @@ class SaveOrderBook:
                 time.sleep(1)
 
 
-SOB = SaveOrderBook(exchange='ftx')
+print("Enter the exhange's name: ")
+exchange = input()
+SOB = SaveOrderBook(exchange=exchange)
 
 SOB.run()
