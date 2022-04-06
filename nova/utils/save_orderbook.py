@@ -7,36 +7,47 @@ import aiohttp
 from os import walk
 import csv
 import time
+import requests
+import numpy as np
 
 from nova.utils.constant import EXCEPTION_LIST_BINANCE
 
 import warnings
+
 warnings.filterwarnings("ignore")
 
-class SaveOrderBook():
+
+class SaveOrderBook:
 
     def __init__(self,
-                 timeframe: int = 1,
+                 exchange: str,
                  limit: int = 100,
-                 list_pair=None):
+                 list_pair=None,
+                 ):
 
+        self.exchange = exchange
+        self.limit = limit
         self.client = self.initiate_client()
         self.exception_pair = EXCEPTION_LIST_BINANCE
 
         self.list_pair = list_pair
         if not list_pair:
-            self.list_pair = self.get_list_pair()
+            self.list_pair = eval(f'self.get_list_pair_{self.exchange}()')
 
-        self.limit = limit
         self.save_path = './datasets/'
         self.currentOB = pd.DataFrame()
 
         self.create_empty_csv()
 
+        self.exchanges_params = {'binance': {'url': "https://fapi.binance.com/fapi/v1/depth",
+                                             'columns_to_drop': ['bids', 'asks', 'E', 'lastUpdateId']},
+                                 'ftx': {'url': 'https://ftx.com/api/markets/',
+                                         'columns_to_drop': ['bids', 'asks']}}
+
     def initiate_client(self):
         return Client(config("BinanceAPIKey"), config("BinanceAPISecret"))
 
-    def get_list_pair(self) -> list:
+    def get_list_pair_binance(self) -> list:
         """
         Returns:
             all the futures pairs we can to trade.
@@ -50,12 +61,59 @@ class SaveOrderBook():
 
         return list_pair
 
-    async def get_orderbook(self, session, pair):
-        url = "https://fapi.binance.com/fapi/v1/depth"
+    def get_list_pair_ftx(self) -> list:
+        """
+        Returns:
+            all the futures pairs we can to trade.
+        """
+        list_pair = []
+        url_futures = 'https://ftx.com/api/futures'
 
-        async with session.get(url=url, params=dict(symbol=pair, limit=self.limit)) as response:
+        r = requests.get(url_futures)
+        response = r.json()['result']
+
+        for pair in response:
+            name = pair['name']
+            if 'PERP' in name:
+                list_pair.append(pair['name'])
+
+        return list_pair
+
+    def get_url_params_binance(self, pair):
+
+        url = self.exchanges_params[self.exchange]['url']
+
+        params = dict(symbol=pair, limit=self.limit)
+
+        return url, params
+
+    def get_url_params_ftx(self, pair):
+
+        url = self.exchanges_params[self.exchange]['url'] + pair + '/orderbook'
+
+        params = dict(depth=self.limit)
+
+        return url, params
+
+    async def get_orderbook(self, session, pair):
+
+        url, params = eval(f'self.get_url_params_{self.exchange}(pair)', {"pair": pair, "self": self})
+
+        async with session.get(url=url, params=params) as response:
             result_data = await response.json()
+
+            if self.exchange == 'ftx':
+                result_data = result_data['result']
+
             result_data['symbol'] = pair
+            result_data['T'] = int(1000 * datetime.now().timestamp())
+
+            nan_number_asks = self.limit - len(result_data['asks'])
+            result_data['asks'] += [[np.nan, np.nan]] * nan_number_asks
+
+            nan_number_bids = self.limit - len(result_data['bids'])
+            result_data['bids'] += [[np.nan, np.nan]] * nan_number_bids
+
             return result_data
 
     async def get_all_orderbooks(self):
@@ -74,7 +132,6 @@ class SaveOrderBook():
     def createAskBidColumns(self):
 
         for i in range(self.limit):
-
             # Convert to float bc it takes less memory
             self.currentOB[f'ask_price_{i}'] = pd.to_numeric(self.currentOB['asks'].apply(lambda col: col[i][0]))
             self.currentOB[f'ask_qty_{i}'] = pd.to_numeric(self.currentOB['asks'].apply(lambda col: col[i][1]))
@@ -82,9 +139,11 @@ class SaveOrderBook():
             self.currentOB[f'bid_price_{i}'] = pd.to_numeric(self.currentOB['bids'].apply(lambda col: col[i][0]))
             self.currentOB[f'bid_qty_{i}'] = pd.to_numeric(self.currentOB['bids'].apply(lambda col: col[i][1]))
 
-        self.currentOB = self.currentOB.drop(columns=['bids', 'asks', 'E', 'lastUpdateId'])
+        self.currentOB = self.currentOB.drop(columns=self.exchanges_params[self.exchange]['columns_to_drop'])
 
         self.currentOB = self.currentOB.rename(columns={"T": "timestamp"})
+
+        self.currentOB = self.currentOB[['timestamp', 'symbol'] + list(self.currentOB.columns.values[2:])]
 
     def create_empty_csv(self):
 
@@ -97,22 +156,20 @@ class SaveOrderBook():
         filenames = next(walk(self.save_path), (None, None, []))[2]
 
         for pair in self.list_pair:
-            filename = f"{pair}_orderbook_full.csv"
+            filename = f"{pair}_{self.exchange}_orderbook_full.csv"
 
             if filename not in filenames:
-
                 empty_df.to_csv(self.save_path + filename, index=False)
 
     def save_to_csv(self):
 
         for pair in self.list_pair:
-            filename = f"{pair}_orderbook_full.csv"
+            filename = f"{pair}_{self.exchange}_orderbook_full.csv"
 
             new_line = self.currentOB[self.currentOB.symbol == pair]
             new_line_dict = new_line.to_dict('records')[0]
 
             with open(self.save_path + filename, 'a', newline='') as f_object:
-
                 new_line_in_csv = list(new_line_dict.values())
 
                 csv_writer = csv.writer(f_object)
@@ -126,7 +183,6 @@ class SaveOrderBook():
         while True:
 
             if datetime.now().second == 0:
-
                 print("Start fetching data at", datetime.now())
 
                 t0 = time.time()
@@ -152,11 +208,8 @@ class SaveOrderBook():
                 time.sleep(1)
 
 
-SOB = SaveOrderBook()
+print("Enter the exhange's name: ")
+exchange = input()
+SOB = SaveOrderBook(exchange=exchange)
 
 SOB.run()
-
-
-
-
-
