@@ -1,3 +1,5 @@
+import socket
+
 from decouple import config
 import pandas as pd
 from datetime import datetime
@@ -6,19 +8,21 @@ from nova.api.nova_client import NovaClient
 import time
 from nova.utils.constant import POSITION_PROD_COLUMNS
 
-from warnings import simplefilter
-simplefilter(action="ignore", category=pd.errors.PerformanceWarning)
+import logging
+import logging.handlers
 
 
 class Strategy:
 
     def __init__(self,
+                 bot_id: str,
                  candle: str,
                  size: float,
                  window: int,
                  holding: float,
                  bankroll: float,
                  max_down: float,
+                 is_logging: bool = False
                  ):
 
         self.candle = candle
@@ -31,6 +35,28 @@ class Strategy:
 
         self.bankroll = bankroll
         self.max_down = max_down
+
+        self.currentPNL = 0
+        self.bot_id = bot_id
+
+        # Logging  and
+        logging.getLogger().setLevel(logging.NOTSET)
+        logging.basicConfig(filename=f'{self.bot_id}.log', filemode='w')
+        self.log = logging.getLogger(socket.gethostname())
+
+        self.logger = is_logging
+
+        if self.logger:
+            self.HEADER = 64
+            self.FORMAT = 'utf-8'
+            self.DISCONNECT_MESSAGE = '!DISCONNECT'
+
+            self.PORT = 5080
+            self.SERVER = socket.gethostbyname(socket.gethostname())
+            self.ADDR = (self.SERVER, self.PORT)
+
+            self.logger_client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            self.logger_client.connect(self.ADDR)
 
     def setup_leverage(self, pair: str, lvl: int = 1):
         """
@@ -337,6 +363,8 @@ class Strategy:
             total_fee_usd
         )
 
+        self.currentPNL += realized_pnl
+
     def exit_position(self,
                       pair: str,
                       side: str,
@@ -423,8 +451,24 @@ class Strategy:
                 index_opened=index,
                 exit_type=exit_type
             )
+        time.sleep(2)
 
-        # ToDo : Verify if all positions are closed
+    def print_log_send_msg(self, msg: str):
+        print(msg)
+        self.log.info(msg)
 
-        exit()
+        if self.logger:
+            message = msg.encode(self.FORMAT)
+            msg_length = len(message)
+            send_length = str(msg_length).encode(self.FORMAT)
+            send_length += b' ' * (self.HEADER - len(send_length))
+            self.logger_client.send(send_length)
+            self.logger_client.send(message)
+
+    def security_check_max_down(self):
+        self.print_log_send_msg(f'Current bot PNL is {self.currentPNL}')
+        max_down_amount = -1 * self.max_down * self.bankroll
+        if self.currentPNL <= max_down_amount:
+            self.security_close_all(exit_type="MAX_LOSS")
+
 

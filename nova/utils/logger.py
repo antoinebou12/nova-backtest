@@ -1,31 +1,49 @@
-# using TCP The Transmission Control Protocol
-
-
-# echo-server.py
-
 import socket
+import threading
 
-HOST = "127.0.0.1"  # Standard loopback interface address (localhost) -> Usually IP address
-PORT = 65432  # Port to listen on (non-privileged ports are > 1023)
 
-with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-    s.bind((HOST, PORT))
-    s.listen()
-    # each client will create a new socket object
-    conn, addr = s.accept()
-    with conn:
-        print(f"Connected by {addr}")
+class ServerLog:
+
+    def __init__(self):
+
+        self.HEADER = 64
+        self.PORT = 7070
+        self.SERVER = socket.gethostbyname(socket.gethostname())
+        self.ADDR = (self.SERVER, self.PORT)
+        self.FORMAT = 'utf-8'
+        self.DISCONNECT_MESSAGE = '!DISCONNECT'
+
+        self.server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.server.bind(self.ADDR)
+
+    def handle_client(self, conn, addr):
+        print(f"new connection -- {addr} connected")
+        connected = True
+
+        while connected:
+            msg_length = conn.recv(self.HEADER).decode(self.FORMAT)
+            if msg_length:
+                msg_length = int(msg_length)
+                msg = conn.recv(msg_length).decode(self.FORMAT)
+                if msg == self.DISCONNECT_MESSAGE:
+                    connected = False
+                print(f'address -- {addr} -- {msg}')
+
+                # message = msg.encode(self.FORMAT)
+                # conn.send(message)
+
+        conn.close()
+
+    def start(self):
+        self.server.listen()
+        print(f'Sever is listening on {self.SERVER}')
         while True:
-            data = conn.recv(1024)
-            if not data:
-                break
-            conn.sendall(data)
+            conn, addr = self.server.accept()
+            thread = threading.Thread(target=self.handle_client, args=(conn, addr))
+            thread.start()
+            print(f'Active Connections -- {threading.active_count() - 1}')
 
 
-
-with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-    s.connect((HOST, PORT))
-    s.sendall(b"Hello, world")
-    data = s.recv(1024)
-
-print(f"Received {data!r}")
+log_server = ServerLog()
+print('SERVER IS STARTING')
+log_server.start()
