@@ -98,10 +98,16 @@ class Strategy:
             k[0] = datetime.fromtimestamp(int(str(k[0])[:10]))
             del k[6:]
 
-        df = pd.DataFrame(kline, columns=['timeUTC', 'open', 'high', 'low', 'close', 'volume'])
+        df = pd.DataFrame(
+            kline,
+            columns=['timeUTC', 'open', 'high', 'low', 'close', 'volume']
+        )
+
         for var in ["volume", "open", "high", "low", "close"]:
             df[var] = pd.to_numeric(df[var], downcast="float")
+
         df['timeUTC'] = pd.to_datetime(df['timeUTC'])
+
         return df
 
     def get_prod_data(self, list_pair: list):
@@ -119,13 +125,13 @@ class Strategy:
         for pair in list_pair:
 
             klines = self.client.get_historical_klines(pair, self.candle, f'{multi * self.window_period} {unit} ago UTC')
-
             df = self._data_fomating(klines)
 
+            s_time = self.client.get_server_time()
+
             self.prod_data[pair] = {}
-            self.prod_data[pair]['latest_update'] = df['timeUTC'].max()
+            self.prod_data[pair]['latest_update'] = s_time
             self.prod_data[pair]['data'] = df
-            print('Starting', self.prod_data[pair]['latest_update'])
 
     def update_prod_data(self,  pair: str):
         """
@@ -139,12 +145,13 @@ class Strategy:
         """
         unit, multi = self.get_unit_multiplier()
         klines = self.client.get_historical_klines(pair, self.candle, f'{multi*2} {unit} ago UTC')
-
         df = self._data_fomating(klines)
-
         df_new = pd.concat([self.prod_data[pair]['data'], df])
         df_new = df_new.drop_duplicates(subset=['timeUTC']).sort_values(by=['timeUTC'], ascending=True)
-        self.prod_data[pair]['latest_update'] = df_new['timeUTC'].max()
+
+        s_time = self.client.get_server_time()
+
+        self.prod_data[pair]['latest_update'] = s_time
         self.prod_data[pair]['data'] = df_new.tail(self.window_period)
 
     def get_quantity_precision(self, pair: str) -> tuple:
@@ -187,17 +194,17 @@ class Strategy:
         else:
             return self.size
 
-    def get_actual_position(self, list_pair: list) -> dict:
+    def get_actual_position(self) -> dict:
         """
-        Note: => This function execute 1 API call to binance
         Args:
             list_pair: list of pair that we want to run analysis on
-        Returns: a dictionary containing all the current positions on binance
+        Returns:
+            a dictionary containing all the current positions on binance
         """
         all_pos = self.client.futures_position_information()
         position = {}
         for pos in all_pos:
-            if float(pos['positionAmt']) != 0 and pos['symbol'] in list_pair:
+            if pos['symbol'] in self.list_pair:
                 position[pos['symbol']] = pos
         return position
 
@@ -218,23 +225,22 @@ class Strategy:
             Send transaction to the exchange and update the backend and the class
         """
 
-        # get the price and size of the trade in USDT
+        # 1 - get price on exchange, size of position and precision required by exchange
         prc = self.get_price_binance(pair)
         size = self.get_position_size()
-
-        # get the quantity and the price precision
-        quantity = (size / prc)
         q_precision, p_precision = self.get_quantity_precision(pair)
+
+        # 2 - derive the quantity from the previous variables
+        quantity = (size / prc)
         quantity = float(round(quantity, q_precision))
 
-        # build the action information needed
+        # 3 - build the order information {side, tp, sl, type and closing side}
         if action == 1:
             side = 'BUY'
             prc_tp = float(round(prc * (1 + tp), p_precision))
             prc_sl = float(round(prc * (1 - sl), p_precision))
             type_pos = 'LONG'
             closing_side = 'SELL'
-
         elif action == -1:
             side = 'SELL'
             prc_tp = float(round(prc * (1 - tp), p_precision))
@@ -242,16 +248,33 @@ class Strategy:
             type_pos = 'SHORT'
             closing_side = 'BUY'
 
-        # send the transaction to the exchange
-        order = self.client.futures_create_order(symbol=pair, side=side, type='MARKET', quantity=quantity)
+        # 4 - send the order to the exchange
+        order = self.client.futures_create_order(
+            symbol=pair,
+            side=side,
+            type='MARKET',
+            quantity=quantity
+        )
 
-        tp_open = self.client.futures_create_order(symbol=pair, side=closing_side, type='TAKE_PROFIT_MARKET',
-                                                   stopPrice=prc_tp, closePosition=True)
+        # 5 - send the tp order to the exchange
+        tp_open = self.client.futures_create_order(
+            symbol=pair,
+            side=closing_side,
+            type='TAKE_PROFIT_MARKET',
+            stopPrice=prc_tp,
+            closePosition=True
+        )
 
-        sl_open = self.client.futures_create_order(symbol=pair, side=closing_side, type='STOP_MARKET',
-                                                   stopPrice=prc_sl, closePosition=True)
+        # 6 - send the sl order to the exchange
+        sl_open = self.client.futures_create_order(
+            symbol=pair,
+            side=closing_side,
+            type='STOP_MARKET',
+            stopPrice=prc_sl,
+            closePosition=True
+        )
 
-        # update the backend data
+        # 7 - create the position data in nova labs backend
         nova_data = self.nova.create_new_bot_position(
             bot_name=bot_name,
             post_type=type_pos,
@@ -262,63 +285,161 @@ class Strategy:
             stop_loss=float(sl_open['stopPrice']),
             pair=order['symbol'])
 
-        # update the class position
+        # 8 - update the dataframe position_opened that keeps track of orders
         new_position = pd.DataFrame([{
+            'time_entry': str(order['updateTime']),
+            'nova_id': nova_data['newBotPosition']['_id'],
             'id': order['orderId'],
             'pair': order['symbol'],
             'status': order['status'],
             'quantity': order['origQty'],
             'type': order['type'],
             'side': order['side'],
+
             'tp_id': tp_open['orderId'],
             'tp_side': tp_open['side'],
             'tp_type': tp_open['type'],
             'tp_stopPrice': tp_open['stopPrice'],
+
             'sl_id': sl_open['orderId'],
             'sl_side': sl_open['side'],
             'sl_type': sl_open['type'],
-            'sl_stopPrice': sl_open['stopPrice'],
-            'nova_id': nova_data['newBotPosition']['_id'],
-            'time_entry':  str(order['updateTime'])[:-3]
+            'sl_stopPrice': sl_open['stopPrice']
         }])
-
         self.position_opened = pd.concat([self.position_opened, new_position])
 
-    def update_position(self, current_position: dict):
+    def _update_user_touched(self, row_pos: dict, df_orders: pd.DataFrame):
+
+        if row_pos.sl_id in list(df_orders.orderId):
+            self.client.futures_cancel_order(
+                symbol=row_pos.pair,
+                orderId=row_pos.sl_id
+            )
+
+        if row_pos.tp_id in list(df_orders.orderId):
+            self.client.futures_cancel_order(
+                symbol=row_pos.pair,
+                orderId=row_pos.tp_id
+            )
+
+        self.nova.update_bot_position(
+            pos_id=row_pos.nova_id,
+            pos_type=row_pos.side,
+            state='CLOSED',
+            entry_price=0,
+            exit_price=0,
+            exit_type='USER_CHANGES',
+            profit=0,
+            fees=0,
+            pair=row_pos.pair
+        )
+
+    def verify_positions(self, current_position: list):
         """
-        Args:
-            current_position: this dictionary is the output of the get_actual_position method
         Returns:
             This function updates the open position of the bot, checking if there is any TP or SL
         """
 
+        # 0.1 - get all tx since last data update
+        all_time_updates = [self.prod_data[pair]['latest_update'] for pair in self.list_pair]
 
-        # loop through all the positions
+        # 0.2 - get last tx
+        tx = self.client.futures_account_trades(startTime=min(all_time_updates))
+        df_tx = pd.DataFrame(tx)
+
+        # 0.3 - get open orders
+        open_orders = self.client.futures_get_open_orders()
+        df_orders = pd.DataFrame(open_orders)
+
+        # 1 - for each position opened by the bot we are executing a verification
         for index, row in self.position_opened.iterrows():
-            # verify if the pair position is still open on the exchange
-            if row.pair not in list(current_position.keys()):
-                # if not update the back end  by looking if it's a TP or SL
-                print('Position have been through TP or SL')
-                actual_tp = self.client.futures_get_order(symbol=row.pair, orderId=row.tp_id)
-                actual_sl = self.client.futures_get_order(symbol=row.pair, orderId=row.sl_id)
 
-                entry_tx = self.client.futures_account_trades(orderId=row.id)
+            position_info = current_position[row.pair]
 
-                if actual_tp['status'] == 'FILLED':
-                    exit_tx = self.client.futures_account_trades(orderId=row.tp_id)
-                    exit_type = 'TP'
+            entries = df_tx[df_tx['orderId'] == row.id]
+            entry_tx = entries.to_dict('records')
 
-                elif actual_sl['status'] == 'FILLED':
-                    exit_tx = self.client.futures_account_trades(orderId=row.sl_id)
-                    exit_type = 'SL'
+            signe = -1 if row.side == 'SELL' else 1
+            qty = signe * row.quantity
+
+            # 2 - verify if the tp and sl order have been deleted
+            if float(position_info.positionAmt) == qty:
+
+                # 2.1 - check if tp or sl order has been canceled
+                list_changes = []
+                if (row.tp_id not in list(df_tx.orderId)) and (row.tp_id not in list(df_orders.orderId)):
+                    list_changes.append('TP')
+                if (row.sl_id not in list(df_tx.orderId)) and (row.sl_id not in list(df_orders.orderId)):
+                    list_changes.append('SL')
+
+                # 2.2 - if it has been touched - cancel bot position
+                if len(list_changes) > 0:
+                    self._update_user_touched(
+                        row_pos=row,
+                        df_orders=df_orders
+                    )
+                    self.position_opened.drop(self.position_opened.index[index], inplace=True)
+
+            # 3 - if there is a difference between class and real position
+            if abs(float(position_info.positionAmt)) != qty:
+
+                # 3.1 - check if tp has been executed
+                if row.tp_id in list(df_tx.orderId):
+
+                    # 3.1.1 if the sl order still exit -> close it
+                    if row.sl_id in list(df_orders.orderId):
+                        self.client.futures_cancel_order(
+                            symbol=row.pair,
+                            orderId=row.sl_id
+                        )
+
+                    exits = df_tx[df_tx['orderId'] == row.tp_id]
+                    exits_tx = exits.to_dict('records')
+
+                    self._push_backend(
+                        entry_tx=entry_tx,
+                        exit_tx=exits_tx,
+                        nova_id=row.nova_id,
+                        exit_type='TP'
+                    )
+
+                # 3.2 - check if sl has been executed
+                elif row.sl_id in list(df_tx.orderId):
+
+                    if row.tp_id in list(df_orders.orderId):
+                        self.client.futures_cancel_order(
+                            symbol=row.pair,
+                            orderId=row.tp_id
+                        )
+
+                    exits = df_tx[df_tx['orderId'] == row.sl_id]
+                    exits_tx = exits.to_dict('records')
+
+                    self._push_backend(
+                        entry_tx=entry_tx,
+                        exit_tx=exits_tx,
+                        nova_id=row.nova_id,
+                        exit_type='SL'
+                    )
+
+                # 3.3 - update positions
                 else:
-                    break
 
-                print('Update Backend and current data')
-                self._push_backend(entry_tx, exit_tx, row.nova_id, exit_type)
+                    self._update_user_touched(
+                        row_pos=row,
+                        df_orders=df_orders
+                    )
+
                 self.position_opened.drop(self.position_opened.index[index], inplace=True)
 
-    def _push_backend(self, entry_tx: list, exit_tx: list, nova_id: str, exit_type: str):
+
+
+    def _push_backend(self,
+                      entry_tx: list,
+                      exit_tx: list,
+                      nova_id: str,
+                      exit_type: str
+                      ):
         """
         Args:
             entry_tx: the entry tx list coming from the client
@@ -329,7 +450,7 @@ class Strategy:
             Updates the data in novalabs backend
         """
 
-        # information needed
+        # 1 - compute statistics
         commission_entry = 0
         commission_exit = 0
         entry_total = 0
@@ -383,7 +504,6 @@ class Strategy:
                       quantity: float,
                       entry_order_id: int,
                       nova_id: str,
-                      index_opened: int,
                       exit_type: str):
         """
         Args:
@@ -392,12 +512,17 @@ class Strategy:
             quantity : exact quantity of of token to exit completely the position
             entry_order_id : entry tx id needed to complete the backend data
             nova_id : nova position id to update the backend
-            index_opened : index at which the position is located in the position_opened dataframe
             exit_type: String that can take the 4 types TP, SL, MAX_HOLDING, EXIT_POINT
         """
 
         # Exit send on the market
-        order = self.client.futures_create_order(symbol=pair, side=side, type='MARKET', quantity=quantity)
+        order = self.client.futures_create_order(
+            symbol=pair,
+            side=side,
+            type='MARKET',
+            quantity=quantity
+        )
+
         time.sleep(2)
 
         # Extract the entry and exit transactions
@@ -406,7 +531,6 @@ class Strategy:
 
         # Update the position tx in backend and int the class
         self._push_backend(entry_tx, exit_tx, nova_id, exit_type)
-        self.position_opened.drop(self.position_opened.index[index_opened], inplace=True)
 
     def is_max_holding(self):
         """
@@ -414,37 +538,47 @@ class Strategy:
             This method is used to check if the maximum holding time is reached for each open positions.
         """
 
-        # Compute the current time
+        # Compute the server time
         s_time = self.client.get_server_time()
         server_time = int(str(s_time['serverTime'])[:-3])
         server = datetime.fromtimestamp(server_time)
 
+        # For each position taken by the bot
         for index, row in self.position_opened.iterrows():
 
             # get the number of hours since opening
-            entry_time_date = datetime.fromtimestamp(int(row.time_entry))
+            entry_time_date = datetime.fromtimestamp(int(row.time_entry[:-3]))
             diff = server - entry_time_date
             diff_in_hours = diff.total_seconds() / 3600
 
-            # create the Exit Side
+            # Condition if the number of hours holding is greater than the max holding
             if diff_in_hours >= self.max_holding:
 
+                # determine the exit side
+                exit_side = 'BUY'
                 if row.side == 'BUY':
                     exit_side = 'SELL'
-                elif row.side == 'SELL':
-                    exit_side = 'BUY'
 
-                self.exit_position(pair=row.pair,
-                                   side=exit_side,
-                                   quantity=row.quantity,
-                                   entry_order_id=row.id,
-                                   nova_id=row.nova_id,
-                                   index_opened=index,
-                                   exit_type='MAX_HOLDING')
+                # call the exit function
+                self.exit_position(
+                    pair=row.pair,
+                    side=exit_side,
+                    quantity=row.quantity,
+                    entry_order_id=row.id,
+                    nova_id=row.nova_id,
+                    exit_type='MAX_HOLDING'
+                )
+
+                self.position_opened.drop(
+                    self.position_opened.index[index],
+                    inplace=True
+                )
 
     def security_close_all(self, exit_type: str):
         """
-        Note: this function has to be executed each time an error stops the bot
+        Args:
+            exit_type:
+        returns:
         """
 
         for index, row in self.position_opened.iterrows():
@@ -460,12 +594,20 @@ class Strategy:
                 quantity=row.quantity,
                 entry_order_id=row.id,
                 nova_id=row.nova_id,
-                index_opened=index,
                 exit_type=exit_type
             )
-        time.sleep(2)
 
     def print_log_send_msg(self, msg: str, error: bool = False):
+        """
+        Args:
+            msg: string message that wants to be sent
+            error: boolean that determines if you want to log an error
+        Returns:
+            This function:
+                - print the messages
+                - log the messages into a log file for debugging
+                - send the message to a server
+        """
         print(msg)
         self.log.info(msg)
 
@@ -482,11 +624,13 @@ class Strategy:
 
     def security_check_max_down(self):
         """
-
+        Returns:
+            This function close all the positions and breaks the bot if it reaches
+            the max down
         """
-        self.print_log_send_msg(f'Current bot PNL is {self.currentPNL}')
         max_down_amount = -1 * self.max_down * self.bankroll
         if self.currentPNL <= max_down_amount:
+            self.print_log_send_msg('Max Down Reached -> Closing all positions')
             self.security_close_all(exit_type="MAX_LOSS")
 
 
