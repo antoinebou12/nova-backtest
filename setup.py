@@ -5,7 +5,7 @@ with open("README.md", "r") as fh:
 
 setuptools.setup(
     name="novalabs",
-    version="0.1.9",
+    version="0.1.91",
     author="Nova Labs",
     author_email="devteam@novalabs.ai",
     description="Nova Labs aims to facilitate the development of algorithmic trading and this package help to backtest and productionize technical strategies on Crypto Market",

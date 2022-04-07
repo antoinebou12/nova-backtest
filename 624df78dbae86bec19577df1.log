@@ -6,16 +6,92 @@ INFO:gql.transport.aiohttp:>>> {"query": "{\n  bot(botId: \"624df78dbae86bec1957
 INFO:gql.transport.aiohttp:<<< {"data":{"bot":{"_id":"624df78dbae86bec19577df1","name":"bot_1"}}}
 
 INFO:Ariis-MacBook-Pro.local:Nova L@bs bot_1 Starting in 1 second
-DEBUG:urllib3.connectionpool:https://testnet.binance.vision:443 "GET /api/v3/klines?endTime=1649346723205&interval=1m&limit=1&startTime=0&symbol=XRPUSDT HTTP/1.1" 200 146
-DEBUG:urllib3.connectionpool:https://testnet.binance.vision:443 "GET /api/v3/klines?interval=1m&limit=500&startTime=1649346423203&symbol=XRPUSDT HTTP/1.1" 200 203
+DEBUG:urllib3.connectionpool:https://testnet.binance.vision:443 "GET /api/v3/klines?endTime=1649355524946&interval=1m&limit=1&startTime=0&symbol=XRPUSDT HTTP/1.1" 200 146
+DEBUG:urllib3.connectionpool:https://testnet.binance.vision:443 "GET /api/v3/klines?interval=1m&limit=500&startTime=1649355224943&symbol=XRPUSDT HTTP/1.1" 200 221
 DEBUG:urllib3.connectionpool:https://testnet.binance.vision:443 "GET /api/v3/time HTTP/1.1" 200 28
-DEBUG:urllib3.connectionpool:https://testnet.binance.vision:443 "GET /api/v3/klines?endTime=1649346724644&interval=1m&limit=1&startTime=0&symbol=BTCUSDT HTTP/1.1" 200 162
-DEBUG:urllib3.connectionpool:https://testnet.binance.vision:443 "GET /api/v3/klines?interval=1m&limit=500&startTime=1649346424643&symbol=BTCUSDT HTTP/1.1" 200 302
+DEBUG:urllib3.connectionpool:https://testnet.binance.vision:443 "GET /api/v3/klines?endTime=1649355526513&interval=1m&limit=1&startTime=0&symbol=BTCUSDT HTTP/1.1" 200 162
+DEBUG:urllib3.connectionpool:https://testnet.binance.vision:443 "GET /api/v3/klines?interval=1m&limit=500&startTime=1649355226512&symbol=BTCUSDT HTTP/1.1" 200 326
 DEBUG:urllib3.connectionpool:https://testnet.binance.vision:443 "GET /api/v3/time HTTP/1.1" 200 28
-DEBUG:urllib3.connectionpool:https://testnet.binance.vision:443 "GET /api/v3/klines?endTime=1649346725685&interval=1m&limit=1&startTime=0&symbol=ETHUSDT HTTP/1.1" 200 156
-DEBUG:urllib3.connectionpool:https://testnet.binance.vision:443 "GET /api/v3/klines?interval=1m&limit=500&startTime=1649346425684&symbol=ETHUSDT HTTP/1.1" 200 293
+DEBUG:urllib3.connectionpool:https://testnet.binance.vision:443 "GET /api/v3/klines?endTime=1649355527732&interval=1m&limit=1&startTime=0&symbol=ETHUSDT HTTP/1.1" 200 156
+DEBUG:urllib3.connectionpool:https://testnet.binance.vision:443 "GET /api/v3/klines?interval=1m&limit=500&startTime=1649355227731&symbol=ETHUSDT HTTP/1.1" 200 289
 DEBUG:urllib3.connectionpool:https://testnet.binance.vision:443 "GET /api/v3/time HTTP/1.1" 200 28
 INFO:Ariis-MacBook-Pro.local:Current bot PNL is 0
 DEBUG:urllib3.connectionpool:Starting new HTTPS connection (1): testnet.binancefuture.com:443
-DEBUG:urllib3.connectionpool:https://testnet.binancefuture.com:443 "GET /fapi/v1/positionRisk?timestamp=1649346780000&signature=a2fb2c8cd85b32f6ea8d0d6b0a89ff5ef572d98c9afe317011f19b2bcd59c7e8 HTTP/1.1" 200 None
-INFO:Ariis-MacBook-Pro.local:Bot faced and error
+DEBUG:urllib3.connectionpool:https://testnet.binancefuture.com:443 "GET /fapi/v1/positionRisk?timestamp=1649355540000&signature=c58d5318a2562f192f5295390df3d9b440cabd40cc2ccd87050bcea613d0d6b5 HTTP/1.1" 200 None
+DEBUG:urllib3.connectionpool:https://testnet.binancefuture.com:443 "GET /fapi/v1/userTrades?startTime=1649355526567&timestamp=1649355540616&signature=75b6dcdef13e0ccf239b6cebd343026572294fb956fdcea7f2a684b9203b25ec HTTP/1.1" 200 2
+DEBUG:urllib3.connectionpool:https://testnet.binancefuture.com:443 "GET /fapi/v1/openOrders?timestamp=1649355541143&signature=07707ffa7bff5e8cbbeadbd5d0ae82e0483107340231e7bebc948aa2122fc80d HTTP/1.1" 200 2
+INFO:Ariis-MacBook-Pro.local:Check Exit -> Max Holding
+DEBUG:urllib3.connectionpool:https://testnet.binance.vision:443 "GET /api/v3/time HTTP/1.1" 200 28
+DEBUG:urllib3.connectionpool:https://testnet.binance.vision:443 "GET /api/v3/klines?endTime=1649355542189&interval=1m&limit=1&startTime=0&symbol=XRPUSDT HTTP/1.1" 200 146
+DEBUG:urllib3.connectionpool:https://testnet.binance.vision:443 "GET /api/v3/klines?interval=1m&limit=500&startTime=1649355422188&symbol=XRPUSDT HTTP/1.1" 200 114
+DEBUG:urllib3.connectionpool:https://testnet.binance.vision:443 "GET /api/v3/time HTTP/1.1" 200 28
+INFO:Ariis-MacBook-Pro.local:Check Entry -> XRPUSDT
+DEBUG:urllib3.connectionpool:https://testnet.binance.vision:443 "GET /api/v3/klines?endTime=1649355543417&interval=1m&limit=1&startTime=0&symbol=BTCUSDT HTTP/1.1" 200 162
+DEBUG:urllib3.connectionpool:https://testnet.binance.vision:443 "GET /api/v3/klines?interval=1m&limit=500&startTime=1649355423416&symbol=BTCUSDT HTTP/1.1" 200 148
+DEBUG:urllib3.connectionpool:https://testnet.binance.vision:443 "GET /api/v3/time HTTP/1.1" 200 28
+INFO:Ariis-MacBook-Pro.local:Check Entry -> BTCUSDT
+DEBUG:urllib3.connectionpool:https://testnet.binance.vision:443 "GET /api/v3/klines?endTime=1649355545052&interval=1m&limit=1&startTime=0&symbol=ETHUSDT HTTP/1.1" 200 156
+DEBUG:urllib3.connectionpool:https://testnet.binance.vision:443 "GET /api/v3/klines?interval=1m&limit=500&startTime=1649355425051&symbol=ETHUSDT HTTP/1.1" 200 150
+DEBUG:urllib3.connectionpool:https://testnet.binance.vision:443 "GET /api/v3/time HTTP/1.1" 200 28
+INFO:Ariis-MacBook-Pro.local:Check Entry -> ETHUSDT
+INFO:Ariis-MacBook-Pro.local:Current bot PNL is 0
+DEBUG:urllib3.connectionpool:https://testnet.binancefuture.com:443 "GET /fapi/v1/positionRisk?timestamp=1649355600000&signature=e96cc82d394280a2062004058df7d6ba7966b3e2e5093ab204016191d3719658 HTTP/1.1" 200 None
+DEBUG:urllib3.connectionpool:https://testnet.binancefuture.com:443 "GET /fapi/v1/userTrades?startTime=1649355543464&timestamp=1649355600514&signature=e44cbdee5c8fce6b30e46e4e333f7b569ee857fdc2e49f5e47c6f0aa41e8438f HTTP/1.1" 200 2
+DEBUG:urllib3.connectionpool:https://testnet.binancefuture.com:443 "GET /fapi/v1/openOrders?timestamp=1649355601039&signature=cc0f593784e0081b6abd01fb91b35d4f538b1ab1b24201cdf9519b154dc5134e HTTP/1.1" 200 2
+INFO:Ariis-MacBook-Pro.local:Check Exit -> Max Holding
+DEBUG:urllib3.connectionpool:https://testnet.binance.vision:443 "GET /api/v3/time HTTP/1.1" 200 28
+DEBUG:urllib3.connectionpool:https://testnet.binance.vision:443 "GET /api/v3/klines?endTime=1649355602078&interval=1m&limit=1&startTime=0&symbol=XRPUSDT HTTP/1.1" 200 146
+DEBUG:urllib3.connectionpool:https://testnet.binance.vision:443 "GET /api/v3/klines?interval=1m&limit=500&startTime=1649355482077&symbol=XRPUSDT HTTP/1.1" 200 118
+DEBUG:urllib3.connectionpool:https://testnet.binance.vision:443 "GET /api/v3/time HTTP/1.1" 200 28
+INFO:Ariis-MacBook-Pro.local:Check Entry -> XRPUSDT
+DEBUG:urllib3.connectionpool:https://testnet.binance.vision:443 "GET /api/v3/klines?endTime=1649355603292&interval=1m&limit=1&startTime=0&symbol=BTCUSDT HTTP/1.1" 200 162
+DEBUG:urllib3.connectionpool:https://testnet.binance.vision:443 "GET /api/v3/klines?interval=1m&limit=500&startTime=1649355483291&symbol=BTCUSDT HTTP/1.1" 200 154
+DEBUG:urllib3.connectionpool:https://testnet.binance.vision:443 "GET /api/v3/time HTTP/1.1" 200 28
+INFO:Ariis-MacBook-Pro.local:Check Entry -> BTCUSDT
+DEBUG:urllib3.connectionpool:https://testnet.binance.vision:443 "GET /api/v3/klines?endTime=1649355604848&interval=1m&limit=1&startTime=0&symbol=ETHUSDT HTTP/1.1" 200 156
+DEBUG:urllib3.connectionpool:https://testnet.binance.vision:443 "GET /api/v3/klines?interval=1m&limit=500&startTime=1649355484847&symbol=ETHUSDT HTTP/1.1" 200 147
+DEBUG:urllib3.connectionpool:https://testnet.binance.vision:443 "GET /api/v3/time HTTP/1.1" 200 28
+INFO:Ariis-MacBook-Pro.local:Check Entry -> ETHUSDT
+INFO:Ariis-MacBook-Pro.local:ETHUSDT action is -1
+DEBUG:urllib3.connectionpool:https://testnet.binance.vision:443 "GET /api/v1/trades?symbol=ETHUSDT HTTP/1.1" 200 10066
+DEBUG:urllib3.connectionpool:https://testnet.binancefuture.com:443 "GET /fapi/v1/balance?timestamp=1649355605929&signature=e4c6e99e609a4a078ca74ec8dc10417e76819c74f23019a442e1ef03a89b2d54 HTTP/1.1" 200 None
+DEBUG:urllib3.connectionpool:https://testnet.binancefuture.com:443 "GET /fapi/v1/exchangeInfo HTTP/1.1" 200 None
+DEBUG:urllib3.connectionpool:https://testnet.binancefuture.com:443 "POST /fapi/v1/order?quantity=0.031&side=SELL&symbol=ETHUSDT&timestamp=1649355606649&type=MARKET&signature=4080349b55fd1270bdde49e0f43f32d18881e5bbe2d5240f6156a0c5eb58c023 HTTP/1.1" 200 None
+DEBUG:urllib3.connectionpool:https://testnet.binancefuture.com:443 "POST /fapi/v1/order?closePosition=True&side=BUY&stopPrice=2583.27&symbol=ETHUSDT&timestamp=1649355607168&type=TAKE_PROFIT_MARKET&signature=1f99647da2046d00456f299222920e3b1d141bd50bc3cbb93e2f905995eccec1 HTTP/1.1" 200 None
+DEBUG:urllib3.connectionpool:https://testnet.binancefuture.com:443 "POST /fapi/v1/order?closePosition=True&side=BUY&stopPrice=3874.91&symbol=ETHUSDT&timestamp=1649355607685&type=STOP_MARKET&signature=ea93829425f1f7790025c81f504b4b52b7a6db19865ebfc369829ea10e5486e1 HTTP/1.1" 200 None
+INFO:gql.transport.aiohttp:>>> {"query": "mutation newBotPosition($name: String!, $input: PositionInput!) {\n  newBotPosition(name: $name, input: $input) {\n    _id\n  }\n}", "variables": {"name": "bot_1", "input": {"type": "SHORT", "value": 100.0, "state": "OPENED", "entry_price": 3229.09, "take_profit": 2583.27, "stop_loss": 3874.91, "pair": {"name": "ETHUSDT"}}}}
+INFO:gql.transport.aiohttp:<<< {"data":{"newBotPosition":{"_id":"624f2b58899dbdf84f19b89e"}}}
+
+INFO:Ariis-MacBook-Pro.local:Current bot PNL is 0
+DEBUG:urllib3.connectionpool:https://testnet.binancefuture.com:443 "GET /fapi/v1/positionRisk?timestamp=1649355660000&signature=4a110d0003975efd9bd502735fc434fd3cb57e4087caba794a8af4224d8229ba HTTP/1.1" 200 None
+DEBUG:urllib3.connectionpool:https://testnet.binancefuture.com:443 "GET /fapi/v1/userTrades?startTime=1649355603345&timestamp=1649355660540&signature=eea2fec30c9b554ba157de4ceb621b7fd455b02d78e5e777f98f77132dc83e70 HTTP/1.1" 200 None
+DEBUG:urllib3.connectionpool:https://testnet.binancefuture.com:443 "GET /fapi/v1/openOrders?timestamp=1649355661160&signature=02f7a43a2179f440b327428e6d017aa5b1fca705bae2ee3720f61ac50a79fa50 HTTP/1.1" 200 None
+DEBUG:urllib3.connectionpool:https://testnet.binancefuture.com:443 "DELETE /fapi/v1/order?orderId=842278468&symbol=ETHUSDT&timestamp=1649355661670&signature=299039093392192e271c4a19f068b15532f329485339db48950db86243ed94ce HTTP/1.1" 200 None
+DEBUG:urllib3.connectionpool:https://testnet.binancefuture.com:443 "DELETE /fapi/v1/order?orderId=842278467&symbol=ETHUSDT&timestamp=1649355662201&signature=4e875c0833c37e9d436a855a1b12a2106e0dba4748551238d88b5905466f6fe4 HTTP/1.1" 200 None
+INFO:gql.transport.aiohttp:>>> {"query": "mutation editPosition($input: PositionInput!) {\n  editPosition(input: $input) {\n    _id\n    state\n  }\n}", "variables": {"input": {"id": "624f2b58899dbdf84f19b89e", "type": "SELL", "state": "CLOSED", "entry_price": 0, "exit_price": 0, "exit_type": "USER_CHANGES", "profit": 0, "fees": 0, "pair": {"name": "ETHUSDT"}}}}
+INFO:gql.transport.aiohttp:<<< {"data":{"editPosition":{"_id":"624f2b58899dbdf84f19b89e","state":"CLOSED"}}}
+
+INFO:Ariis-MacBook-Pro.local:Check Exit -> Max Holding
+DEBUG:urllib3.connectionpool:https://testnet.binance.vision:443 "GET /api/v3/time HTTP/1.1" 200 28
+DEBUG:urllib3.connectionpool:https://testnet.binance.vision:443 "GET /api/v3/klines?endTime=1649355663173&interval=1m&limit=1&startTime=0&symbol=XRPUSDT HTTP/1.1" 200 146
+DEBUG:urllib3.connectionpool:https://testnet.binance.vision:443 "GET /api/v3/klines?interval=1m&limit=500&startTime=1649355543172&symbol=XRPUSDT HTTP/1.1" 200 114
+DEBUG:urllib3.connectionpool:https://testnet.binance.vision:443 "GET /api/v3/time HTTP/1.1" 200 28
+INFO:Ariis-MacBook-Pro.local:Check Entry -> XRPUSDT
+DEBUG:urllib3.connectionpool:https://testnet.binance.vision:443 "GET /api/v3/klines?endTime=1649355664957&interval=1m&limit=1&startTime=0&symbol=BTCUSDT HTTP/1.1" 200 162
+DEBUG:urllib3.connectionpool:https://testnet.binance.vision:443 "GET /api/v3/klines?interval=1m&limit=500&startTime=1649355544956&symbol=BTCUSDT HTTP/1.1" 200 137
+DEBUG:urllib3.connectionpool:https://testnet.binance.vision:443 "GET /api/v3/time HTTP/1.1" 200 28
+INFO:Ariis-MacBook-Pro.local:Check Entry -> BTCUSDT
+INFO:Ariis-MacBook-Pro.local:BTCUSDT action is -1
+DEBUG:urllib3.connectionpool:https://testnet.binance.vision:443 "GET /api/v1/trades?symbol=BTCUSDT HTTP/1.1" 200 10397
+DEBUG:urllib3.connectionpool:https://testnet.binancefuture.com:443 "GET /fapi/v1/balance?timestamp=1649355666147&signature=eea5c663a47c511da6246d1acddfc34554215d88adac48d68d385586bbba3766 HTTP/1.1" 200 None
+DEBUG:urllib3.connectionpool:https://testnet.binancefuture.com:443 "GET /fapi/v1/exchangeInfo HTTP/1.1" 200 None
+DEBUG:urllib3.connectionpool:https://testnet.binancefuture.com:443 "POST /fapi/v1/order?quantity=0.002&side=SELL&symbol=BTCUSDT&timestamp=1649355667033&type=MARKET&signature=589490c45ee896cf0853574d89e2a7d245288adc710e718de4affccdfe4c104b HTTP/1.1" 200 None
+DEBUG:urllib3.connectionpool:https://testnet.binancefuture.com:443 "POST /fapi/v1/order?closePosition=True&side=BUY&stopPrice=34936.55&symbol=BTCUSDT&timestamp=1649355667825&type=TAKE_PROFIT_MARKET&signature=3d6568c5688747da8ff060db35a9b6323bba267238eb9c55c1f68abe26a3d804 HTTP/1.1" 200 None
+DEBUG:urllib3.connectionpool:https://testnet.binancefuture.com:443 "POST /fapi/v1/order?closePosition=True&side=BUY&stopPrice=52404.83&symbol=BTCUSDT&timestamp=1649355668429&type=STOP_MARKET&signature=8d0c889e8acc877ee0f9dd713a1853706525deb7cbdfe6d4b23f37f9aea0a3b6 HTTP/1.1" 200 None
+INFO:gql.transport.aiohttp:>>> {"query": "mutation newBotPosition($name: String!, $input: PositionInput!) {\n  newBotPosition(name: $name, input: $input) {\n    _id\n  }\n}", "variables": {"name": "bot_1", "input": {"type": "SHORT", "value": 100.0, "state": "OPENED", "entry_price": 43670.69, "take_profit": 34936.55, "stop_loss": 52404.83, "pair": {"name": "BTCUSDT"}}}}
+INFO:gql.transport.aiohttp:<<< {"data":{"newBotPosition":{"_id":"624f2b95899dbdf84f19b8a8"}}}
+
+DEBUG:urllib3.connectionpool:https://testnet.binance.vision:443 "GET /api/v3/klines?endTime=1649355669223&interval=1m&limit=1&startTime=0&symbol=ETHUSDT HTTP/1.1" 200 156
+DEBUG:urllib3.connectionpool:https://testnet.binance.vision:443 "GET /api/v3/klines?interval=1m&limit=500&startTime=1649355549222&symbol=ETHUSDT HTTP/1.1" 200 146
+DEBUG:urllib3.connectionpool:https://testnet.binance.vision:443 "GET /api/v3/time HTTP/1.1" 200 28
+INFO:Ariis-MacBook-Pro.local:Already in position -> ETHUSDT

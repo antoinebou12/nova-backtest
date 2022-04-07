@@ -130,7 +130,7 @@ class Strategy:
             s_time = self.client.get_server_time()
 
             self.prod_data[pair] = {}
-            self.prod_data[pair]['latest_update'] = s_time
+            self.prod_data[pair]['latest_update'] = s_time['serverTime']
             self.prod_data[pair]['data'] = df
 
     def update_prod_data(self,  pair: str):
@@ -151,7 +151,7 @@ class Strategy:
 
         s_time = self.client.get_server_time()
 
-        self.prod_data[pair]['latest_update'] = s_time
+        self.prod_data[pair]['latest_update'] = s_time['serverTime']
         self.prod_data[pair]['data'] = df_new.tail(self.window_period)
 
     def get_quantity_precision(self, pair: str) -> tuple:
@@ -306,7 +306,10 @@ class Strategy:
             'sl_type': sl_open['type'],
             'sl_stopPrice': sl_open['stopPrice']
         }])
+
         self.position_opened = pd.concat([self.position_opened, new_position])
+
+        print(self.position_opened)
 
     def _update_user_touched(self, row_pos: dict, df_orders: pd.DataFrame):
 
@@ -361,9 +364,13 @@ class Strategy:
 
             signe = -1 if row.side == 'SELL' else 1
             qty = signe * row.quantity
+            print(qty)
+            print(position_info['positionAmt'])
 
             # 2 - verify if the tp and sl order have been deleted
-            if float(position_info.positionAmt) == qty:
+            if float(position_info['positionAmt']) == qty:
+
+                print('Position is the same')
 
                 # 2.1 - check if tp or sl order has been canceled
                 list_changes = []
@@ -372,8 +379,10 @@ class Strategy:
                 if (row.sl_id not in list(df_tx.orderId)) and (row.sl_id not in list(df_orders.orderId)):
                     list_changes.append('SL')
 
+                print(list_changes)
                 # 2.2 - if it has been touched - cancel bot position
                 if len(list_changes) > 0:
+                    print('funtion Touched')
                     self._update_user_touched(
                         row_pos=row,
                         df_orders=df_orders
@@ -381,7 +390,9 @@ class Strategy:
                     self.position_opened.drop(self.position_opened.index[index], inplace=True)
 
             # 3 - if there is a difference between class and real position
-            if abs(float(position_info.positionAmt)) != qty:
+            if float(position_info['positionAmt']) != qty:
+
+                print('Position is not the same')
 
                 # 3.1 - check if tp has been executed
                 if row.tp_id in list(df_tx.orderId):
@@ -431,8 +442,6 @@ class Strategy:
                     )
 
                 self.position_opened.drop(self.position_opened.index[index], inplace=True)
-
-
 
     def _push_backend(self,
                       entry_tx: list,
@@ -551,6 +560,8 @@ class Strategy:
             diff = server - entry_time_date
             diff_in_hours = diff.total_seconds() / 3600
 
+            print(f'time diff is : {diff_in_hours}')
+
             # Condition if the number of hours holding is greater than the max holding
             if diff_in_hours >= self.max_holding:
 
@@ -619,8 +630,8 @@ class Strategy:
             self.logger_client.send(send_length)
             self.logger_client.send(message)
 
-            if error:
-                self.log.error(msg, exc_info=True)
+        if error:
+            self.log.error(msg, exc_info=True)
 
     def security_check_max_down(self):
         """

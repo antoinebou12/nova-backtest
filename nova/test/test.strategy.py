@@ -71,7 +71,7 @@ class RandomStrategy (Strategy):
         df_ind = self.build_indicators(self.prod_data[pair]['data'])
         df_ind['action'] = np.where(df_ind['entry_long'] < self.entry_long_prob, 1,
                                          np.where(df_ind['entry_short'] < self.entry_short_prob, -1, 0))
-        action = df_ind[df_ind['timeUTC'] == self.prod_data[pair]['latest_update']]['action']
+        action = df_ind[df_ind['timeUTC'] == df_ind['timeUTC'].max()]['action']
         return int(action)
 
     def exit_signals_prod(self):
@@ -106,9 +106,6 @@ class RandomStrategy (Strategy):
                     # 2.2 - check if positions have been updated
                     self.verify_positions(current_position)
 
-                    # 2.2 - print current position
-                    print(self.position_opened)
-
                     # 3 - check the exit positions
                     self.exit_signals_prod()
 
@@ -119,7 +116,7 @@ class RandomStrategy (Strategy):
                         self.update_prod_data(pair=pair)
 
                         # 4.2 - if pair not in position yet
-                        if pair not in list(self.position_opened.pair):
+                        if float(current_position[pair]['positionAmt']) == 0:
 
                             # 4.2.1 - compute bot action
                             self.print_log_send_msg(f'Check Entry -> {pair}')
@@ -139,6 +136,8 @@ class RandomStrategy (Strategy):
                                     tp=0.2,
                                     sl=0.2
                                 )
+                        else:
+                            self.print_log_send_msg(f'Already in position -> {pair}')
 
                     time.sleep(1)
 
@@ -163,135 +162,5 @@ random_strat = RandomStrategy(
 
 
 random_strat.production_run()
-
-positions = random_strat.get_actual_position(['XRPUSDT', 'BTCUSDT', 'ETHUSDT'])
-
-trades = random_strat.client.futures_account_trades()
-
-data = random_strat.client.futures_get_all_orders()
-
-data = random_strat.client.futures_get_all_orders()
-
-all_pos = random_strat.client.futures_position_information()
-
-position = {}
-for pos in all_pos:
-    position[pos['symbol']] = pos
-
-
-position['BTCUSDT']
-
-trades = random_strat.client.futures_account_trades(symbol ='ETHUSDT')
-import pandas as pd
-
-
-
-trades = random_strat.client.futures_account_trades(startTime=1649252285943)
-df = pd.DataFrame(trades)
-
-
-entry_tx = df[df['orderId'] == 3019566738]
-entry_tx.to_dict('records')
-
-
-
-df_pair = df[(df['symbol']=='ETHUSDT') & (df['time'] > 1649254722046)]
-
-for index, row_tx in df_pair.iterrows():
-    print(row_tx.qty)
-    #
-    # if float(row_tx.qty) > 0.02:
-    #     print('break')
-    #     break
-
-df_btc = df[(df['symbol']=='BTCUSDT') & (df['time'] > 1649268965735)]
-
-order_iddd = 841984428
-
-if order_iddd in list(df.orderId):
-    print(1)
-
-s_time = random_strat.client.get_server_time()
-
-s = [-1,2,3]
-min(s)
-
-open_orders = random_strat.client.futures_get_open_orders()
-df_orders = pd.DataFrame(open_orders)
-
-##################### EXAMPLE #####################
-
-# random_strat.get_prod_data(random_strat.list_pair)
-# data = random_strat.prod_data
-# random_strat.security_check_max_down()
 #
-
-# pair = 'BNBUSDT'
-# action = -1
-# tp = 0.1
-# sl = 0.1
-#
-# prc = random_strat.get_price_binance(pair)
-# size = random_strat.get_position_size()
-# quantity = (size / prc)
-# q_precision, p_precision = random_strat.get_quantity_precision(pair)
-#
-# quantity = float(round(quantity, q_precision))
-#
-# if action == 1:
-#     side = 'BUY'
-#     prc_tp = float(round(prc * (1 + tp), p_precision))
-#     prc_sl = float(round(prc * (1 - sl), p_precision))
-#     type_pos = 'LONG'
-#     closing_side = 'SELL'
-# elif action == -1:
-#     side = 'SELL'
-#     prc_tp = float(round(prc * (1 - tp), p_precision))
-#     prc_sl = float(round(prc * (1 + sl), p_precision))
-#     type_pos = 'SHORT'
-#     closing_side = 'BUY'
-#
-# order = random_strat.client.futures_create_order(
-#     symbol=pair,
-#     side=side,
-#     type='MARKET',
-#     quantity=quantity
-# )
-#
-# tp_open = random_strat.client.futures_create_order(
-#     symbol=pair,
-#     side=closing_side,
-#     type='TAKE_PROFIT_MARKET',
-#     stopPrice=prc_tp,
-#     closePosition=True
-# )
-#
-# sl_open = random_strat.client.futures_create_order(
-#     symbol=pair,
-#     side=closing_side,
-#     type='STOP_MARKET',
-#     stopPrice=prc_sl,
-#     closePosition=True
-# )
-#
-#
-# # all tx since
-# tx = random_strat.client.futures_account_trades(startTime=1649299015009)
-
-# order = random_strat.client.futures_create_order(symbol='XRPUSDT', side='BUY', type='MARKET', quantity=100.0)
-# entry_tx = random_strat.client.futures_account_trades(orderId=order['orderId'])
-
-# data = random_strat.get_actual_position(['XRPUSDT', 'BTCUSDT', 'ETHUSDT'])
-#
-# random_strat.nova.update_bot_position(
-#     pos_id='624d8575fc922c884ae6cc7a',
-#     pos_type='LONG',
-#     state='CLOSED',
-#     entry_price=0.7913,
-#     exit_price=0.8027,
-#     exit_type='MAX_HOLDING',
-#     profit=-1.42842,
-#     fees=34.944441497999996,
-#     pair='XRPUSDT'
-# )
-
+# current_position = random_strat.get_actual_position()
