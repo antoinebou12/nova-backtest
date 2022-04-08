@@ -46,6 +46,7 @@ class Strategy:
 
         # Logging  and
         logging.getLogger().setLevel(logging.NOTSET)
+
         # ToDo : add creation date
         logging.basicConfig(filename=f'{self.bot_id}.log', filemode='w')
         self.log = logging.getLogger(socket.gethostname())
@@ -76,7 +77,7 @@ class Strategy:
         try:
             self.client.futures_change_leverage(symbol=pair, leverage=lvl)
             print(f'Setup leverage for {pair}')
-        except(Exception):
+        except Exception:
             print('Setting not working')
 
     def get_unit_multiplier(self) -> tuple:
@@ -658,7 +659,7 @@ class Strategy:
                     orderId=row.tp_id
                 )
 
-    def updateTPOrder(self,
+    def update_tp(self,
                       pair: str,
                       tp_id: str,
                       new_tp_price: float,
@@ -667,17 +668,24 @@ class Strategy:
         print(f"Update Take profit order: {pair}")
 
         # Cancel old Take profit order
-        self.client.futures_cancel_order(symbol=pair, orderId=tp_id)
+        self.client.futures_cancel_order(
+            symbol=pair,
+            orderId=tp_id
+        )
 
         # Create new Take profit order
-        tp_open = self.client.futures_create_order(symbol=pair, side=side, type='TAKE_PROFIT_MARKET',
-                                                   stopPrice=new_tp_price,
-                                                   closePosition=True)
+        tp_open = self.client.futures_create_order(
+            symbol=pair,
+            side=side,
+            type='TAKE_PROFIT_MARKET',
+            stopPrice=new_tp_price,
+            closePosition=True
+        )
 
         self.position_opened[pair]['tp_id'] = tp_open['orderId']
         self.position_opened[pair]['tp_stopPrice'] = tp_open['stopPrice']
 
-    def updateSLOrder(self,
+    def update_sl(self,
                       pair: str,
                       sl_id: str,
                       new_sl_price: float,
@@ -686,12 +694,19 @@ class Strategy:
         print(f"Update Stop loss order: {pair}")
 
         # Cancel old Stop loss order
-        self.client.futures_cancel_order(symbol=pair, orderId=sl_id)
+        self.client.futures_cancel_order(
+            symbol=pair,
+            orderId=sl_id
+        )
 
         # Create new Stop loss order
-        sl_open = self.client.futures_create_order(symbol=pair, side=side, type='STOP_MARKET',
-                                                   stopPrice=new_sl_price,
-                                                   closePosition=True)
+        sl_open = self.client.futures_create_order(
+            symbol=pair,
+            side=side,
+            type='STOP_MARKET',
+            stopPrice=new_sl_price,
+            closePosition=True
+        )
 
         self.position_opened[pair]['tp_id'] = sl_open['orderId']
         self.position_opened[pair]['tp_stopPrice'] = sl_open['stopPrice']
@@ -766,5 +781,3 @@ class Strategy:
     def update_tp(self):
         pass
 
-    def update_sl(self):
-        pass

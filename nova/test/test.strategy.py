@@ -165,39 +165,3 @@ random_strat = RandomStrategy(
     max_down=0.2,
     is_logging=False
 )
-
-
-random_strat.production_run()
-#
-# # current_position = random_strat.get_actual_position()
-# current_position = random_strat.get_actual_position()
-#
-# position_info = current_position['BTCUSDT']
-# qty = 1 * '0.01'
-# if float(position_info['positionAmt']) == qty:
-#     print(1)
-#
-# ###
-#
-#
-# order = random_strat.client.futures_create_order(
-#     symbol='XRPUSDT',
-#     side='SELL',
-#     type='MARKET',
-#     quantity=100.0
-# )
-
-#
-# open_orders = random_strat.client.futures_get_open_orders()
-# df_orders = pd.DataFrame(open_orders)
-#
-# for index, row in df_orders.iterrows():
-#     print(index)
-#     if index>=4:
-#         print('delete')
-#         df_orders.drop(
-#             index=index,
-#             inplace=True
-#         )
-#
-
