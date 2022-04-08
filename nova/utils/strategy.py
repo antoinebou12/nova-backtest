@@ -711,7 +711,7 @@ class Strategy:
         self.position_opened[pair]['tp_id'] = sl_open['orderId']
         self.position_opened[pair]['tp_stopPrice'] = sl_open['stopPrice']
 
-    def security_close_all(self):
+    def security_close_all(self, exit_type: str):
 
         self.print_log_send_msg(msg='SECURITY CLOSE ALL')
 
@@ -727,7 +727,7 @@ class Strategy:
                 quantity=row.quantity,
                 entry_order_id=row.id,
                 nova_id=row.nova_id,
-                exit_type='ERROR'
+                exit_type=exit_type
             )
 
             # cancel sl order
