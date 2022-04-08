@@ -42,6 +42,8 @@ class Strategy:
         self.currentPNL = 0
         self.bot_id = bot_id
 
+        self.server_time = datetime(2019, 1, 1)
+
         # Logging  and
         logging.getLogger().setLevel(logging.NOTSET)
         # ToDo : add creation date
@@ -118,12 +120,17 @@ class Strategy:
         url = "https://fapi.binance.com/fapi/v1/klines"
         params = dict(symbol=pair, interval=self.candle, limit=limit)
 
+        # Compute the server time
+        s_time = self.client.get_server_time()
+        server_time = int(str(s_time['serverTime'])[:-3])
+        self.server_time = datetime.fromtimestamp(server_time)
+
         async with session.get(url=url, params=params) as response:
             klines = await response.json()
 
             df = self._data_fomating(klines)
 
-            df = df[df['close_time'] < datetime.now()]
+            df = df[df['close_time'] < self.server_time]
 
             self.prod_data[pair] = {}
             self.prod_data[pair]['latest_update'] = df['timeUTC'].max()
@@ -157,12 +164,17 @@ class Strategy:
         url = "https://fapi.binance.com/fapi/v1/klines"
         params = dict(symbol=pair, interval=self.candle, limit=2)
 
+        # Compute the server time
+        s_time = self.client.get_server_time()
+        server_time = int(str(s_time['serverTime'])[:-3])
+        self.server_time = datetime.fromtimestamp(server_time)
+
         async with session.get(url=url, params=params) as response:
             klines = await response.json()
 
             df = self._data_fomating(klines)
 
-            df = df[df['close_time'] < datetime.now()]
+            df = df[df['close_time'] < self.server_time]
 
             df_new = pd.concat([self.prod_data[pair]['data'], df])
             df_new = df_new.drop_duplicates(subset=['timeUTC']).sort_values(by=['timeUTC'], ascending=True)
