@@ -8,6 +8,9 @@ from nova.api.nova_client import NovaClient
 import time
 from nova.utils.constant import POSITION_PROD_COLUMNS
 
+import aiohttp
+import asyncio
+
 import logging
 import logging.handlers
 
@@ -110,49 +113,83 @@ class Strategy:
 
         return df
 
-    def get_prod_data(self, list_pair: list):
+    async def get_klines_and_prod_data(self, session, pair, limit):
+
+        url = "https://fapi.binance.com/fapi/v1/klines"
+        params = dict(symbol=pair, interval=self.candle, limit=limit)
+
+        async with session.get(url=url, params=params) as response:
+            klines = await response.json()
+
+            df = self._data_fomating(klines)
+
+            df = df[df['close_time'] < datetime.now()]
+
+            self.prod_data[pair] = {}
+            self.prod_data[pair]['latest_update'] = df['timeUTC'].max()
+            self.prod_data[pair]['data'] = df
+
+        return klines
+
+    async def get_prod_data(self, list_pair: list):
         """
         Note: This function is called once when the bot is instantiated.
         This function execute n API calls with n representing the number of pair in the list
         Args:
             list_pair: list of all the pairs you want to run the bot on.
-
         Returns: None, but it fills the dictionary self.prod_data that will contain all the data
         needed for the analysis.
+        !! Command to run async function: asyncio.run(self.get_prod_data(list_pair=list_pair)) !!
         """
-        unit, multi = self.get_unit_multiplier()
 
-        for pair in list_pair:
+        async with aiohttp.ClientSession(connector=aiohttp.TCPConnector(ssl=False)) as session:
+            tasks = []
 
-            klines = self.client.get_historical_klines(pair, self.candle, f'{multi * self.window_period} {unit} ago UTC')
+            for pair in list_pair:
+
+                task = asyncio.ensure_future(self.get_klines_and_prod_data(session, pair, limit=self.window_period + 1))
+                tasks.append(task)
+
+            await asyncio.gather(*tasks)
+
+    async def get_klines_and_update_data(self, session, pair):
+
+        url = "https://fapi.binance.com/fapi/v1/klines"
+        params = dict(symbol=pair, interval=self.candle, limit=2)
+
+        async with session.get(url=url, params=params) as response:
+            klines = await response.json()
+
             df = self._data_fomating(klines)
 
-            s_time = self.client.get_server_time()
+            df = df[df['close_time'] < datetime.now()]
 
-            self.prod_data[pair] = {}
-            self.prod_data[pair]['latest_update'] = s_time['serverTime']
-            self.prod_data[pair]['data'] = df
+            df_new = pd.concat([self.prod_data[pair]['data'], df])
+            df_new = df_new.drop_duplicates(subset=['timeUTC']).sort_values(by=['timeUTC'], ascending=True)
+            self.prod_data[pair]['latest_update'] = df_new['timeUTC'].max()
+            self.prod_data[pair]['data'] = df_new.tail(self.window_period)
 
-    def update_prod_data(self,  pair: str):
+        return klines
+
+    async def update_prod_data(self,  list_pair: list):
         """
         Notes: This function execute 1 API call
-
         Args:
             pair:  pairs you want to run the bot on ex: 'BTCUSDT', 'ETHUSDT'
-
         Returns: None, but it updates the dictionary self.prod_data that will contain all the data
         needed for the analysis.
+        !! Command to run async function: asyncio.run(self.update_prod_data(list_pair=list_pair)) !!
         """
-        unit, multi = self.get_unit_multiplier()
-        klines = self.client.get_historical_klines(pair, self.candle, f'{multi*2} {unit} ago UTC')
-        df = self._data_fomating(klines)
-        df_new = pd.concat([self.prod_data[pair]['data'], df])
-        df_new = df_new.drop_duplicates(subset=['timeUTC']).sort_values(by=['timeUTC'], ascending=True)
 
-        s_time = self.client.get_server_time()
+        async with aiohttp.ClientSession(connector=aiohttp.TCPConnector(ssl=False)) as session:
+            tasks = []
 
-        self.prod_data[pair]['latest_update'] = s_time['serverTime']
-        self.prod_data[pair]['data'] = df_new.tail(self.window_period)
+            for pair in list_pair:
+
+                task = asyncio.ensure_future(self.get_klines_and_update_data(session, pair))
+                tasks.append(task)
+
+            await asyncio.gather(*tasks)
 
     def get_quantity_precision(self, pair: str) -> tuple:
         """
