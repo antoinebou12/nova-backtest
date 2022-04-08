@@ -658,6 +658,44 @@ class Strategy:
                     orderId=row.tp_id
                 )
 
+    def updateTPOrder(self,
+                      pair: str,
+                      tp_id: str,
+                      new_tp_price: float,
+                      side: str):
+
+        print(f"Update Take profit order: {pair}")
+
+        # Cancel old Take profit order
+        self.client.futures_cancel_order(symbol=pair, orderId=tp_id)
+
+        # Create new Take profit order
+        tp_open = self.client.futures_create_order(symbol=pair, side=side, type='TAKE_PROFIT_MARKET',
+                                                   stopPrice=new_tp_price,
+                                                   closePosition=True)
+
+        self.position_opened[pair]['tp_id'] = tp_open['orderId']
+        self.position_opened[pair]['tp_stopPrice'] = tp_open['stopPrice']
+
+    def updateSLOrder(self,
+                      pair: str,
+                      sl_id: str,
+                      new_sl_price: float,
+                      side: str):
+
+        print(f"Update Stop loss order: {pair}")
+
+        # Cancel old Stop loss order
+        self.client.futures_cancel_order(symbol=pair, orderId=sl_id)
+
+        # Create new Stop loss order
+        sl_open = self.client.futures_create_order(symbol=pair, side=side, type='STOP_MARKET',
+                                                   stopPrice=new_sl_price,
+                                                   closePosition=True)
+
+        self.position_opened[pair]['tp_id'] = sl_open['orderId']
+        self.position_opened[pair]['tp_stopPrice'] = sl_open['stopPrice']
+
     def security_close_all(self):
 
         self.print_log_send_msg(msg='SECURITY CLOSE ALL')
