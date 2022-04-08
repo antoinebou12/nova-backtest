@@ -308,8 +308,7 @@ class Strategy:
         }])
 
         self.position_opened = pd.concat([self.position_opened, new_position])
-
-        print(self.position_opened)
+        self.position_opened.reset_index(inplace=True, drop=True)
 
     def _update_user_touched(self, row_pos: dict, df_orders: pd.DataFrame):
 
@@ -345,9 +344,11 @@ class Strategy:
 
         # 0.1 - get all tx since last data update
         all_time_updates = [self.prod_data[pair]['latest_update'] for pair in self.list_pair]
+        earliest_update = str(min(all_time_updates))
+        start_time_int = (int(earliest_update[:-3]) - 3600 * self.max_holding) * 1000
 
-        # 0.2 - get last tx
-        tx = self.client.futures_account_trades(startTime=min(all_time_updates))
+        # 0.2 - get last txs
+        tx = self.client.futures_account_trades(startTime=int(start_time_int))
         df_tx = pd.DataFrame(tx)
 
         # 0.3 - get open orders
@@ -363,14 +364,12 @@ class Strategy:
             entry_tx = entries.to_dict('records')
 
             signe = -1 if row.side == 'SELL' else 1
-            qty = signe * row.quantity
-            print(qty)
-            print(position_info['positionAmt'])
+            qty = signe * float(row.quantity)
 
             # 2 - verify if the tp and sl order have been deleted
             if float(position_info['positionAmt']) == qty:
 
-                print('Position is the same')
+                self.print_log_send_msg(f'No change in Qty {row.pair}')
 
                 # 2.1 - check if tp or sl order has been canceled
                 list_changes = []
@@ -379,23 +378,29 @@ class Strategy:
                 if (row.sl_id not in list(df_tx.orderId)) and (row.sl_id not in list(df_orders.orderId)):
                     list_changes.append('SL')
 
-                print(list_changes)
                 # 2.2 - if it has been touched - cancel bot position
                 if len(list_changes) > 0:
-                    print('funtion Touched')
+
+                    self.print_log_send_msg(f'Cancel Trade Cause an Order has been removed {row.pair}')
+
                     self._update_user_touched(
                         row_pos=row,
                         df_orders=df_orders
                     )
-                    self.position_opened.drop(self.position_opened.index[index], inplace=True)
+                    self.position_opened.drop(
+                        index=index,
+                        inplace=True
+                    )
 
             # 3 - if there is a difference between class and real position
             if float(position_info['positionAmt']) != qty:
 
-                print('Position is not the same')
+                self.print_log_send_msg(f'Change in Qty {row.pair}')
 
                 # 3.1 - check if tp has been executed
                 if row.tp_id in list(df_tx.orderId):
+
+                    self.print_log_send_msg(f'TP {row.pair}')
 
                     # 3.1.1 if the sl order still exit -> close it
                     if row.sl_id in list(df_orders.orderId):
@@ -417,6 +422,8 @@ class Strategy:
                 # 3.2 - check if sl has been executed
                 elif row.sl_id in list(df_tx.orderId):
 
+                    self.print_log_send_msg(f'SL {row.pair}')
+
                     if row.tp_id in list(df_orders.orderId):
                         self.client.futures_cancel_order(
                             symbol=row.pair,
@@ -436,12 +443,14 @@ class Strategy:
                 # 3.3 - update positions
                 else:
 
+                    self.print_log_send_msg(f'Tx has been done {row.pair}')
+
                     self._update_user_touched(
                         row_pos=row,
                         df_orders=df_orders
                     )
 
-                self.position_opened.drop(self.position_opened.index[index], inplace=True)
+                self.position_opened.drop(index=index, inplace=True)
 
     def _push_backend(self,
                       entry_tx: list,
@@ -547,6 +556,8 @@ class Strategy:
             This method is used to check if the maximum holding time is reached for each open positions.
         """
 
+        self.print_log_send_msg(f'Checking Max Holding')
+
         # Compute the server time
         s_time = self.client.get_server_time()
         server_time = int(str(s_time['serverTime'])[:-3])
@@ -560,10 +571,10 @@ class Strategy:
             diff = server - entry_time_date
             diff_in_hours = diff.total_seconds() / 3600
 
-            print(f'time diff is : {diff_in_hours}')
-
             # Condition if the number of hours holding is greater than the max holding
             if diff_in_hours >= self.max_holding:
+
+                self.print_log_send_msg(msg=f'Max Holding For {row.pair}')
 
                 # determine the exit side
                 exit_side = 'BUY'
@@ -580,22 +591,31 @@ class Strategy:
                     exit_type='MAX_HOLDING'
                 )
 
+                # update the
                 self.position_opened.drop(
-                    self.position_opened.index[index],
+                    index=index,
                     inplace=True
                 )
 
-    def security_close_all(self, exit_type: str):
-        """
-        Args:
-            exit_type:
-        returns:
-        """
+                # cancel sl order
+                self.client.futures_cancel_order(
+                    symbol=row.pair,
+                    orderId=row.sl_id
+                )
+
+                # cancel tp order
+                self.client.futures_cancel_order(
+                    symbol=row.pair,
+                    orderId=row.tp_id
+                )
+
+    def security_close_all(self):
+
+        self.print_log_send_msg(msg='SECURITY CLOSE ALL')
 
         for index, row in self.position_opened.iterrows():
 
             exit_side = 'SELL'
-
             if row.side == 'SELL':
                 exit_side = 'BUY'
 
@@ -605,7 +625,19 @@ class Strategy:
                 quantity=row.quantity,
                 entry_order_id=row.id,
                 nova_id=row.nova_id,
-                exit_type=exit_type
+                exit_type='ERROR'
+            )
+
+            # cancel sl order
+            self.client.futures_cancel_order(
+                symbol=row.pair,
+                orderId=row.sl_id
+            )
+
+            # cancel tp order
+            self.client.futures_cancel_order(
+                symbol=row.pair,
+                orderId=row.tp_id
             )
 
     def print_log_send_msg(self, msg: str, error: bool = False):
@@ -644,4 +676,8 @@ class Strategy:
             self.print_log_send_msg('Max Down Reached -> Closing all positions')
             self.security_close_all(exit_type="MAX_LOSS")
 
+    def update_tp(self):
+        pass
 
+    def update_sl(self):
+        pass

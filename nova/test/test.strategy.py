@@ -75,8 +75,8 @@ class RandomStrategy (Strategy):
         return int(action)
 
     def exit_signals_prod(self):
-        self.print_log_send_msg('Check Exit -> Max Holding')
-        self.is_max_holding()
+        self.print_log_send_msg('-- Checking Exit --')
+        pass
 
     def production_run(self):
 
@@ -97,32 +97,36 @@ class RandomStrategy (Strategy):
                     # 1 - print current PNL
                     self.print_log_send_msg(f'Current bot PNL is {self.currentPNL}')
 
-                    # 2 - check if there the bot loss the maximum amount
+                    # 2- is max holding
+                    self.is_max_holding()
+
+                    # 3 - check if there the bot loss the maximum amount
                     self.security_check_max_down()
 
-                    # 2.1 - check current position
+                    # 4 - check current position
                     current_position = self.get_actual_position()
 
-                    # 2.2 - check if positions have been updated
+                    # 5 - check if positions have been updated
                     self.verify_positions(current_position)
 
-                    # 3 - check the exit positions
+                    # 6 - check the exit positions
                     self.exit_signals_prod()
 
-                    # 4 - for each token
+                    # 7 - for each token
                     for pair in self.list_pair:
 
-                        # 4.1 - update the data
+                        # 8 - update the data
+                        self.print_log_send_msg('-- Update Data --')
                         self.update_prod_data(pair=pair)
 
-                        # 4.2 - if pair not in position yet
+                        # 9 - if pair not in position yet
                         if float(current_position[pair]['positionAmt']) == 0:
 
-                            # 4.2.1 - compute bot action
+                            # 10 - compute bot action
                             self.print_log_send_msg(f'Check Entry -> {pair}')
                             action = self.entry_signals_prod(pair=pair)
 
-                            # 4.2.2 - if action is different from 0
+                            # 11 - if action is different from 0
                             if action != 0:
 
                                 # 4.3 - send entering position
@@ -142,6 +146,8 @@ class RandomStrategy (Strategy):
                     time.sleep(1)
 
         except Exception:
+
+            self.security_close_all('ERROR')
 
             self.print_log_send_msg(
                 msg='Bot faced and error',
@@ -163,4 +169,35 @@ random_strat = RandomStrategy(
 
 random_strat.production_run()
 #
+# # current_position = random_strat.get_actual_position()
 # current_position = random_strat.get_actual_position()
+#
+# position_info = current_position['BTCUSDT']
+# qty = 1 * '0.01'
+# if float(position_info['positionAmt']) == qty:
+#     print(1)
+#
+# ###
+#
+#
+# order = random_strat.client.futures_create_order(
+#     symbol='XRPUSDT',
+#     side='SELL',
+#     type='MARKET',
+#     quantity=100.0
+# )
+
+#
+# open_orders = random_strat.client.futures_get_open_orders()
+# df_orders = pd.DataFrame(open_orders)
+#
+# for index, row in df_orders.iterrows():
+#     print(index)
+#     if index>=4:
+#         print('delete')
+#         df_orders.drop(
+#             index=index,
+#             inplace=True
+#         )
+#
+
