@@ -147,7 +147,7 @@ class RandomStrategy (Strategy):
 
         except Exception:
 
-            self.security_close_all('ERROR')
+            self.security_close_all(exit_type='ERROR')
 
             self.print_log_send_msg(
                 msg='Bot faced and error',
@@ -165,3 +165,5 @@ random_strat = RandomStrategy(
     max_down=0.2,
     is_logging=False
 )
+
+random_strat.production_run()

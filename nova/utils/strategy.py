@@ -686,10 +686,10 @@ class Strategy:
         self.position_opened[pair]['tp_stopPrice'] = tp_open['stopPrice']
 
     def update_sl(self,
-                      pair: str,
-                      sl_id: str,
-                      new_sl_price: float,
-                      side: str):
+                  pair: str,
+                  sl_id: str,
+                  new_sl_price: float,
+                  side: str):
 
         print(f"Update Stop loss order: {pair}")
 
@@ -777,7 +777,3 @@ class Strategy:
         if self.currentPNL <= max_down_amount:
             self.print_log_send_msg('Max Down Reached -> Closing all positions')
             self.security_close_all(exit_type="MAX_LOSS")
-
-    def update_tp(self):
-        pass
-
