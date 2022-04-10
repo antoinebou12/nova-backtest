@@ -1,4 +1,5 @@
 from nova.utils.strategy import Strategy
+import asyncio
 
 import pandas as pd
 import numpy as np
@@ -68,7 +69,7 @@ class RandomStrategy (Strategy):
         Returns:
             a integer that indicates what type of action will be taken
         """
-        df_ind = self.build_indicators(self.prod_data[pair]['data'])
+        df_ind = self.build_indicators(self.prod_data[pair]['data'].copy())
         df_ind['action'] = np.where(df_ind['entry_long'] < self.entry_long_prob, 1,
                                          np.where(df_ind['entry_short'] < self.entry_short_prob, -1, 0))
         action = df_ind[df_ind['timeUTC'] == df_ind['timeUTC'].max()]['action']
@@ -87,7 +88,7 @@ class RandomStrategy (Strategy):
         time.sleep(1)
 
         # 0.2 - Download the production data
-        self.get_prod_data(self.list_pair)
+        asyncio.run(self.get_prod_data(self.list_pair))
 
         try:
             while True:
@@ -109,15 +110,17 @@ class RandomStrategy (Strategy):
                     # 5 - check if positions have been updated
                     self.verify_positions(current_position)
 
-                    # 6 - check the exit positions
+                    # 6 - update positions
+                    self.print_log_send_msg('-- Update Data --')
+                    asyncio.run(self.update_prod_data(list_pair=self.list_pair))
+
+                    # 7 - check the exit positions
                     self.exit_signals_prod()
 
-                    # 7 - for each token
+                    # 8 - for each token
                     for pair in self.list_pair:
 
-                        # 8 - update the data
-                        self.print_log_send_msg('-- Update Data --')
-                        self.update_prod_data(pair=pair)
+                        print(self.prod_data[pair]['data'].iloc[-1,:])
 
                         # 9 - if pair not in position yet
                         if float(current_position[pair]['positionAmt']) == 0:
@@ -156,7 +159,7 @@ class RandomStrategy (Strategy):
 
 
 random_strat = RandomStrategy(
-    bot_id="624df78dbae86bec19577df1",
+    bot_id="62522ee98acf3c6a027d9769",
     api_key=config("BinanceAPIKeyTest"),
     api_secret=config("BinanceAPISecretTest"),
     list_pair=['XRPUSDT', 'BTCUSDT', 'ETHUSDT'],
@@ -167,3 +170,4 @@ random_strat = RandomStrategy(
 )
 
 random_strat.production_run()
+

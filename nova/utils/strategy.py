@@ -2,11 +2,11 @@ import socket
 
 from decouple import config
 import pandas as pd
-from datetime import datetime
+from datetime import datetime, timedelta
 import re
 from nova.api.nova_client import NovaClient
 import time
-from nova.utils.constant import POSITION_PROD_COLUMNS
+from nova.utils.constant import POSITION_PROD_COLUMNS, BINANCE_KLINES_COLUMNS
 
 import aiohttp
 import asyncio
@@ -41,8 +41,6 @@ class Strategy:
 
         self.currentPNL = 0
         self.bot_id = bot_id
-
-        self.server_time = datetime(2019, 1, 1)
 
         # Logging  and
         logging.getLogger().setLevel(logging.NOTSET)
@@ -100,19 +98,17 @@ class Strategy:
 
         Returns: dataframe with usable format.
         """
-        for k in kline:
-            k[0] = datetime.fromtimestamp(int(str(k[0])[:10]))
-            del k[6:]
+        df = pd.DataFrame(kline, columns=BINANCE_KLINES_COLUMNS)
+        to_keep = [
+            'open_time', 'open', 'high', 'low',
+            'close', 'volume', 'close_time'
+        ]
+        df = df[to_keep]
 
-        df = pd.DataFrame(
-            kline,
-            columns=['timeUTC', 'open', 'high', 'low', 'close', 'volume']
-        )
-
-        for var in ["volume", "open", "high", "low", "close"]:
+        for var in ["open", "high", "low", "close", "volume"]:
             df[var] = pd.to_numeric(df[var], downcast="float")
 
-        df['timeUTC'] = pd.to_datetime(df['timeUTC'])
+        df['timeUTC'] = pd.to_datetime(df['open_time'], unit='ms')
 
         return df
 
@@ -123,18 +119,16 @@ class Strategy:
 
         # Compute the server time
         s_time = self.client.get_server_time()
-        server_time = int(str(s_time['serverTime'])[:-3])
-        self.server_time = datetime.fromtimestamp(server_time)
 
         async with session.get(url=url, params=params) as response:
             klines = await response.json()
 
             df = self._data_fomating(klines)
 
-            df = df[df['close_time'] < self.server_time]
+            df = df[df['close_time'] < s_time['serverTime']]
 
             self.prod_data[pair] = {}
-            self.prod_data[pair]['latest_update'] = df['timeUTC'].max()
+            self.prod_data[pair]['latest_update'] = s_time['serverTime']
             self.prod_data[pair]['data'] = df
 
         return klines
@@ -167,19 +161,17 @@ class Strategy:
 
         # Compute the server time
         s_time = self.client.get_server_time()
-        server_time = int(str(s_time['serverTime'])[:-3])
-        self.server_time = datetime.fromtimestamp(server_time)
 
         async with session.get(url=url, params=params) as response:
             klines = await response.json()
 
             df = self._data_fomating(klines)
 
-            df = df[df['close_time'] < self.server_time]
+            df = df[df['close_time'] < int(s_time['serverTime'])]
 
             df_new = pd.concat([self.prod_data[pair]['data'], df])
             df_new = df_new.drop_duplicates(subset=['timeUTC']).sort_values(by=['timeUTC'], ascending=True)
-            self.prod_data[pair]['latest_update'] = df_new['timeUTC'].max()
+            self.prod_data[pair]['latest_update'] = s_time['serverTime']
             self.prod_data[pair]['data'] = df_new.tail(self.window_period)
 
         return klines
@@ -188,7 +180,7 @@ class Strategy:
         """
         Notes: This function execute 1 API call
         Args:
-            pair:  pairs you want to run the bot on ex: 'BTCUSDT', 'ETHUSDT'
+            list_pair:  pairs you want to run the bot on ex: 'BTCUSDT', 'ETHUSDT'
         Returns: None, but it updates the dictionary self.prod_data that will contain all the data
         needed for the analysis.
         !! Command to run async function: asyncio.run(self.update_prod_data(list_pair=list_pair)) !!
@@ -207,10 +199,8 @@ class Strategy:
     def get_quantity_precision(self, pair: str) -> tuple:
         """
         Note: => This function execute 1 API call to binance
-
         Args:
             pair: string variable that represent the pair ex: 'BTCUSDT'
-
         Returns: a tuple containing the quantity precision and the price precision needed for the pair
         """
         info = self.client.futures_exchange_info()
@@ -394,8 +384,9 @@ class Strategy:
 
         # 0.1 - get all tx since last data update
         all_time_updates = [self.prod_data[pair]['latest_update'] for pair in self.list_pair]
-        earliest_update = str(min(all_time_updates))
-        start_time_int = (int(earliest_update[:-3]) - 3600 * self.max_holding) * 1000
+        earliest_update = min(all_time_updates)
+
+        start_time_int = (int(str(earliest_update)[:-3]) - self.max_holding * 3600 - 300) * 1000
 
         # 0.2 - get last txs
         tx = self.client.futures_account_trades(startTime=int(start_time_int))

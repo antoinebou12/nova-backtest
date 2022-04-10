@@ -62,3 +62,10 @@ POSITION_PROD_COLUMNS = [
     'tp_type', 'tp_stopPrice', 'sl_id', 'sl_side', 'sl_type', 'sl_stopPrice',
     'nova_id', 'time_entry'
 ]
+
+
+BINANCE_KLINES_COLUMNS = [
+    'open_time', 'open', 'high', 'low', 'close', 'volume', 'close_time',
+    'quote_asset_volume', 'nb_of_trades', 'taker_base_volume',
+    'taker_quote_volume', 'ignore'
+]
