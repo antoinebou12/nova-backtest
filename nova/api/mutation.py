@@ -4,7 +4,7 @@ from gql import gql
 class GraphMutation:
     
     @staticmethod
-    def create_pair_query():
+    def create_pair():
         return gql(
             """
             mutation createPair($input: PairInput!){
@@ -15,7 +15,22 @@ class GraphMutation:
             }
             """
         )
-    
+
+    @staticmethod
+    def delete_pair():
+        return gql(
+            """
+            mutation deletePair($pairId: ObjectId!){
+                deletePair(pairId: $pairId)
+                
+            }
+            """
+        )
+
+    @staticmethod
+    def update_pair():
+        pass
+
     @staticmethod
     def create_strategy_query():
         return gql(

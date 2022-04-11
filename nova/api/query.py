@@ -2,16 +2,36 @@ from gql import gql
 
 
 class GraphQuery:
-    
+
     @staticmethod
-    def strategies():
+    def read_pairs():
         return gql(
-        """
-            query 
-        """
+            """
+            {
+                pairs {
+                    _id
+                    name
+                }
+            }
+            """
         )
 
-    
+    @staticmethod
+    def read_strategy():
+        return gql(
+            """
+            {
+                strategies {
+                    _id
+                    name
+                    candles
+                    avg_expd_return
+                    avg_reel_return
+                }
+            }
+            """
+        )
+
     @staticmethod
     def bots():
         return gql('''

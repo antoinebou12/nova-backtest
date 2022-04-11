@@ -1,8 +1,8 @@
 from gql import Client
 from gql.transport.aiohttp import AIOHTTPTransport
 
-from nova.api.nova_graphql.mutation import GraphMutation
-from nova.api.nova_graphql.query import GraphQuery
+from nova.api.mutation import GraphMutation
+from nova.api.query import GraphQuery
 
 
 class NovaClient:
@@ -10,24 +10,48 @@ class NovaClient:
     def __init__(self, api_secret=None) -> None:
         self._api_secret = api_secret
         self._headers = {"Authorization": f"Bearer {api_secret}"}
-        self._transport = AIOHTTPTransport(url='https://api.novalabs.ai/graphql',
-                                           headers=self._headers)
-        self._client = Client(transport=self._transport,
-                              fetch_schema_from_transport=True)
-        
-    def create_pair(self, pair: str) -> dict:
-        query = GraphMutation.create_pair_query()
+        self._transport = AIOHTTPTransport(
+            url='https://api.novalabs.ai/graphql',
+            headers=self._headers
+        )
+        self._client = Client(
+            transport=self._transport,
+            fetch_schema_from_transport=True
+        )
+
+    def create_pairs(self, pair: str) -> dict:
         params = {
             "input": {
                 "name": pair
             }
         }
-        
-        return self._client.execute(query, variable_values=params)
-    
-    def create_strategy(self, name: str, candle: str, avg_return_e: float, avg_return_r: float) -> dict:
-        query = GraphMutation.create_strategy_query()
-        
+
+        data = self._client.execute(
+            GraphMutation.create_pair_query(),
+            variable_values=params
+        )
+        return data
+
+    def read_pairs(self) -> dict:
+        return self._client.execute(GraphQuery.read_pairs())
+
+    def update_pairs(self) -> dict:
+        pass
+
+    def delete_pairs(self, pair_id: str) -> dict:
+        params = {
+            "pairId": {
+                'id': pair_id
+            }
+        }
+
+        self._client.execute(GraphMutation.delete_pair(), variable_values=params)
+
+    def create_strategy(self,
+                        name: str,
+                        candle: str,
+                        avg_return_e: float,
+                        avg_return_r: float) -> dict:
         params = {
             "input": {
                 "name": name,
@@ -36,11 +60,21 @@ class NovaClient:
                 "avg_reel_return": avg_return_r
             }
         }
-        return self._client.execute(query, variable_values=params)
+        return self._client.execute(GraphMutation.create_strategy(), variable_values=params)
 
-        
-    def create_bot(self, name: str, exchange: str, strategy: str) -> dict:
-        query = GraphMutation.create_bot_query()
+    def read_strategy(self) -> dict:
+        return self._client.execute(GraphQuery.read_strategy())
+
+    def update_strategy(self) -> dict:
+        pass
+
+    def delete_strategy(self) -> dict:
+        pass
+
+    def create_bot(self,
+                   name: str,
+                   exchange: str,
+                   strategy: str) -> dict:
         params = {
             "input": {
                 "name": name,
@@ -50,19 +84,32 @@ class NovaClient:
                 },
             }
         }
-        return self._client.execute(query, variable_values=params)
 
-    def create_new_bot_position(self,
-                                bot_name: str,
-                                post_type: str,
-                                value: float,
-                                state: str,
-                                entry_price: float,
-                                take_profit: float,
-                                stop_loss: float,
-                                pair: str):
+        data = self._client.execute(GraphMutation.create_bot_query(), variable_values=params)
+        return data
+
+    def read_bots(self):
+        return self._client.execute(GraphQuery.bots())
+
+    def read_bot(self, _bot_id) -> dict:
+        return self._client.execute(GraphQuery.bot(_bot_id))
+
+    def update_bot(self):
+        pass
+
+    def delete_bot(self):
+        pass
+
+    def create_position(self,
+                        bot_name: str,
+                        post_type: str,
+                        value: float,
+                        state: str,
+                        entry_price: float,
+                        take_profit: float,
+                        stop_loss: float,
+                        pair: str):
         
-        query = GraphMutation.new_bot_position_query()
         params = {
             "name": bot_name,
             "input": {
@@ -72,25 +119,31 @@ class NovaClient:
                 "entry_price": entry_price,
                 "take_profit": take_profit,
                 "stop_loss": stop_loss,
-                "pair":{
+                "pair": {
                     "name": pair
                 }
             }
         }
-        return self._client.execute(query, variable_values=params)
-    
-    def update_bot_position(self,
-                            pos_id: str,
-                            pos_type: str,
-                            state: str,
-                            entry_price: float,
-                            exit_price: float,
-                            exit_type: str,
-                            profit: float,
-                            fees: float,
-                            pair: str):
-        
-        query = GraphMutation.update_bot_position_query()
+        data = self._client.execute(
+            GraphMutation.new_bot_position_query(),
+            variable_values=params
+        )
+        return data
+
+    def read_positions(self):
+        pass
+
+    def update_position(self,
+                        pos_id: str,
+                        pos_type: str,
+                        state: str,
+                        entry_price: float,
+                        exit_price: float,
+                        exit_type: str,
+                        profit: float,
+                        fees: float,
+                        pair: str):
+
         params = {
             "input": {
                 "id": pos_id,
@@ -106,13 +159,13 @@ class NovaClient:
                 }
             }
         }
-        return self._client.execute(query, variable_values=params)    
 
-    def get_all_bots(self) -> dict:
-        return self._client.execute(GraphQuery.bots())
-    
-    def get_bot(self, _bot_id) -> dict:
-        return self._client.execute(GraphQuery.bot(_bot_id))
+        data = self._client.execute(
+            GraphMutation.update_bot_position_query(),
+            variable_values=params
+        )
 
+        return data
 
-
+    def delete_positions(self):
+        pass
