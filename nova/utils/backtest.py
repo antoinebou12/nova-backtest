@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 import re
 import random
 
-from nova.utils.constant import EXCEPTION_LIST_BINANCE, VAR_NEEDED_FOR_POSITION
+from nova.utils.constant import EXCEPTION_LIST_BINANCE, VAR_NEEDED_FOR_POSITION, BINANCE_KLINES_COLUMNS
 
 from warnings import simplefilter
 simplefilter(action="ignore", category=pd.errors.PerformanceWarning)
@@ -62,7 +62,7 @@ class BackTest:
 
         df_freq = self.get_freq()
 
-        self.df_pos['date'] = pd.date_range(start=start, end=end, freq=df_freq)
+        self.df_pos['open_time'] = pd.date_range(start=start, end=end, freq=df_freq)
         for var in ['all_positions', 'total_profit_bot', 'long_profit_bot', 'short_profit_bot']:
             self.df_pos[var] = 0
 
@@ -74,6 +74,29 @@ class BackTest:
             return self.candle.replace('m', 'min')
         else:
             return self.candle
+
+    def _data_fomating(self, kline: list) -> pd.DataFrame:
+        """
+        Args:
+            kline: is the list returned by get_historical_klines method from binance
+
+        Returns: dataframe with usable format.
+        """
+        df = pd.DataFrame(kline, columns=BINANCE_KLINES_COLUMNS)
+        num_var = [
+            "open", "high", "low", "close", "volume", "quote_asset_volume",
+            "nb_of_trades", "taker_base_volume", "taker_quote_volume"
+        ]
+        for var in num_var:
+            df[var] = pd.to_numeric(df[var], downcast="float")
+
+        df['timestamp'] = df['open_time']
+        df['open_time'] = pd.to_datetime(df['open_time'], unit='ms')
+        df['close_time'] = pd.to_datetime(df['close_time'], unit='ms')
+
+        df['next_open'] = df['open'].shift(-1)
+
+        return df
 
     def get_list_pair(self) -> list:
         """
@@ -110,12 +133,14 @@ class BackTest:
         else:
             raise Exception('Please enter a valid market (futures or market)')
 
-        try:  # Check if the data is already in the database
+        try:
             df = pd.read_csv(f'database/{market}/hist_{pair}_{self.candle}.csv')
-            end_date_data = pd.to_datetime(df.loc[len(df) - 1, 'timestamp'], unit='ms')
 
-            # If we want to back test until self.end but we don't have the full dataframe =>
-            # DL missing rows and concatenate
+            end_date_data = pd.to_datetime(df['timestamp'].max(), unit='ms')
+
+            df['open_time'] = pd.to_datetime(df.open_time)
+            df['close_time'] = pd.to_datetime(df.open_time)
+
             if self.end > end_date_data + timedelta(days=5):
 
                 print("Update data: ", pair)
@@ -124,60 +149,31 @@ class BackTest:
                                     end_date_data.strftime('%d %b, %Y'),
                                     self.end.strftime('%d %b, %Y'))
 
-                for k in klines:
-                    del k[6:]
-
-                new_df = pd.DataFrame(klines, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
-
-                num_var = ['volume', 'open', 'high', 'low', 'close']
-                for var in num_var:
-                    new_df[var] = pd.to_numeric(new_df[var], downcast="float")
-
-                new_df['next_open'] = new_df['open'].shift(-1)
-                new_df = new_df.dropna()
+                new_df = self._data_fomating(klines)
 
                 df = pd.concat([df, new_df])
                 df = df[~df.duplicated(keep='first')]
 
                 df.to_csv(f'database/{market}/hist_{pair}_{self.candle}.csv', index=False)
 
-            df['timeUTC'] = pd.to_datetime(df['timestamp'], unit='ms')
-            df.drop(['timestamp'], axis=1, inplace=True)
-            df = df.set_index('timeUTC')
-            df['date'] = df.index
-
-            return df[(df.index >= self.start) & (df.index <= self.end)]
+            df = df.set_index('timestamp')
+            return df[(df.open_time >= self.start) & (df.open_time <= self.end)]
 
         except:
-
             klines = get_klines(pair,
                                self.candle,
                                datetime(2018, 1, 1).strftime('%d %b, %Y'),
                                self.end.strftime('%d %b, %Y'))
 
-            for k in klines:
-                del k[6:]
-
-            df = pd.DataFrame(klines, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
-
-            num_var = ['volume', 'open', 'high', 'low', 'close']
-            for var in num_var:
-                df[var] = pd.to_numeric(df[var], downcast="float")
-
-            # create the next open
-            df['next_open'] = df['open'].shift(-1)
-
-            # drop the missing values
+            df = self._data_fomating(klines)
+            
             df = df.dropna()
 
             df.to_csv(f'database/{market}/hist_{pair}_{self.candle}.csv', index=False)
 
-            df['timeUTC'] = pd.to_datetime(df['timestamp'], unit='ms')
-            df.drop(['timestamp'], axis=1, inplace=True)
-            df = df.set_index('timeUTC')
-            df['date'] = df.index
+            df = df.set_index('timestamp')
 
-            return df[(df.index >= self.start) & (df.index <= self.end)]
+            return df[(df.open_time >= self.start) & (df.open_time <= self.end)]
 
     def get_exit_signals_date(self, x):
         """
@@ -193,7 +189,7 @@ class BackTest:
             end_pt = x.index_num + self.convert_hours_to_candle_nb()
             closest_exit = np.where(self.df_copy['exit_situation'][x.index_num: end_pt] == True)[0][-1]
             if (closest_exit > 0) and (self.df_copy['all_entry_point'][x.index_num] != np.nan):
-                return self.df_copy['date'][x.index_num + closest_exit]
+                return self.df_copy['open_time'][x.index_num + closest_exit]
             else :
                 return np.datetime64('NaT')
         except:
@@ -242,7 +238,7 @@ class BackTest:
         """
 
         df['all_entry_price'] = np.where(df.all_entry_point.notnull(), df.next_open, np.nan)
-        df['all_entry_time'] = np.where(df.all_entry_point.notnull(), df.date, np.datetime64('NaT'))
+        df['all_entry_time'] = np.where(df.all_entry_point.notnull(), df.open_time, np.datetime64('NaT'))
 
         df['all_tp'] = np.where(df.all_entry_point == -1, df.all_entry_price * (1 - self.tp_prc),
                                 np.where(df.all_entry_point == 1, df.all_entry_price * (1 + self.tp_prc), np.nan))
@@ -289,9 +285,9 @@ class BackTest:
             condition_tp_long = (df.all_entry_point == 1) & (df.high.shift(-i) >= df.all_tp) & (
                     df.low.shift(-i) >= df.all_sl)
 
-            df[f'sl_lead_{i}'] = np.where(condition_sl_long | condition_sl_short, df.date.shift(-i),
+            df[f'sl_lead_{i}'] = np.where(condition_sl_long | condition_sl_short, df.open_time.shift(-i),
                                           np.datetime64('NaT'))
-            df[f'tp_lead_{i}'] = np.where(condition_tp_short | condition_tp_long, df.date.shift(-i),
+            df[f'tp_lead_{i}'] = np.where(condition_tp_short | condition_tp_long, df.open_time.shift(-i),
                                           np.datetime64('NaT'))
             lead_sl.append(f'sl_lead_{i}')
             lead_tp.append(f'tp_lead_{i}')
@@ -302,7 +298,7 @@ class BackTest:
 
         # get the max holding date
         delta_holding = timedelta(hours=self.max_holding)
-        df['max_hold_date'] = np.where(df.all_entry_point.notnull(), df['date'] + delta_holding, np.datetime64('NaT'))
+        df['max_hold_date'] = np.where(df.all_entry_point.notnull(), df['open_time'] + delta_holding, np.datetime64('NaT'))
 
         # clean dataset
         df.drop(lead_sl + lead_tp, axis=1, inplace=True)
@@ -347,9 +343,9 @@ class BackTest:
         final_df.reset_index(drop=True, inplace=True)
 
         # add back the 'next_open' variable
-        final_df = pd.merge(final_df, df[['date', 'next_open']], how="left",
-                            left_on=["all_exit_time"], right_on=["date"])
-        final_df = final_df.drop('date', axis=1)
+        final_df = pd.merge(final_df, df[['open_time', 'next_open']], how="left",
+                            left_on=["all_exit_time"], right_on=["open_time"])
+        final_df = final_df.drop('open_time', axis=1)
 
         # compute the exit price for depending on the exit point category
         final_df['exit_price'] = np.where(final_df['all_exit_point'] == -10, final_df['all_sl'],
@@ -416,9 +412,9 @@ class BackTest:
 
         # add to the main dataframe the 'entry_point', 'PL_amt_realized' and 'exit_point'
         self.df_pos = pd.merge(self.df_pos, entering, how='left',
-                               left_on='date', right_on='entry_time')
+                               left_on='open_time', right_on='entry_time')
         self.df_pos = pd.merge(self.df_pos, exiting, how='left',
-                               left_on='date', right_on='exit_time')
+                               left_on='open_time', right_on='exit_time')
 
         # create the in position variable and forward fill it
         condition_enter = self.df_pos['entry_point'].notnull()
@@ -463,9 +459,9 @@ class BackTest:
             Creates the plots with the total return, long return and short return
         """
         plt.figure(figsize=(10, 10))
-        plt.plot(self.df_pos.date, self.df_pos[f'total_profit_{pair}'], label='Total Profit')
-        plt.plot(self.df_pos.date, self.df_pos[f'long_profit_{pair}'], label='Long Profit')
-        plt.plot(self.df_pos.date, self.df_pos[f'short_profit_{pair}'], label='Short Profit')
+        plt.plot(self.df_pos.open_time, self.df_pos[f'total_profit_{pair}'], label='Total Profit')
+        plt.plot(self.df_pos.open_time, self.df_pos[f'long_profit_{pair}'], label='Long Profit')
+        plt.plot(self.df_pos.open_time, self.df_pos[f'short_profit_{pair}'], label='Short Profit')
         plt.legend()
         plt.title(f"Total Profit {pair}")
         plt.show()

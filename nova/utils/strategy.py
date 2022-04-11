@@ -2,7 +2,7 @@ import socket
 
 from decouple import config
 import pandas as pd
-from datetime import datetime, timedelta
+from datetime import datetime
 import re
 from nova.api.nova_client import NovaClient
 import time
