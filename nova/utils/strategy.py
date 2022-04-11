@@ -315,7 +315,7 @@ class Strategy:
         )
 
         # 7 - create the position data in nova labs backend
-        nova_data = self.nova.create_new_bot_position(
+        nova_data = self.nova.create_position(
             bot_name=bot_name,
             post_type=type_pos,
             value=size,
@@ -364,7 +364,7 @@ class Strategy:
                 orderId=row_pos.tp_id
             )
 
-        self.nova.update_bot_position(
+        self.nova.update_position(
             pos_id=row_pos.nova_id,
             pos_type=row_pos.side,
             state='CLOSED',
@@ -543,7 +543,7 @@ class Strategy:
         total_fee_usd = (commission_exit + commission_entry) * prc_bnb
 
         # send updates to the backend
-        self.nova.update_bot_position(
+        self.nova.update_position(
             pos_id=nova_id,
             pos_type=type_pos,
             state='CLOSED',
