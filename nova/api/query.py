@@ -33,30 +33,29 @@ class GraphQuery:
         )
 
     @staticmethod
-    def bots():
+    def read_bots():
         return gql('''
         query getBots {
             bots {
                 _id
                 name
                 exchange
-                strategy {
-                    _id
-                }
-                positions {
-                    _id
-                }
+                maxDown
+                bankRoll
             }
         }
         ''')
 
     @staticmethod
-    def bot(_bot_id: str):
+    def read_bot(_bot_id: str):
         return gql('''
         {
             bot(botId: "%s") {
                 _id
                 name
+                exchange
+                maxDown
+                bankRoll
             }
         }
         ''' % _bot_id)

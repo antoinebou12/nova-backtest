@@ -74,25 +74,30 @@ class NovaClient:
     def create_bot(self,
                    name: str,
                    exchange: str,
+                   max_down: float,
+                   bankroll: float,
                    strategy: str) -> dict:
         params = {
             "input": {
                 "name": name,
                 "exchange": exchange,
+                "maxDown": max_down,
+                "bankRoll": bankroll,
+                "totalProfit": 0,
+                "status": "Offline",
                 "strategy": {
                     "name": strategy
                 },
             }
         }
-
         data = self._client.execute(GraphMutation.create_bot_query(), variable_values=params)
         return data
 
     def read_bots(self):
-        return self._client.execute(GraphQuery.bots())
+        return self._client.execute(GraphQuery.read_bots())
 
     def read_bot(self, _bot_id) -> dict:
-        return self._client.execute(GraphQuery.bot(_bot_id))
+        return self._client.execute(GraphQuery.read_bot(_bot_id))
 
     def update_bot(self):
         pass

@@ -411,10 +411,18 @@ class BackTest:
         exiting = df[['exit_time', 'exit_point', 'PL_amt_realized']]
 
         # add to the main dataframe the 'entry_point', 'PL_amt_realized' and 'exit_point'
-        self.df_pos = pd.merge(self.df_pos, entering, how='left',
-                               left_on='open_time', right_on='entry_time')
-        self.df_pos = pd.merge(self.df_pos, exiting, how='left',
-                               left_on='open_time', right_on='exit_time')
+        self.df_pos = pd.merge(
+            self.df_pos,
+            entering,
+            how='left',
+            left_on='open_time',
+            right_on='entry_time')
+
+        self.df_pos = pd.merge(
+            self.df_pos, exiting,
+            how='left',
+            left_on='open_time',
+            right_on='exit_time')
 
         # create the in position variable and forward fill it
         condition_enter = self.df_pos['entry_point'].notnull()
