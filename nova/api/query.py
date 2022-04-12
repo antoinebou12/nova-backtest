@@ -61,7 +61,25 @@ class GraphQuery:
         ''' % _bot_id)
 
     @staticmethod
-    def positions():
+    def read_positions():
+        return gql(
+            '''
+            query Positions{
+                positions {_id}
+            }
+            ''')
+
+
+    @staticmethod
+    def read_position(_bot_id: str):
         return gql('''
-                   
+                   {
+                        positions(botId: "%s") {
+                            _id
+                            name
+                            exchange
+                            maxDown
+                            bankRoll
+                        }
+                    }
                    ''')

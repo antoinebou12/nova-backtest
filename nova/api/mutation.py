@@ -85,3 +85,13 @@ class GraphMutation:
             }
             """)
 
+    @staticmethod
+    def delete_position():
+        return gql(
+            """
+            mutation deletePosition($positionId: ObjectId!){
+                deletePosition(positionId: $positionId)
+
+            }
+            """
+        )

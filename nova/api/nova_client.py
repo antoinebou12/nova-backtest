@@ -72,19 +72,15 @@ class NovaClient:
         pass
 
     def create_bot(self,
-                   name: str,
                    exchange: str,
                    max_down: float,
                    bankroll: float,
                    strategy: str) -> dict:
         params = {
             "input": {
-                "name": name,
                 "exchange": exchange,
                 "maxDown": max_down,
                 "bankRoll": bankroll,
-                "totalProfit": 0,
-                "status": "Offline",
                 "strategy": {
                     "name": strategy
                 },
@@ -136,7 +132,7 @@ class NovaClient:
         return data
 
     def read_positions(self):
-        pass
+        return self._client.execute(GraphQuery.read_positions())
 
     def update_position(self,
                         pos_id: str,
@@ -172,5 +168,12 @@ class NovaClient:
 
         return data
 
-    def delete_positions(self):
+    def delete_positions(self, position_id: str):
+        params = {
+            "positionId": {
+                'id': position_id
+            }
+        }
+
+        self._client.execute(GraphMutation.delete_position(), variable_values=params)
         pass
