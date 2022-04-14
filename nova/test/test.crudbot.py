@@ -4,4 +4,5 @@ from decouple import config
 nova_client = NovaClient(config('NovaAPISecret'))
 
 
-data = nova_client.read_bot(_bot_id="62522ee98acf3c6a027d9769")
+data = nova_client.read_bot(_bot_id="625711120ea0fc6779168f55")
+

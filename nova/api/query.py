@@ -56,6 +56,9 @@ class GraphQuery:
                 exchange
                 maxDown
                 bankRoll
+                pairs{
+                    pair
+                }
             }
         }
         ''' % _bot_id)
