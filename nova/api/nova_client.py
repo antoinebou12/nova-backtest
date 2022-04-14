@@ -121,7 +121,7 @@ class NovaClient:
                 "take_profit": take_profit,
                 "stop_loss": stop_loss,
                 "pair": {
-                    "name": pair
+                    "pair": pair
                 }
             }
         }
