@@ -1,4 +1,5 @@
 import socket
+import socketio
 
 from decouple import config
 import pandas as pd
@@ -51,17 +52,10 @@ class Strategy:
 
         self.logger = is_logging
 
+        # Socket log stream
         if self.logger:
-            self.HEADER = 64
-            self.FORMAT = 'utf-8'
-            self.DISCONNECT_MESSAGE = '!DISCONNECT'
-
-            self.PORT = 5080
-            self.SERVER = socket.gethostbyname(socket.gethostname())
-            self.ADDR = (self.SERVER, self.PORT)
-
-            self.logger_client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            self.logger_client.connect(self.ADDR)
+            self.logger_client = socketio.Client()
+            self.logger_client.connect('http://localhost:5000', wait_timeout=10)
 
     def setup_leverage(self, pair: str, lvl: int = 1):
         """
@@ -748,12 +742,10 @@ class Strategy:
         self.log.info(msg)
 
         if self.logger:
-            message = msg.encode(self.FORMAT)
-            msg_length = len(message)
-            send_length = str(msg_length).encode(self.FORMAT)
-            send_length += b' ' * (self.HEADER - len(send_length))
-            self.logger_client.send(send_length)
-            self.logger_client.send(message)
+            self.logger_client.emit('MessageStream', {'data': {
+                'message': msg,
+                'botId': self.bot_id
+            }})
 
         if error:
             self.log.error(msg, exc_info=True)
