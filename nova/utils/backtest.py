@@ -104,7 +104,7 @@ class BackTest:
             all the futures pairs we can to trade.
         """
         list_pair = []
-        all_pair = self.client.futures_position_information()
+        all_pair = self.client.futures_symbol_ticker()
 
         for pair in all_pair:
             if 'USDT' in pair['symbol'] and pair['symbol'] not in self.exception_pair:
