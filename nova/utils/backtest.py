@@ -152,7 +152,7 @@ class BackTest:
                 new_df = self._data_fomating(klines)
 
                 df = pd.concat([df, new_df])
-                df = df[~df.duplicated(keep='first')]
+                df = df.drop_duplicates(subset=['open_time'])
 
                 df.to_csv(f'database/{market}/hist_{pair}_{self.candle}.csv', index=False)
 
