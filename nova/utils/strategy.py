@@ -55,7 +55,7 @@ class Strategy:
         # Socket log stream
         if self.logger:
             self.logger_client = socketio.Client()
-            self.logger_client.connect('http://localhost:5000', wait_timeout=10)
+            self.logger_client.connect('http://167.114.3.100:5000', wait_timeout=10)
 
     def setup_leverage(self, pair: str, lvl: int = 1):
         """
