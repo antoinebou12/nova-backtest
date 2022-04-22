@@ -623,3 +623,155 @@ class BackTest:
 
         self.df_pos = pd.concat([self.df_pos, df[all_var]], axis=1)
 
+    def get_daily_return(self,
+                         row,
+                         df_all_positions):
+
+        all_exit_of_the_day = df_all_positions[df_all_positions['exit_time'] <= row.date + timedelta(days=1)]
+        all_exit_of_the_day = all_exit_of_the_day[all_exit_of_the_day['exit_time'] > row.date]
+
+        if all_exit_of_the_day['bankroll_size'].values.shape[0] > 0:
+            day_profit = 100 * (
+                        all_exit_of_the_day['bankroll_size'].values[-1] - all_exit_of_the_day['bankroll_size'].values[
+                    0]) / \
+                         all_exit_of_the_day['bankroll_size'].values[0]
+        else:
+            day_profit = 0
+
+        row['daily_percentage_profit'] = day_profit
+
+        return row
+
+    def create_full_statistics(self,
+                               since: datetime,
+                               list_pair: list):
+
+        ################################ Create complete df #############################
+
+        df_all_positions = pd.DataFrame()
+
+        overview = {}
+
+        for pair in self.df_all_positions.keys():
+            if pair in list_pair:
+                df_concat = self.df_all_positions[pair]
+                df_concat['pair'] = pair
+                df_all_positions = pd.concat([df_all_positions, self.df_all_positions[pair]])
+
+        df_all_positions = df_all_positions[df_all_positions['entry_time'] > since]
+
+        df_all_positions = df_all_positions.sort_values(by=['exit_time'])
+
+        df_all_positions['cumulative_profit'] = df_all_positions['PL_amt_realized'].cumsum()
+
+        df_all_positions['bankroll_size'] = df_all_positions['cumulative_profit'] + self.start_bk
+
+        df_all_positions['bankroll_size_percentage_evolution_%'] = 100 * (df_all_positions['bankroll_size'] /
+                                                                          self.start_bk - 1)
+
+        df_all_positions['PL_bk_perc'] = 100 * df_all_positions['PL_amt_realized'] / df_all_positions['bankroll_size']
+
+        ################################ Create daily results df ######################
+
+        first_day = since - timedelta(hours=since.hour, minutes=since.minute)
+        last_day = self.end - timedelta(hours=self.end.hour, minutes=self.end.minute, microseconds=self.end.microsecond)
+
+        df_daily = pd.DataFrame(index=pd.date_range(first_day, last_day), columns=['daily_percentage_profit'])
+        df_daily['date'] = df_daily.index
+
+        df_daily = df_daily.apply(lambda row: self.get_daily_return(row, df_all_positions), axis=1)
+        # fillna for days without exits
+        df_daily = df_daily.fillna(0)
+
+        ################################ Compute overview #############################
+        realized_profit = round(df_all_positions['PL_amt_realized'].sum(), 1)
+        overview['Realized profit'] = f"{realized_profit} $"
+
+        avg_profit = round(df_all_positions['PL_amt_realized'].mean(), 2)
+        overview['Average profit / trade'] = f"{avg_profit} $"
+
+        avg_profit_winning_trade = df_all_positions[df_all_positions['PL_amt_realized'] > 0]['PL_amt_realized'].sum() / \
+                                   df_all_positions[df_all_positions['PL_amt_realized'] > 0].shape[0]
+        avg_loss_losing_trade = df_all_positions[df_all_positions['PL_amt_realized'] < 0]['PL_amt_realized'].sum() / \
+                                df_all_positions[df_all_positions['PL_amt_realized'] < 0].shape[0]
+        overview['Average profit / winning trade'] = f"{round(avg_profit_winning_trade, 2)} $"
+        overview['Average loss / losing trade'] = f"{round(avg_loss_losing_trade, 2)} $"
+
+        best_profit = round(df_all_positions['PL_amt_realized'].max(), 2)
+        overview['Best trade profit'] = f"{best_profit} $"
+        worst_loss = round(df_all_positions['PL_amt_realized'].min(), 2)
+        overview['Worst trade loss'] = f"{worst_loss} $"
+
+        overview['Cumulative fees paid'] = f"{round(df_all_positions['tx_fees_paid'].sum(), 2)} $ "
+
+        overview['Nb winning trade'] = df_all_positions[df_all_positions['PL_amt_realized'] > 0].shape[0]
+        overview['Nb losing trade'] = df_all_positions[df_all_positions['PL_amt_realized'] < 0].shape[0]
+
+        overview['Total nb trade'] = overview['Nb losing trade'] + overview['Nb winning trade']
+
+        overview['% winning trade'] = f"{round(100 * overview['Nb winning trade'] / overview['Total nb trade'], 1)} %"
+
+        overview['Best day profit'] = f"{round(df_daily['daily_percentage_profit'].max(), 1)} %"
+
+        overview['Worst day loss'] = f"{round(df_daily['daily_percentage_profit'].min(), 1)} %"
+
+        ################################ Compute statistics #############################
+
+        statistics = {}
+
+        # Compute Geometric Returns
+        total_return = 100 * realized_profit / self.start_bk
+
+        statistics['Total return'] = f"{round(total_return, 2)} %"
+
+        nb_days_backtest = (self.end - since).days
+        geometric_return = 100 * ((1 + total_return / 100) ** (365 / (nb_days_backtest)) - 1)
+
+        statistics['Geometric return (yearly)'] = f"{round(geometric_return, 2)} %"
+
+        # Compute Volatility
+        df_daily['Distribution'] = np.square(df_daily['daily_percentage_profit'] -
+                                             df_daily['daily_percentage_profit'].mean())
+        volatility = math.sqrt(df_daily['Distribution'].sum() / df_daily.shape[0])
+        volatility = volatility * math.sqrt(365)
+
+        statistics['Annualized standard deviation'] = f"{round(volatility, 2)} %"
+
+        # Compute Sharpe Ratio
+        sharpe_ratio = geometric_return / volatility
+
+        statistics['Sharpe Ratio'] = round(sharpe_ratio, 2)
+
+        # Compute Sortino Ratio
+        df_down = df_daily[df_daily['daily_percentage_profit'] < 0].copy()
+        df_down['Downside_distribution'] = np.square(df_down['daily_percentage_profit'] -
+                                                     df_down['daily_percentage_profit'].mean())
+        downside_volatility = math.sqrt(df_down['Downside_distribution'].sum() / df_daily.shape[0])
+        downside_volatility = downside_volatility * math.sqrt(365)
+
+        sortino_ratio = geometric_return / downside_volatility
+        statistics['Sortino Ratio'] = round(sortino_ratio, 2)
+
+        print("#" * 60)
+        print("{:<5} {:<35} {:<5} {:<10} {:<1}".format('#', 'Overview:', '|', '     ', '#'))
+        print("{:<5} {:<35} {:<5} {:<10} {:<1}".format('#', f'From {since.strftime("%Y-%m-%d")}', '|', 'Value', '#'))
+        print("{:<5} {:<35} {:<5} {:<10} {:<1}".format('#', f'To {self.end.strftime("%Y-%m-%d")}', '|', '     ', '#'))
+        print("#" * 60)
+        for k, v in overview.items():
+            print("{:<5} {:<35} {:<5} {:<10} {:<1}".format('#', k, '|', v, '#'))
+            print("#", "-" * 56, "#")
+        print("#" * 60)
+
+        print("#" * 60)
+        print("{:<5} {:<35} {:<5} {:<10} {:<1}".format('#', 'Statistics:', '|', 'Value', '#'))
+        print("#" * 60)
+        for k, v in statistics.items():
+            print("{:<5} {:<35} {:<5} {:<10} {:<1}".format('#', k, '|', v, '#'))
+            print("#", "-" * 56, "#")
+        print("#" * 60)
+
+        all_statistics = {"overview": overview,
+                          "statistics": statistics}
+
+        return all_statistics
+
