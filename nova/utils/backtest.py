@@ -616,11 +616,11 @@ class BackTest:
             self.get_pair_stats(df=self.df_all_positions[pair],
                                 pair=pair)
 
-    def get_daily_return(self,
-                         row,
-                         df_all_positions):
+    def compute_daily_return(self,
+                             row,
+                             df_all_pairs_positions):
 
-        all_exit_of_the_day = df_all_positions[df_all_positions['exit_time'] <= row.date + timedelta(days=1)]
+        all_exit_of_the_day = df_all_pairs_positions[df_all_pairs_positions['exit_time'] <= row.date + timedelta(days=1)]
         all_exit_of_the_day = all_exit_of_the_day[all_exit_of_the_day['exit_time'] > row.date]
 
         if all_exit_of_the_day['bankroll_size'].values.shape[0] > 0:
@@ -632,6 +632,23 @@ class BackTest:
             day_profit = 0
 
         row['daily_percentage_profit'] = day_profit
+
+        if all_exit_of_the_day.shape[0] > 0:
+            row['bankroll'] = all_exit_of_the_day['bankroll_size'].values[-1]
+
+        return row
+
+    def compute_drawdown(self,
+                        row,
+                        df_daily):
+
+        temp = df_daily[df_daily['date'] <= row.date]
+
+        temp = temp[temp['date'] >= temp['bankroll'].idxmax()]
+
+        row['drawdown'] = (temp['bankroll'].max() - row.bankroll) / temp['bankroll'].max()
+
+        row['last_date_max'] = temp['bankroll'].idxmax()
 
         return row
 
@@ -648,12 +665,19 @@ class BackTest:
         first_day = since - timedelta(hours=since.hour, minutes=since.minute)
         last_day = self.end - timedelta(hours=self.end.hour, minutes=self.end.minute, microseconds=self.end.microsecond)
 
-        df_daily = pd.DataFrame(index=pd.date_range(first_day, last_day), columns=['daily_percentage_profit'])
+        df_daily = pd.DataFrame(index=pd.date_range(first_day, last_day), columns=['daily_percentage_profit',
+                                                                                   'last_date_max'])
         df_daily['date'] = df_daily.index
+        df_daily['bankroll'] = np.nan
+        df_daily['drawdown'] = 0
 
-        df_daily = df_daily.apply(lambda row: self.get_daily_return(row, df_all_pairs_positions), axis=1)
+        df_daily = df_daily.apply(lambda row: self.compute_daily_return(row, df_all_pairs_positions), axis=1)
         # fillna for days without exits
-        df_daily = df_daily.fillna(0)
+        df_daily['daily_percentage_profit'] = df_daily['daily_percentage_profit'].fillna(0)
+        df_daily['bankroll'] = df_daily['bankroll'].fillna(method='ffill')
+        df_daily['bankroll'] = df_daily['bankroll'].fillna(self.start_bk)
+
+        df_daily = df_daily.apply(lambda row: self.compute_drawdown(row, df_daily), axis=1)
 
         ################################ Compute overview #############################
 
@@ -729,24 +753,33 @@ class BackTest:
         sortino_ratio = geometric_return / downside_volatility
         statistics['Sortino Ratio'] = round(sortino_ratio, 2)
 
-        print("#" * 60)
-        print("{:<5} {:<35} {:<5} {:<10} {:<1}".format('#', 'Overview:', '|', '     ', '#'))
-        print("{:<5} {:<35} {:<5} {:<10} {:<1}".format('#', f'From {since.strftime("%Y-%m-%d")}', '|', 'Value', '#'))
-        print("{:<5} {:<35} {:<5} {:<10} {:<1}".format('#', f'To {self.end.strftime("%Y-%m-%d")}', '|', '     ', '#'))
-        print("{:<5} {:<35} {:<5} {:<10} {:<1}".format('#', f"With {starting_bk} $ starting", '|', '     ', '#'))
-        print("#" * 60)
-        for k, v in overview.items():
-            print("{:<5} {:<35} {:<5} {:<10} {:<1}".format('#', k, '|', v, '#'))
-            print("#", "-" * 56, "#")
-        print("#" * 60)
+        statistics['Max DrawDown'] = f"{round(100 * df_daily['drawdown'].max(), 2)} %"
+        start_max_DD = df_daily[df_daily['date'] == df_daily['drawdown'].idxmax()]['last_date_max']
+        end_max_DD = df_daily[df_daily['date'] == df_daily['drawdown'].idxmax()]['date']
 
-        print("#" * 60)
-        print("{:<5} {:<35} {:<5} {:<10} {:<1}".format('#', 'Statistics:', '|', 'Value', '#'))
-        print("#" * 60)
+        statistics['Max DrawDown start'] = str(pd.to_datetime(start_max_DD.values[0]).date())
+        statistics['Max DrawDown end'] = str(pd.to_datetime(end_max_DD.values[0]).date())
+
+        ################################  Print statistics  #############################
+
+        print("#" * 65)
+        print("{:<5} {:<35} {:<5} {:<15} {:<1}".format('#', 'Overview:', '|', '     ', '#'))
+        print("{:<5} {:<35} {:<5} {:<15} {:<1}".format('#', f'From {since.strftime("%Y-%m-%d")}', '|', 'Value', '#'))
+        print("{:<5} {:<35} {:<5} {:<15} {:<1}".format('#', f'To {self.end.strftime("%Y-%m-%d")}', '|', '     ', '#'))
+        print("{:<5} {:<35} {:<5} {:<15} {:<1}".format('#', f"With {starting_bk} $ starting", '|', '     ', '#'))
+        print("#" * 65)
+        for k, v in overview.items():
+            print("{:<5} {:<35} {:<5} {:<15} {:<1}".format('#', k, '|', v, '#'))
+            print("#", "-" * 61, "#")
+        print("#" * 65)
+
+        print("#" * 65)
+        print("{:<5} {:<35} {:<5} {:<15} {:<1}".format('#', 'Statistics:', '|', 'Value', '#'))
+        print("#" * 65)
         for k, v in statistics.items():
-            print("{:<5} {:<35} {:<5} {:<10} {:<1}".format('#', k, '|', v, '#'))
-            print("#", "-" * 56, "#")
-        print("#" * 60)
+            print("{:<5} {:<35} {:<5} {:<15} {:<1}".format('#', k, '|', v, '#'))
+            print("#", "-" * 61, "#")
+        print("#" * 65)
 
         all_statistics = {"overview": overview,
                           "statistics": statistics}
