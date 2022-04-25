@@ -29,18 +29,14 @@ class BackTest:
                  list_pair: list,
                  start: datetime,
                  end: datetime,
-                 n_jobs: int,
                  fees: float,
                  max_pos: int,
                  amount_position: float = 100,
-                 max_holding: int = 24,
-                 tp: float = 0.05,
-                 sl: float = 0.05):
+                 max_holding: int = 24):
 
         self.start = start
         self.end = end
         self.candle = candle
-        self.n_jobs = n_jobs
         self.fees = fees
         self.amount_per_position = amount_position
         self.list_pair = list_pair
@@ -48,8 +44,6 @@ class BackTest:
         self.max_pos = max_pos
 
         self.max_holding = max_holding
-        self.tp_prc = tp
-        self.sl_prc = sl
 
         self.exception_pair = EXCEPTION_LIST_BINANCE
 
@@ -57,17 +51,18 @@ class BackTest:
             self.list_pair = self.get_list_pair()
 
         self.df_all_positions = {}
-        self.df_stat = pd.DataFrame()
+        self.df_pairs_stat = pd.DataFrame()
         self.df_pos = pd.DataFrame()
 
         df_freq = self.get_freq()
 
         self.df_pos['open_time'] = pd.date_range(start=start, end=end, freq=df_freq)
-        for var in ['all_positions', 'total_profit_bot', 'long_profit_bot', 'short_profit_bot']:
+        for var in ['all_positions', 'total_profit_all_pairs', 'long_profit_all_pairs', 'short_profit_all_pairs']:
             self.df_pos[var] = 0
 
         self.df_copy = pd.DataFrame()
         self.position_cols = []
+        self.df_all_pairs_positions = pd.DataFrame()
 
     def get_freq(self) -> str:
         if 'm' in self.candle:
@@ -366,8 +361,6 @@ class BackTest:
 
         self.df_all_positions[pair] = final_df
 
-        return final_df
-
     def compute_profit(self, df: pd.DataFrame) -> pd.DataFrame:
         """
         Args:
@@ -455,9 +448,9 @@ class BackTest:
         self.df_pos.drop(to_drop, axis=1, inplace=True)
 
         # update the bot total profit or all token
-        self.df_pos['total_profit_bot'] = self.df_pos['total_profit_bot'] + self.df_pos[f'total_profit_{pair}']
-        self.df_pos['long_profit_bot'] = self.df_pos['long_profit_bot'] + self.df_pos[f'long_profit_{pair}']
-        self.df_pos['short_profit_bot'] = self.df_pos['short_profit_bot'] + self.df_pos[f'short_profit_{pair}']
+        self.df_pos['total_profit_all_pairs'] = self.df_pos['total_profit_all_pairs'] + self.df_pos[f'total_profit_{pair}']
+        self.df_pos['long_profit_all_pairs'] = self.df_pos['long_profit_all_pairs'] + self.df_pos[f'long_profit_{pair}']
+        self.df_pos['short_profit_all_pairs'] = self.df_pos['short_profit_all_pairs'] + self.df_pos[f'short_profit_{pair}']
 
     def get_performance_graph(self, pair: str):
         """
@@ -471,10 +464,10 @@ class BackTest:
         plt.plot(self.df_pos.open_time, self.df_pos[f'long_profit_{pair}'], label='Long Profit')
         plt.plot(self.df_pos.open_time, self.df_pos[f'short_profit_{pair}'], label='Short Profit')
         plt.legend()
-        plt.title(f"Total Profit {pair}")
+        plt.title(f"Backtest {self.strategy_name} strategy for {pair}")
         plt.show()
 
-    def get_performance_stats(self, df: pd.DataFrame, pair: str) -> pd.DataFrame:
+    def get_pair_stats(self, df: pd.DataFrame, pair: str) -> pd.DataFrame:
         """
         Args:
             df : position dataframe that contains all the statistics needed
@@ -533,95 +526,95 @@ class BackTest:
 
         # add the statistics to the general stats df_stat
         stat_perf = pd.DataFrame([perf_dict], columns=list(perf_dict.keys()))
-        self.df_stat = pd.concat([self.df_stat, stat_perf])
+        self.df_pairs_stat = pd.concat([self.df_pairs_stat, stat_perf])
 
-    def get_bot_stats(self) -> dict:
-        """
-        Returns:
-            return a dictionary with aggregated statistics on the bot
-        """
-        bot_statistics = dict()
+    def all_pairs_position(self):
+        ############################# Create self.df_all_pairs_positions #############################
 
-        bot_statistics['average_profit'] = self.df_stat.total_profit_amt.sum() / self.df_stat.total_position.sum()
-        bot_statistics['max_nb_pos'] = self.df_pos.all_positions.max()
-        bot_statistics['perc_winning_trade'] = (self.df_stat.total_position * self.df_stat.perc_winning_trade).sum() / self.df_stat.total_position.sum()
+        since = self.start
 
-        return bot_statistics
+        for pair in self.df_all_positions.keys():
+            df_concat = self.df_all_positions[pair]
+            df_concat['pair'] = pair
+            self.df_all_pairs_positions = pd.concat([self.df_all_pairs_positions, self.df_all_positions[pair]])
 
-    def get_all_name_pos(self, x):
-        in_position_list = []
-        for var in self.position_cols:
-            if x[var] != 0 and x.all_positions != 0:
-                in_position_list.append(var)
-        return in_position_list
+        self.df_all_pairs_positions = self.df_all_pairs_positions[self.df_all_pairs_positions['entry_time'] > since]
 
-    def real_position(self):
-        df = self.df_pos.copy()
+        self.df_all_pairs_positions = self.df_all_pairs_positions.sort_values(by=['exit_time'])
 
-        for var in self.df_pos.columns:
-            if 'in_position' in var:
-                self.position_cols.append(var)
+        self.df_all_pairs_positions['cumulative_profit'] = self.df_all_pairs_positions['PL_amt_realized'].cumsum()
 
-        df['all_position_name'] = df.apply(self.get_all_name_pos, axis=1)
-        df['real_pos'] = df['all_position_name']
+        self.df_all_pairs_positions['bankroll_size'] = self.df_all_pairs_positions['cumulative_profit'] + self.start_bk
 
-        all_var = ['in_position_real', 'total_profit_real', 'long_profit_real', 'short_profit_real']
-        for var in all_var:
-            df[var] = 0.0
+        ##################### Shift all TP or SL exit time bc it is based on the open ################
 
-        for index, row in df.iterrows():
+        hours_step = self.max_holding / self.convert_hours_to_candle_nb()
 
-            if index == 0:
-                pass
-            else:
-                prev_index = index - 1
+        self.df_all_pairs_positions['exit_time'] = np.where(self.df_all_pairs_positions['exit_point'] == 20,
+                                                            self.df_all_pairs_positions['exit_time'] + timedelta(
+                                                                hours=hours_step),
+                                                            self.df_all_pairs_positions['exit_time'])
 
-                pre_pos = df['real_pos'][prev_index]
+        self.df_all_pairs_positions['exit_time'] = np.where(self.df_all_pairs_positions['exit_point'] == -10,
+                                                            self.df_all_pairs_positions['exit_time'] + timedelta(
+                                                                hours=hours_step),
+                                                            self.df_all_pairs_positions['exit_time'])
 
-                new_pos = [var for var in df['all_position_name'][index] if var not in df['all_position_name'][prev_index]]
-                random.shuffle(new_pos)
+        #############################      Delete impossible trades      #############################
 
-                final_pos = pre_pos.copy()
+        t = since
+        actual_nb_pos = 0
+        exit_times = []
+        all_rows_to_delete = pd.DataFrame(columns=self.df_all_pairs_positions.columns)
 
-                real_total_profit = 0
-                real_short_profit = 0
-                real_long_profit = 0
+        while t <= self.end:
 
-                # verify if exit happened
-                for pos in pre_pos:
-                    if row[pos] == 0:
-                        profit_name = pos.replace('in_position_', 'total_profit_')
-                        long_name = pos.replace('in_position_', 'long_profit_')
-                        short_name = pos.replace('in_position_', 'short_profit_')
-                        real_total_profit += (df[profit_name][index] - df[profit_name][prev_index])
-                        real_short_profit += (df[short_name][index] - df[short_name][prev_index])
-                        real_long_profit += (df[long_name][index] - df[long_name][prev_index])
-                        final_pos.remove(pos)
+            if t in exit_times:
+                actual_nb_pos -= exit_times.count(t)
+                exit_times = list(filter(t.__ne__, exit_times))
 
-                # verify if new position possible
-                open_pos = self.max_pos - len(final_pos)
+            entry_t = self.df_all_pairs_positions[self.df_all_pairs_positions['entry_time'] == t]
+            nb_signals = entry_t.shape[0]
 
-                for pos_two in new_pos:
-                    if open_pos > 0:
-                        final_pos.append(pos_two)
-                        open_pos -= 1
+            # Delete rows if actual_nb_pos is over maximum pos
+            if nb_signals + actual_nb_pos > self.max_pos:
+                nb_to_delete = nb_signals - (self.max_pos - actual_nb_pos)
 
-                df.at[index, 'real_pos'] = final_pos
+                rows_to_delete = entry_t.sample(n=nb_to_delete)
 
-                df.loc[index, 'in_position_real'] = len(final_pos)
-                df.loc[index, 'total_profit_real'] = float(real_total_profit)
-                df.loc[index, 'short_profit_real'] = float(real_short_profit)
-                df.loc[index, 'long_profit_real'] = float(real_long_profit)
+                self.df_all_pairs_positions = pd.concat([self.df_all_pairs_positions, rows_to_delete])
+                # self.df_all_pairs_positions = self.df_all_pairs_positions.sort_values(by=['exit_time', 'pair'])
+                self.df_all_pairs_positions = self.df_all_pairs_positions.drop_duplicates(keep=False)
 
-        df['total_profit_real'] = np.where(df['total_profit_real'] == 0, np.nan, df['total_profit_real'])
-        df['short_profit_real'] = np.where(df['short_profit_real'] == 0, np.nan, df['short_profit_real'])
-        df['long_profit_real'] = np.where(df['long_profit_real'] == 0, np.nan, df['long_profit_real'])
+                all_rows_to_delete = pd.concat([all_rows_to_delete, rows_to_delete])
+                actual_nb_pos = self.max_pos
 
-        df['total_profit_real'] = df['total_profit_real'].fillna(0).cumsum()
-        df['short_profit_real'] = df['short_profit_real'].fillna(0).cumsum()
-        df['long_profit_real'] = df['long_profit_real'].fillna(0).cumsum()
+                # Append exit times
+                real_entry_t = self.df_all_pairs_positions[self.df_all_pairs_positions['entry_time'] == t]
+                exit_times += real_entry_t['exit_time'].tolist()
 
-        self.df_pos = pd.concat([self.df_pos, df[all_var]], axis=1)
+            elif nb_signals != 0:
+
+                actual_nb_pos += nb_signals
+
+                # Append exit times
+                real_entry_t = self.df_all_pairs_positions[self.df_all_pairs_positions['entry_time'] == t]
+                exit_times += real_entry_t['exit_time'].tolist()
+
+            t = t + timedelta(hours=hours_step)
+
+        for index, row in all_rows_to_delete.iterrows():
+            pair = row['pair']
+            self.df_all_positions[pair] = self.df_all_positions[pair][self.df_all_positions[pair]['entry_time'] !=
+                                                                      row['entry_time']]
+
+        ############################# Create full position for all pairs #############################
+
+        for pair in self.list_pair:
+            self.create_full_positions(df=self.df_all_positions[pair],
+                                       pair=pair)
+            self.get_pair_stats(df=self.df_all_positions[pair],
+                                pair=pair)
 
     def get_daily_return(self,
                          row,
@@ -643,33 +636,12 @@ class BackTest:
         return row
 
     def create_full_statistics(self,
-                               since: datetime,
-                               list_pair: list):
+                               since: datetime):
 
-        ################################ Create complete df #############################
+        df_all_pairs_positions = self.df_all_pairs_positions[self.df_all_pairs_positions['entry_time'] > since]
 
-        df_all_positions = pd.DataFrame()
-
-        overview = {}
-
-        for pair in self.df_all_positions.keys():
-            if pair in list_pair:
-                df_concat = self.df_all_positions[pair]
-                df_concat['pair'] = pair
-                df_all_positions = pd.concat([df_all_positions, self.df_all_positions[pair]])
-
-        df_all_positions = df_all_positions[df_all_positions['entry_time'] > since]
-
-        df_all_positions = df_all_positions.sort_values(by=['exit_time'])
-
-        df_all_positions['cumulative_profit'] = df_all_positions['PL_amt_realized'].cumsum()
-
-        df_all_positions['bankroll_size'] = df_all_positions['cumulative_profit'] + self.start_bk
-
-        df_all_positions['bankroll_size_percentage_evolution_%'] = 100 * (df_all_positions['bankroll_size'] /
-                                                                          self.start_bk - 1)
-
-        df_all_positions['PL_bk_perc'] = 100 * df_all_positions['PL_amt_realized'] / df_all_positions['bankroll_size']
+        starting_bk = round(self.df_all_pairs_positions['bankroll_size'].values[0] - \
+                      self.df_all_pairs_positions['PL_amt_realized'].values[0], 1)
 
         ################################ Create daily results df ######################
 
@@ -679,33 +651,36 @@ class BackTest:
         df_daily = pd.DataFrame(index=pd.date_range(first_day, last_day), columns=['daily_percentage_profit'])
         df_daily['date'] = df_daily.index
 
-        df_daily = df_daily.apply(lambda row: self.get_daily_return(row, df_all_positions), axis=1)
+        df_daily = df_daily.apply(lambda row: self.get_daily_return(row, df_all_pairs_positions), axis=1)
         # fillna for days without exits
         df_daily = df_daily.fillna(0)
 
         ################################ Compute overview #############################
-        realized_profit = round(df_all_positions['PL_amt_realized'].sum(), 1)
+
+        overview = {}
+
+        realized_profit = round(df_all_pairs_positions['PL_amt_realized'].sum(), 1)
         overview['Realized profit'] = f"{realized_profit} $"
 
-        avg_profit = round(df_all_positions['PL_amt_realized'].mean(), 2)
+        avg_profit = round(df_all_pairs_positions['PL_amt_realized'].mean(), 2)
         overview['Average profit / trade'] = f"{avg_profit} $"
 
-        avg_profit_winning_trade = df_all_positions[df_all_positions['PL_amt_realized'] > 0]['PL_amt_realized'].sum() / \
-                                   df_all_positions[df_all_positions['PL_amt_realized'] > 0].shape[0]
-        avg_loss_losing_trade = df_all_positions[df_all_positions['PL_amt_realized'] < 0]['PL_amt_realized'].sum() / \
-                                df_all_positions[df_all_positions['PL_amt_realized'] < 0].shape[0]
+        avg_profit_winning_trade = df_all_pairs_positions[df_all_pairs_positions['PL_amt_realized'] > 0]['PL_amt_realized'].sum() / \
+                                   df_all_pairs_positions[df_all_pairs_positions['PL_amt_realized'] > 0].shape[0]
+        avg_loss_losing_trade = df_all_pairs_positions[df_all_pairs_positions['PL_amt_realized'] < 0]['PL_amt_realized'].sum() / \
+                                df_all_pairs_positions[df_all_pairs_positions['PL_amt_realized'] < 0].shape[0]
         overview['Average profit / winning trade'] = f"{round(avg_profit_winning_trade, 2)} $"
         overview['Average loss / losing trade'] = f"{round(avg_loss_losing_trade, 2)} $"
 
-        best_profit = round(df_all_positions['PL_amt_realized'].max(), 2)
+        best_profit = round(df_all_pairs_positions['PL_amt_realized'].max(), 2)
         overview['Best trade profit'] = f"{best_profit} $"
-        worst_loss = round(df_all_positions['PL_amt_realized'].min(), 2)
+        worst_loss = round(df_all_pairs_positions['PL_amt_realized'].min(), 2)
         overview['Worst trade loss'] = f"{worst_loss} $"
 
-        overview['Cumulative fees paid'] = f"{round(df_all_positions['tx_fees_paid'].sum(), 2)} $ "
+        overview['Cumulative fees paid'] = f"{round(df_all_pairs_positions['tx_fees_paid'].sum(), 2)} $ "
 
-        overview['Nb winning trade'] = df_all_positions[df_all_positions['PL_amt_realized'] > 0].shape[0]
-        overview['Nb losing trade'] = df_all_positions[df_all_positions['PL_amt_realized'] < 0].shape[0]
+        overview['Nb winning trade'] = df_all_pairs_positions[df_all_pairs_positions['PL_amt_realized'] > 0].shape[0]
+        overview['Nb losing trade'] = df_all_pairs_positions[df_all_pairs_positions['PL_amt_realized'] < 0].shape[0]
 
         overview['Total nb trade'] = overview['Nb losing trade'] + overview['Nb winning trade']
 
@@ -749,6 +724,8 @@ class BackTest:
         downside_volatility = math.sqrt(df_down['Downside_distribution'].sum() / df_daily.shape[0])
         downside_volatility = downside_volatility * math.sqrt(365)
 
+        statistics['Downside volatility'] = f"{round(downside_volatility, 2)} %"
+
         sortino_ratio = geometric_return / downside_volatility
         statistics['Sortino Ratio'] = round(sortino_ratio, 2)
 
@@ -756,6 +733,7 @@ class BackTest:
         print("{:<5} {:<35} {:<5} {:<10} {:<1}".format('#', 'Overview:', '|', '     ', '#'))
         print("{:<5} {:<35} {:<5} {:<10} {:<1}".format('#', f'From {since.strftime("%Y-%m-%d")}', '|', 'Value', '#'))
         print("{:<5} {:<35} {:<5} {:<10} {:<1}".format('#', f'To {self.end.strftime("%Y-%m-%d")}', '|', '     ', '#'))
+        print("{:<5} {:<35} {:<5} {:<10} {:<1}".format('#', f"With {starting_bk} $ starting", '|', '     ', '#'))
         print("#" * 60)
         for k, v in overview.items():
             print("{:<5} {:<35} {:<5} {:<10} {:<1}".format('#', k, '|', v, '#'))
@@ -774,4 +752,119 @@ class BackTest:
                           "statistics": statistics}
 
         return all_statistics
+
+    def save_trades_charts(self,
+                           data: pd.DataFrame,
+                           perf: pd.DataFrame,
+                           timedelta_before_entry: timedelta,
+                           max_nb_chart: int,
+                           pair: str):
+        """
+        This method will create the candle charts of all trades in perf. It will display the entry point and the exit
+        price.
+
+        Args:
+            data: dataframe that contains all the candles OHLC
+            perf: dataframe with all the positions
+            timedelta_before_entry: the amount of time we want to look back before the entry signal
+            max_nb_chart: maximum number of charts that we create
+            pair: bah la pair hoa
+        """
+
+        position_type = {1: {'color': 'g', 'marker': '^', 'y': 'low'},
+                         -1: {'color': 'r', 'marker': 'v', 'y': 'high'}}
+
+        chart_id = 0
+
+        for index, row in perf.iterrows():
+            try:
+                entry_date = row['entry_time']
+                exit_price = row['exit_price']
+                type = row['entry_point']
+
+                trade_data = data[data.index >= (entry_date - timedelta_before_entry)].copy(deep=True)
+                trade_data = trade_data[trade_data.index <= (entry_date + timedelta(hours=self.max_holding))]
+
+                trade_data['all_entry_point'] = np.where(trade_data.index == entry_date, 1, np.nan)
+
+                entry_signal = trade_data['all_entry_point'].abs() * trade_data[position_type[type]['y']]
+
+                ap0 = [mpf.make_addplot(trade_data['ichimoku_a'], color='g'),
+                       mpf.make_addplot(trade_data['ichimoku_b'], color='r'),
+                       mpf.make_addplot(entry_signal, type='scatter', markersize=100,
+                                        color=position_type[type]['color'],
+                                        marker=position_type[type]['marker'])]
+
+                name = pair + '_' + str(entry_date)
+
+                mpf.plot(trade_data, type='candle', figratio=(7, 5), addplot=ap0,
+                         hlines=dict(hlines=[exit_price], colors=[position_type[(-1) * type]['color']], linewidths=1,
+                                     alpha=0.4),
+                         savefig=f'./strategies/ichimoku/trade_charts/{name}.png', volume=False)
+
+                chart_id += 1
+                if chart_id > max_nb_chart:
+                    return 0
+
+            except Exception as e:
+                print(e)
+                continue
+
+    def run_backtest(self, save: bool = True):
+
+        """
+
+        Args:
+            save: bool
+            save_chart: bool
+
+        RUN BACK TEST !
+        """
+
+        i = 0
+        while i < len(self.list_pair):
+            pair = self.list_pair[i]
+
+            try:
+                print(f'BACK TESTING {pair}', "\U000023F3", end="\r")
+
+                data = self.get_all_historical_data(pair)
+
+                indicator_df = self.build_indicators(data)
+
+                entry_df = self.entry_strategy(indicator_df)
+
+                exit_df = self.exit_strategy(entry_df)
+
+                self.create_position_df(exit_df, pair)
+
+                print(f'BACK TESTING {pair}', "\U00002705")
+
+            except Exception as e:
+                print(f'BACK TESTING {pair}', "\U0000274C")
+
+                print(e)
+                self.list_pair.remove(pair)
+                continue
+
+            i += 1
+
+        # Keep only positions such that number of pos < max nb positions
+        print(f'Creating all positions and timeserie graph', "\U000023F3", end="\r")
+        self.all_pairs_position()
+        print(f'Creating all positions and timeserie graph', "\U00002705")
+
+        all_statistics = self.create_full_statistics(since=self.start)
+
+        self.get_performance_graph('all_pairs')
+
+        if save:
+            self.df_pairs_stat.to_csv(f'database/analysis/{self.strategy_name}/pairs_analytics.csv',
+                                      index=False)
+
+            with open(f'database/analysis/{self.strategy_name}/all_statistics.json', 'w') as fp:
+                json.dump(all_statistics, fp)
+
+        return all_statistics
+
 
