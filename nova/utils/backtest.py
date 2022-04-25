@@ -34,6 +34,7 @@ class BackTest:
                  amount_position: float = 100,
                  max_holding: int = 24):
 
+        self.start_bk = 1000
         self.start = start
         self.end = end
         self.candle = candle
@@ -528,6 +529,17 @@ class BackTest:
         stat_perf = pd.DataFrame([perf_dict], columns=list(perf_dict.keys()))
         self.df_pairs_stat = pd.concat([self.df_pairs_stat, stat_perf])
 
+    def compute_geometric_profits(self,
+                             row,
+                             bankroll_evolution):
+
+        actual_bankroll = bankroll_evolution[row.entry_time]
+
+        row['position_size'] = actual_bankroll * self.positions_size
+        row['PL_amt_realized'] = row['position_size'] * row['PL_prc_realized']
+
+        return row
+
     def all_pairs_position(self):
         ############################# Create self.df_all_pairs_positions #############################
 
@@ -541,10 +553,6 @@ class BackTest:
         self.df_all_pairs_positions = self.df_all_pairs_positions[self.df_all_pairs_positions['entry_time'] > since]
 
         self.df_all_pairs_positions = self.df_all_pairs_positions.sort_values(by=['exit_time'])
-
-        self.df_all_pairs_positions['cumulative_profit'] = self.df_all_pairs_positions['PL_amt_realized'].cumsum()
-
-        self.df_all_pairs_positions['bankroll_size'] = self.df_all_pairs_positions['cumulative_profit'] + self.start_bk
 
         ##################### Shift all TP or SL exit time bc it is based on the open ################
 
@@ -566,6 +574,8 @@ class BackTest:
         actual_nb_pos = 0
         exit_times = []
         all_rows_to_delete = pd.DataFrame(columns=self.df_all_pairs_positions.columns)
+        new_bk = self.start_bk
+        bankroll_evolution = {self.start: self.start_bk}
 
         while t <= self.end:
 
@@ -583,7 +593,6 @@ class BackTest:
                 rows_to_delete = entry_t.sample(n=nb_to_delete)
 
                 self.df_all_pairs_positions = pd.concat([self.df_all_pairs_positions, rows_to_delete])
-                # self.df_all_pairs_positions = self.df_all_pairs_positions.sort_values(by=['exit_time', 'pair'])
                 self.df_all_pairs_positions = self.df_all_pairs_positions.drop_duplicates(keep=False)
 
                 all_rows_to_delete = pd.concat([all_rows_to_delete, rows_to_delete])
@@ -591,6 +600,7 @@ class BackTest:
 
                 # Append exit times
                 real_entry_t = self.df_all_pairs_positions[self.df_all_pairs_positions['entry_time'] == t]
+                new_bk = (1 + real_entry_t['PL_prc_realized'].sum() * self.positions_size) * bankroll_evolution[t]
                 exit_times += real_entry_t['exit_time'].tolist()
 
             elif nb_signals != 0:
@@ -599,14 +609,28 @@ class BackTest:
 
                 # Append exit times
                 real_entry_t = self.df_all_pairs_positions[self.df_all_pairs_positions['entry_time'] == t]
+                new_bk = (1 + real_entry_t['PL_prc_realized'].sum() * self.positions_size) * bankroll_evolution[t]
                 exit_times += real_entry_t['exit_time'].tolist()
 
             t = t + timedelta(hours=hours_step)
 
-        for index, row in all_rows_to_delete.iterrows():
-            pair = row['pair']
-            self.df_all_positions[pair] = self.df_all_positions[pair][self.df_all_positions[pair]['entry_time'] !=
-                                                                      row['entry_time']]
+            bankroll_evolution[t] = new_bk
+
+            assert new_bk > 0, f"You'd get broke at {t}"
+
+        self.df_all_pairs_positions = self.df_all_pairs_positions.apply(lambda row: self.compute_geometric_profits(row,
+                                                                                                                   bankroll_evolution),
+                                                                        axis=1)
+
+        self.df_all_pairs_positions['cumulative_profit'] = self.df_all_pairs_positions['PL_amt_realized'].cumsum()
+
+        self.df_all_pairs_positions['bankroll_size'] = self.df_all_pairs_positions['cumulative_profit'] + self.start_bk
+
+        self.df_all_pairs_positions['tx_fees_paid'] = self.df_all_pairs_positions['position_size'] * self.fees \
+                                                      * (2 + self.df_all_pairs_positions['PL_prc_realized'])
+
+        for pair in self.list_pair:
+            self.df_all_positions[pair] = self.df_all_pairs_positions[self.df_all_pairs_positions['pair'] == pair]
 
         ############################# Create full position for all pairs #############################
 
@@ -657,9 +681,6 @@ class BackTest:
 
         df_all_pairs_positions = self.df_all_pairs_positions[self.df_all_pairs_positions['entry_time'] > since]
 
-        starting_bk = round(self.df_all_pairs_positions['bankroll_size'].values[0] - \
-                      self.df_all_pairs_positions['PL_amt_realized'].values[0], 1)
-
         ################################ Create daily results df ######################
 
         first_day = since - timedelta(hours=since.hour, minutes=since.minute)
@@ -689,12 +710,26 @@ class BackTest:
         avg_profit = round(df_all_pairs_positions['PL_amt_realized'].mean(), 2)
         overview['Average profit / trade'] = f"{avg_profit} $"
 
+        avg_profit_perc = round(100 * df_all_pairs_positions['PL_prc_realized'].mean(), 2)
+        overview['Average profit / trade (%)'] = f"{avg_profit_perc} %"
+
         avg_profit_winning_trade = df_all_pairs_positions[df_all_pairs_positions['PL_amt_realized'] > 0]['PL_amt_realized'].sum() / \
                                    df_all_pairs_positions[df_all_pairs_positions['PL_amt_realized'] > 0].shape[0]
+
+        avg_profit_perc_winning_trade = df_all_pairs_positions[df_all_pairs_positions['PL_prc_realized'] > 0]['PL_prc_realized'].sum() / \
+                                        df_all_pairs_positions[df_all_pairs_positions['PL_prc_realized'] > 0].shape[0]
+
         avg_loss_losing_trade = df_all_pairs_positions[df_all_pairs_positions['PL_amt_realized'] < 0]['PL_amt_realized'].sum() / \
                                 df_all_pairs_positions[df_all_pairs_positions['PL_amt_realized'] < 0].shape[0]
+
+        avg_profit_perc_losing_trade = df_all_pairs_positions[df_all_pairs_positions['PL_prc_realized'] < 0]['PL_prc_realized'].sum() / \
+                                        df_all_pairs_positions[df_all_pairs_positions['PL_prc_realized'] < 0].shape[0]
+
         overview['Average profit / winning trade'] = f"{round(avg_profit_winning_trade, 2)} $"
+        overview['Average profit / winning trade (%)'] = f"{round(100 * avg_profit_perc_winning_trade, 2)} %"
+
         overview['Average loss / losing trade'] = f"{round(avg_loss_losing_trade, 2)} $"
+        overview['Average profit / losing trade (%)'] = f"{round(100 * avg_profit_perc_losing_trade, 2)} %"
 
         best_profit = round(df_all_pairs_positions['PL_amt_realized'].max(), 2)
         overview['Best trade profit'] = f"{best_profit} $"
@@ -766,7 +801,7 @@ class BackTest:
         print("{:<5} {:<35} {:<5} {:<15} {:<1}".format('#', 'Overview:', '|', '     ', '#'))
         print("{:<5} {:<35} {:<5} {:<15} {:<1}".format('#', f'From {since.strftime("%Y-%m-%d")}', '|', 'Value', '#'))
         print("{:<5} {:<35} {:<5} {:<15} {:<1}".format('#', f'To {self.end.strftime("%Y-%m-%d")}', '|', '     ', '#'))
-        print("{:<5} {:<35} {:<5} {:<15} {:<1}".format('#', f"With {starting_bk} $ starting", '|', '     ', '#'))
+        print("{:<5} {:<35} {:<5} {:<15} {:<1}".format('#', f"With {self.start_bk} $ starting", '|', '     ', '#'))
         print("#" * 65)
         for k, v in overview.items():
             print("{:<5} {:<35} {:<5} {:<15} {:<1}".format('#', k, '|', v, '#'))
