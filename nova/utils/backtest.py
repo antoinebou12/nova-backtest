@@ -1,14 +1,14 @@
-import numpy as np
-import pandas as pd
-from datetime import datetime, timedelta
-import matplotlib.pyplot as plt
-import re
-import random
-
-from nova.utils.constant import EXCEPTION_LIST_BINANCE, VAR_NEEDED_FOR_POSITION, BINANCE_KLINES_COLUMNS
-
-from warnings import simplefilter
-simplefilter(action="ignore", category=pd.errors.PerformanceWarning)
+# import numpy as np
+# import pandas as pd
+# from datetime import datetime, timedelta
+# import matplotlib.pyplot as plt
+# import re
+# import random
+#
+# from nova.utils.constant import EXCEPTION_LIST_BINANCE, VAR_NEEDED_FOR_POSITION, BINANCE_KLINES_COLUMNS
+#
+# from warnings import simplefilter
+# simplefilter(action="ignore", category=pd.errors.PerformanceWarning)
 
 
 class BackTest:
@@ -674,6 +674,8 @@ class BackTest:
 
         row['last_date_max'] = temp['bankroll'].idxmax()
 
+        row['nb_day_since_last_date_max'] = (row.date - row['last_date_max']).days
+
         return row
 
     def create_full_statistics(self,
@@ -748,6 +750,8 @@ class BackTest:
         overview['Best day profit'] = f"{round(df_daily['daily_percentage_profit'].max(), 1)} %"
 
         overview['Worst day loss'] = f"{round(df_daily['daily_percentage_profit'].min(), 1)} %"
+
+        overview['Max Nb Days Underwater'] = df_daily['nb_day_since_last_date_max'].max()
 
         ################################ Compute statistics #############################
 
@@ -911,7 +915,6 @@ class BackTest:
             except Exception as e:
                 print(f'BACK TESTING {pair}', "\U0000274C")
 
-                print(e)
                 self.list_pair.remove(pair)
                 continue
 
@@ -922,7 +925,9 @@ class BackTest:
         self.all_pairs_position()
         print(f'Creating all positions and timeserie graph', "\U00002705")
 
+        print(f'Computing statistics', "\U000023F3", end="\r")
         all_statistics = self.create_full_statistics(since=self.start)
+        print(f'Computing statistics', "\U00002705")
 
         self.get_performance_graph('all_pairs')
 
