@@ -1,14 +1,14 @@
-# import numpy as np
-# import pandas as pd
-# from datetime import datetime, timedelta
-# import matplotlib.pyplot as plt
-# import re
-# import random
-#
-# from nova.utils.constant import EXCEPTION_LIST_BINANCE, VAR_NEEDED_FOR_POSITION, BINANCE_KLINES_COLUMNS
-#
-# from warnings import simplefilter
-# simplefilter(action="ignore", category=pd.errors.PerformanceWarning)
+import numpy as np
+import pandas as pd
+from datetime import datetime, timedelta
+import matplotlib.pyplot as plt
+import re
+import random
+
+from nova.utils.constant import EXCEPTION_LIST_BINANCE, VAR_NEEDED_FOR_POSITION, BINANCE_KLINES_COLUMNS
+
+from warnings import simplefilter
+simplefilter(action="ignore", category=pd.errors.PerformanceWarning)
 
 
 class BackTest:
