@@ -26,7 +26,7 @@ class BackTest:
 
     def __init__(self,
                  candle: str,
-                 list_pair: list,
+                 list_pair,
                  start: datetime,
                  end: datetime,
                  fees: float,
@@ -48,8 +48,21 @@ class BackTest:
 
         self.exception_pair = EXCEPTION_LIST_BINANCE
 
-        if list_pair is None:
-            self.list_pair = self.get_list_pair()
+        if type(self.list_pair).__name__ == 'str':
+            raw_list_pair = self.get_list_pair()
+
+            if self.list_pair.split()[0] == 'Random':
+                nb_pairs = self.list_pair.split()[1]
+
+                assert nb_pairs.isnumeric(), "Please enter valid list_pair"
+
+                self.list_pair = random.choices(raw_list_pair, k=int(nb_pairs))
+
+            elif self.list_pair != 'All pairs':
+                raise Exception("Please enter valid list_pair")
+
+            else:
+                self.list_pair = raw_list_pair
 
         self.df_all_positions = {}
         self.df_pairs_stat = pd.DataFrame()
