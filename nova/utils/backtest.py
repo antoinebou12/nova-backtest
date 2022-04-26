@@ -162,7 +162,7 @@ class BackTest:
                                self.end.strftime('%d %b, %Y'))
 
             df = self._data_fomating(klines)
-            
+
             df = df.dropna()
 
             df.to_csv(f'database/{market}/hist_{pair}_{self.candle}.csv', index=False)
@@ -272,7 +272,7 @@ class BackTest:
         # creating all leading variables
 
         nb_candle = self.convert_hours_to_candle_nb()
-        
+
         for i in range(1, nb_candle + 1):
             condition_sl_long = (df.low.shift(-i) <= df.all_sl) & (df.all_entry_point == 1)
             condition_sl_short = (df.high.shift(-i) >= df.all_sl) & (df.all_entry_point == -1)
@@ -554,6 +554,8 @@ class BackTest:
 
         self.df_all_pairs_positions = self.df_all_pairs_positions.sort_values(by=['exit_time'])
 
+        self.df_all_pairs_positions['position_size'] = self.positions_size * self.start_bk
+
         ##################### Shift all TP or SL exit time bc it is based on the open ################
 
         hours_step = self.max_holding / self.convert_hours_to_candle_nb()
@@ -616,11 +618,15 @@ class BackTest:
 
             bankroll_evolution[t] = new_bk
 
-            assert new_bk > 0, f"You'd get broke at {t}"
+            assert new_bk > 0, f"You'd have been broke at {t}"
 
-        self.df_all_pairs_positions = self.df_all_pairs_positions.apply(lambda row: self.compute_geometric_profits(row,
-                                                                                                                   bankroll_evolution),
-                                                                        axis=1)
+        if self.geometric_sizes:
+            self.df_all_pairs_positions = self.df_all_pairs_positions.apply(lambda row: self.compute_geometric_profits(row,
+                                                                                                                       bankroll_evolution),
+                                                                            axis=1)
+        else:
+            self.df_all_pairs_positions['PL_amt_realized'] = self.df_all_pairs_positions['position_size'] *\
+                                                             self.df_all_pairs_positions['PL_prc_realized']
 
         self.df_all_pairs_positions['cumulative_profit'] = self.df_all_pairs_positions['PL_amt_realized'].cumsum()
 
