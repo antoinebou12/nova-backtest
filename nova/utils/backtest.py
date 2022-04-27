@@ -5,6 +5,7 @@ import matplotlib.pyplot as plt
 import re
 import random
 import math
+import json
 
 from nova.utils.constant import EXCEPTION_LIST_BINANCE, VAR_NEEDED_FOR_POSITION, BINANCE_KLINES_COLUMNS
 
@@ -17,12 +18,15 @@ class BackTest:
     This class helps for back testing a strategy.
     :parameter
         - candle : the candle size (ex: '15m')
-        - list_pair : the list of pairs we want to back test (if None it will select all the pairs on Binance)
+        - list_pair : the list of pairs we want to back test
+                      * "All pairs" will select all the Binance Futures pairs
+                      * "Random x" will select int(x) random Binance Futures pairs
+                      * ['BTCUSDT', 'ETHUSDT', 'ADAUSDT'] will backtest on those pairs
         - start : the starting day of the back test
         - end : the ending day of the back test
-        - n_jobs : number of processes that will run in parallel when back testing pairs (default=8)
         - fees : fees applied by the exchange (0.04% for binance in taker)
-        - max_pos : maximum number of position
+        - max_pos : maximum number of position holding at the same time
+        - max_holding: number maximum of hours we can hold a position
     """
 
     def __init__(self,
@@ -32,23 +36,23 @@ class BackTest:
                  end: datetime,
                  fees: float,
                  max_pos: int,
-                 amount_position: float = 100,
-                 max_holding: int = 24):
+                 max_holding: int):
 
         self.start_bk = 1000
+        self.actual_bk = self.start_bk
         self.start = start
         self.end = end
         self.candle = candle
         self.fees = fees
-        self.amount_per_position = amount_position
+        self.amount_per_position = 100
         self.list_pair = list_pair
         self.last_exit_date = np.nan
         self.max_pos = max_pos
-
         self.max_holding = max_holding
 
         self.exception_pair = EXCEPTION_LIST_BINANCE
 
+        # Get the list of pairs on which we perform the back test
         if type(self.list_pair).__name__ == 'str':
             raw_list_pair = self.get_list_pair()
 
@@ -65,6 +69,7 @@ class BackTest:
             else:
                 self.list_pair = raw_list_pair
 
+        # Initialize DataFrames
         self.df_all_positions = {}
         self.df_pairs_stat = pd.DataFrame()
         self.df_pos = pd.DataFrame()
@@ -185,31 +190,11 @@ class BackTest:
 
             return df[(df.open_time >= self.start) & (df.open_time <= self.end)]
 
-    def get_exit_signals_date(self, x):
-        """
-        Note: The dataframe as to have exit_situation and index_num variable that is a boolean. It indicates when an
-        Exit Signal is located in the timeseries
-
-        Args:
-            x: is the element of the apply method on a pandas dataframe
-        Returns:
-            It returns the closest date at which an execution of the exit is made
-        """
-        try:
-            end_pt = x.index_num + self.convert_hours_to_candle_nb()
-            closest_exit = np.where(self.df_copy['exit_situation'][x.index_num: end_pt] == True)[0][-1]
-            if (closest_exit > 0) and (self.df_copy['all_entry_point'][x.index_num] != np.nan):
-                return self.df_copy['open_time'][x.index_num + closest_exit]
-            else :
-                return np.datetime64('NaT')
-        except:
-            return np.datetime64('NaT')
-
     def create_all_exit_point(self, df: pd.DataFrame) -> pd.DataFrame:
         """
         Args:
             df:
-        Returns:
+        Create all exit points (TP, SL, max hold or exit signal)
         """
         all_exit_var = ['closest_sl', 'closest_tp', 'max_hold_date']
 
@@ -223,18 +208,18 @@ class BackTest:
 
         if 'exit_signal_date' in all_exit_var:
             condition_exit_strat = (df.all_entry_point.notnull()) & (df['all_exit_time'] == df['exit_signal_date'])
-            df['all_exit_point'] = np.where(condition_exit_type_sl, -10,
-                                            np.where(condition_exit_type_tp, 20,
-                                                     np.where(max_hold_date_sl, 10,
-                                                              np.where(condition_exit_strat, 5, np.nan))))
+            df['all_exit_point'] = np.where(condition_exit_type_sl, 'SL',
+                                            np.where(condition_exit_type_tp, 'TP',
+                                                     np.where(max_hold_date_sl, 'MaxHolding',
+                                                              np.where(condition_exit_strat, 'ExitSignal', np.nan))))
         else:
-            df['all_exit_point'] = np.where(condition_exit_type_sl, -10,
-                                            np.where(condition_exit_type_tp, 20,
-                                                     np.where(max_hold_date_sl, 10, np.nan)))
+            df['all_exit_point'] = np.where(condition_exit_type_sl, 'SL',
+                                            np.where(condition_exit_type_tp, 'TP',
+                                                     np.where(max_hold_date_sl, 'MaxHolding', np.nan)))
 
         return df
 
-    def create_all_tp_sl(self, df: pd.DataFrame) -> pd.DataFrame:
+    def create_entry_prices_times(self, df: pd.DataFrame) -> pd.DataFrame:
         """
         Args:
             df: dataframe that contains the 'all_entry_point' with the following properties:
@@ -244,21 +229,20 @@ class BackTest:
 
         Returns:
             The function created 4 variables :
-                all_entry_price, all_entry_time, all_tp, all_sl
+                all_entry_price, all_entry_time
         """
 
         df['all_entry_price'] = np.where(df.all_entry_point.notnull(), df.next_open, np.nan)
         df['all_entry_time'] = np.where(df.all_entry_point.notnull(), df.open_time, np.datetime64('NaT'))
 
-        df['all_tp'] = np.where(df.all_entry_point == -1, df.all_entry_price * (1 - self.tp_prc),
-                                np.where(df.all_entry_point == 1, df.all_entry_price * (1 + self.tp_prc), np.nan))
-
-        df['all_sl'] = np.where(df.all_entry_point == -1, df.all_entry_price * (1 + self.sl_prc),
-                                np.where(df.all_entry_point == 1, df.all_entry_price * (1 - self.sl_prc), np.nan))
-
         return df
 
-    def convert_hours_to_candle_nb(self) -> int:
+    def convert_max_holding_to_candle_nb(self) -> int:
+        """
+
+        Return the number maximum of candle we can hold a position
+
+        """
         multi = int(float(re.findall(r'\d+', self.candle)[0]))
 
         if 'm' in self.candle:
@@ -285,7 +269,7 @@ class BackTest:
 
         # creating all leading variables
 
-        nb_candle = self.convert_hours_to_candle_nb()
+        nb_candle = self.convert_max_holding_to_candle_nb()
 
         for i in range(1, nb_candle + 1):
             condition_sl_long = (df.low.shift(-i) <= df.all_sl) & (df.all_entry_point == 1)
@@ -332,10 +316,10 @@ class BackTest:
         final_df.reset_index(drop=True, inplace=True)
 
         # create the variable that indicates if a transaction is good or not
-        final_df['is_good'] = np.nan
+        final_df['not_overlapping'] = np.nan
 
         # For Loop in all the transaction (from the oldest to the newest)
-        # determine if the transaction could have been executed
+        # determine if the transaction could have been executed (don't overlap another trade)
         for index, row in final_df.iterrows():
             good = True
             if index == 0:
@@ -345,11 +329,11 @@ class BackTest:
             else:
                 self.last_exit_date = row.all_exit_time
 
-            final_df.loc[index, 'is_good'] = good
+            final_df.loc[index, 'not_overlapping'] = good
 
         # keep only the real transaction that can be executed
-        final_df = final_df[final_df['is_good']]
-        final_df = final_df.drop('is_good', axis=1)
+        final_df = final_df[final_df['not_overlapping']]
+        final_df = final_df.drop('not_overlapping', axis=1)
         final_df.reset_index(drop=True, inplace=True)
 
         # add back the 'next_open' variable
@@ -358,8 +342,8 @@ class BackTest:
         final_df = final_df.drop('open_time', axis=1)
 
         # compute the exit price for depending on the exit point category
-        final_df['exit_price'] = np.where(final_df['all_exit_point'] == -10, final_df['all_sl'],
-                                          np.where(final_df['all_exit_point'] == 20, final_df['all_tp'],
+        final_df['exit_price'] = np.where(final_df['all_exit_point'] == 'SL', final_df['all_sl'],
+                                          np.where(final_df['all_exit_point'] == 'TP', final_df['all_tp'],
                                                    final_df['next_open']))
 
         # removing non important variables and renaming columns
@@ -392,7 +376,7 @@ class BackTest:
         df['prc_not_realized'] = (df['entry_point'] * (df['exit_price'] - df['entry_price']) / df['entry_price'])
         df['amt_not_realized'] = df['prc_not_realized'] * self.amount_per_position
 
-        df['tx_fees_paid'] = (2 * self.amount_per_position + df['amt_not_realized']) * self.fees
+        df['tx_fees_paid'] = self.amount_per_position * (2 + df['prc_not_realized'] - self.fees) * self.fees
 
         df['PL_amt_realized'] = df['amt_not_realized'] - df['tx_fees_paid']
         df['PL_prc_realized'] = df['PL_amt_realized'] / self.amount_per_position
@@ -404,14 +388,14 @@ class BackTest:
 
         return df
 
-    def create_full_positions(self, df: pd.DataFrame, pair: str) -> pd.DataFrame:
+    def create_timeserie(self, df: pd.DataFrame, pair: str) -> pd.DataFrame:
         """
         Args:
             df: it's the position dataframes with all the statistics per positions
             pair: is the string that represents the pair that is currently backtest
 
         Returns:
-            recreates the real time series scenario when a position has been taken.
+            Recreates the real time series scenario with all positions taken.
         """
 
         # create entering and exiting dataset
@@ -488,7 +472,7 @@ class BackTest:
             df : position dataframe that contains all the statistics needed
             pair : string representing the pair we are currently backtesting
         Returns:
-            aggregated statistics to evaluate the current strategy and add it to
+            aggregated statistics pair by pair to evaluate the current strategy and add it to
             df_stat  dataframe
         """
 
@@ -500,10 +484,10 @@ class BackTest:
 
         # create tp, sl, es, ew dataframes
         exit_stat = {
-            'tp': df[df['exit_point'] == 20].reset_index(drop=True),
-            'sl': df[df['exit_point'] == -10].reset_index(drop=True),
-            'es': df[df['exit_point'] == 5].reset_index(drop=True),
-            'ew': df[df['exit_point'] == 10].reset_index(drop=True)
+            'tp': df[df['exit_point'] == 'TP'].reset_index(drop=True),
+            'sl': df[df['exit_point'] == 'SL'].reset_index(drop=True),
+            'es': df[df['exit_point'] == 'MaxHolding'].reset_index(drop=True),
+            'ew': df[df['exit_point'] == 'ExitSignal'].reset_index(drop=True)
         }
 
         # create an empty dictionary
@@ -511,24 +495,36 @@ class BackTest:
         perf_dict['pair'] = pair
 
         # add general statistics
-        perf_dict['total_position'] = len(df)
-        perf_dict['avg_minutes_in_position'] = df['nb_minutes_in_position'].mean()
-        perf_dict['total_profit_amt'] = df['PL_amt_realized'].sum()
-        perf_dict['total_profit_prc'] = df['PL_prc_realized'].sum()
-        perf_dict['total_tx_fees'] = df['tx_fees_paid'].sum()
-        perf_dict['avg_minutes_before_next_position'] = df['minutes_bf_next_position'].mean()
-        perf_dict['max_minutes_without_position'] = df['minutes_bf_next_position'].max()
-        perf_dict['min_minutes_without_position'] = df['minutes_bf_next_position'].min()
-        perf_dict['perc_winning_trade'] = len(df[df.PL_amt_realized > 0]) / len(df)
-        perf_dict['avg_profit'] = df['PL_prc_realized'].sum() / len(df)
+        if len(df) != 0:
+            perf_dict['total_position'] = len(df)
+            perf_dict['avg_minutes_in_position'] = df['nb_minutes_in_position'].mean()
+            perf_dict['total_profit_amt'] = df['PL_amt_realized'].sum()
+            perf_dict['total_profit_prc'] = df['PL_prc_realized'].sum()
+            perf_dict['total_tx_fees'] = df['tx_fees_paid'].sum()
+            perf_dict['avg_minutes_before_next_position'] = df['minutes_bf_next_position'].mean()
+            perf_dict['max_minutes_without_position'] = df['minutes_bf_next_position'].max()
+            perf_dict['min_minutes_without_position'] = df['minutes_bf_next_position'].min()
+            perf_dict['perc_winning_trade'] = len(df[df.PL_amt_realized > 0]) / len(df)
+            perf_dict['avg_profit'] = df['PL_prc_realized'].sum() / len(df)
+        else:
+            perf_dict['total_position'] = len(df)
+            perf_dict['avg_minutes_in_position'] = 0
+            perf_dict['total_profit_amt'] = 0
+            perf_dict['total_profit_prc'] = 0
+            perf_dict['total_tx_fees'] = 0
+            perf_dict['avg_minutes_before_next_position'] = 0
+            perf_dict['max_minutes_without_position'] = 0
+            perf_dict['min_minutes_without_position'] = 0
+            perf_dict['perc_winning_trade'] = 0
+            perf_dict['avg_profit'] = 0
 
         # add statistics per type of positions
         for pos, pos_df in position_stat.items():
             perf_dict[f'nb_{pos}_position'] = len(pos_df)
-            perf_dict[f'nb_tp_{pos}'] = len(pos_df[pos_df['exit_point'] == 20])
-            perf_dict[f'nb_sl_{pos}'] = len(pos_df[pos_df['exit_point'] == -10])
-            perf_dict[f'nb_exit_{pos}'] = len(pos_df[pos_df['exit_point'] == 5])
-            perf_dict[f'nb_ew_{pos}'] = len(pos_df[pos_df['exit_point'] == 20])
+            perf_dict[f'nb_tp_{pos}'] = len(pos_df[pos_df['exit_point'] == 'TP'])
+            perf_dict[f'nb_sl_{pos}'] = len(pos_df[pos_df['exit_point'] == 'SL'])
+            perf_dict[f'nb_exit_{pos}'] = len(pos_df[pos_df['exit_point'] == 'ExitSignal'])
+            perf_dict[f'nb_ew_{pos}'] = len(pos_df[pos_df['exit_point'] == 'MaxHolding'])
 
             perf_dict[f'{pos}_profit_amt'] = pos_df['PL_amt_realized'].sum()
             perf_dict[f'{pos}_profit_prc'] = pos_df['PL_prc_realized'].sum()
@@ -544,17 +540,32 @@ class BackTest:
         self.df_pairs_stat = pd.concat([self.df_pairs_stat, stat_perf])
 
     def compute_geometric_profits(self,
-                             row,
-                             bankroll_evolution):
+                                  row):
+        """
+        Used only if we backtest with geometric profits: the size of our positions increase (or decrease) as the
+        bankroll increase (or decrease). The proportion of each position size compared to the size of the bankroll
+        is self.position_size.
+        Ex: if you have a bankroll of 2500$ and self.positions_size equals to 1/10, each positions would have a size
+        of 250$.
+        """
 
-        actual_bankroll = bankroll_evolution[row.entry_time]
-
-        row['position_size'] = actual_bankroll * self.positions_size
+        row['position_size'] = self.actual_bk * self.positions_size
         row['PL_amt_realized'] = row['position_size'] * row['PL_prc_realized']
+
+        self.actual_bk += row['PL_amt_realized']
+
+        assert self.actual_bk > 0, f"You'd have been broke at {row['entry_time']}"
 
         return row
 
-    def all_pairs_position(self):
+    def all_pairs_real_positions(self):
+        """
+        This method delete all the positions that wouldn't have been taken because the self.max_pos would be reach.
+        Indeed if the backtest is run on 100 pairs and you have 80 positions at the same time, you wouldn't be
+        able to take 80 positions in the real life (due to your limited portfolio). This situation happens more
+        frequently on crypto market because of the high correlation between assets.
+        """
+
         ############################# Create self.df_all_pairs_positions #############################
 
         since = self.start
@@ -570,32 +581,33 @@ class BackTest:
 
         self.df_all_pairs_positions['position_size'] = self.positions_size * self.start_bk
 
-        ##################### Shift all TP or SL exit time bc it is based on the open ################
+        self.df_all_pairs_positions = self.df_all_pairs_positions.dropna(subset=['exit_price', 'PL_amt_realized'])
 
-        hours_step = self.max_holding / self.convert_hours_to_candle_nb()
+        ################### Shift all TP or SL exit time bc it is based on the open time ##############
 
-        self.df_all_pairs_positions['exit_time'] = np.where(self.df_all_pairs_positions['exit_point'] == 20,
+        hours_step = self.max_holding / self.convert_max_holding_to_candle_nb()
+
+        self.df_all_pairs_positions['exit_time'] = np.where(self.df_all_pairs_positions['exit_point'] == 'TP',
                                                             self.df_all_pairs_positions['exit_time'] + timedelta(
                                                                 hours=hours_step),
                                                             self.df_all_pairs_positions['exit_time'])
 
-        self.df_all_pairs_positions['exit_time'] = np.where(self.df_all_pairs_positions['exit_point'] == -10,
+        self.df_all_pairs_positions['exit_time'] = np.where(self.df_all_pairs_positions['exit_point'] == 'SL',
                                                             self.df_all_pairs_positions['exit_time'] + timedelta(
                                                                 hours=hours_step),
                                                             self.df_all_pairs_positions['exit_time'])
 
-        #############################      Delete impossible trades      #############################
+        #############################      Delete impossible trades      ##############################
 
         t = since
         actual_nb_pos = 0
         exit_times = []
         all_rows_to_delete = pd.DataFrame(columns=self.df_all_pairs_positions.columns)
-        new_bk = self.start_bk
-        bankroll_evolution = {self.start: self.start_bk}
 
         while t <= self.end:
 
             if t in exit_times:
+                # quit positions
                 actual_nb_pos -= exit_times.count(t)
                 exit_times = list(filter(t.__ne__, exit_times))
 
@@ -606,8 +618,10 @@ class BackTest:
             if nb_signals + actual_nb_pos > self.max_pos:
                 nb_to_delete = nb_signals - (self.max_pos - actual_nb_pos)
 
+                # Select nb_to_delete random positions
                 rows_to_delete = entry_t.sample(n=nb_to_delete)
 
+                # Delete these positions
                 self.df_all_pairs_positions = pd.concat([self.df_all_pairs_positions, rows_to_delete])
                 self.df_all_pairs_positions = self.df_all_pairs_positions.drop_duplicates(keep=False)
 
@@ -616,7 +630,6 @@ class BackTest:
 
                 # Append exit times
                 real_entry_t = self.df_all_pairs_positions[self.df_all_pairs_positions['entry_time'] == t]
-                new_bk = (1 + real_entry_t['PL_prc_realized'].sum() * self.positions_size) * bankroll_evolution[t]
                 exit_times += real_entry_t['exit_time'].tolist()
 
             elif nb_signals != 0:
@@ -624,19 +637,13 @@ class BackTest:
                 actual_nb_pos += nb_signals
 
                 # Append exit times
-                real_entry_t = self.df_all_pairs_positions[self.df_all_pairs_positions['entry_time'] == t]
-                new_bk = (1 + real_entry_t['PL_prc_realized'].sum() * self.positions_size) * bankroll_evolution[t]
-                exit_times += real_entry_t['exit_time'].tolist()
+                exit_times += entry_t['exit_time'].tolist()
 
             t = t + timedelta(hours=hours_step)
 
-            bankroll_evolution[t] = new_bk
-
-            assert new_bk > 0, f"You'd have been broke at {t}"
-
+        ######################  Compute real positions sizes and profits ##########################
         if self.geometric_sizes:
-            self.df_all_pairs_positions = self.df_all_pairs_positions.apply(lambda row: self.compute_geometric_profits(row,
-                                                                                                                       bankroll_evolution),
+            self.df_all_pairs_positions = self.df_all_pairs_positions.apply(lambda row: self.compute_geometric_profits(row),
                                                                             axis=1)
         else:
             self.df_all_pairs_positions['PL_amt_realized'] = self.df_all_pairs_positions['position_size'] *\
@@ -646,23 +653,28 @@ class BackTest:
 
         self.df_all_pairs_positions['bankroll_size'] = self.df_all_pairs_positions['cumulative_profit'] + self.start_bk
 
+        # Re calculate the fees
         self.df_all_pairs_positions['tx_fees_paid'] = self.df_all_pairs_positions['position_size'] * self.fees \
                                                       * (2 + self.df_all_pairs_positions['PL_prc_realized'])
 
+        # Update self.df_all_positions
         for pair in self.list_pair:
             self.df_all_positions[pair] = self.df_all_pairs_positions[self.df_all_pairs_positions['pair'] == pair]
 
-        ############################# Create full position for all pairs #############################
+        ############################# Create timeseries for all pairs #############################
 
         for pair in self.list_pair:
-            self.create_full_positions(df=self.df_all_positions[pair],
-                                       pair=pair)
+            self.create_timeserie(df=self.df_all_positions[pair],
+                                  pair=pair)
             self.get_pair_stats(df=self.df_all_positions[pair],
                                 pair=pair)
 
     def compute_daily_return(self,
                              row,
                              df_all_pairs_positions):
+        """
+        Need to compute daily returns to compute statistics (Sharpe ratio, Sortino ratio, volatility...)
+        """
 
         all_exit_of_the_day = df_all_pairs_positions[df_all_pairs_positions['exit_time'] <= row.date + timedelta(days=1)]
         all_exit_of_the_day = all_exit_of_the_day[all_exit_of_the_day['exit_time'] > row.date]
@@ -700,6 +712,10 @@ class BackTest:
 
     def create_full_statistics(self,
                                since: datetime):
+        """
+        This method computes all the statistics on the overall strategy's performances.
+        It prints all theses values in a table and return the dictionary with all the stats.
+        """
 
         df_all_pairs_positions = self.df_all_pairs_positions[self.df_all_pairs_positions['entry_time'] > since]
 
@@ -734,6 +750,9 @@ class BackTest:
 
         avg_profit_perc = round(100 * df_all_pairs_positions['PL_prc_realized'].mean(), 2)
         overview['Average profit / trade (%)'] = f"{avg_profit_perc} %"
+
+        avg_position_size = round(df_all_pairs_positions['position_size'].mean(), 2)
+        overview['Average position size'] = f"{avg_position_size} $"
 
         avg_profit_winning_trade = df_all_pairs_positions[df_all_pairs_positions['PL_amt_realized'] > 0]['PL_amt_realized'].sum() / \
                                    df_all_pairs_positions[df_all_pairs_positions['PL_amt_realized'] > 0].shape[0]
@@ -934,7 +953,6 @@ class BackTest:
 
             except Exception as e:
                 print(f'BACK TESTING {pair}', "\U0000274C")
-
                 self.list_pair.remove(pair)
                 continue
 
@@ -942,14 +960,13 @@ class BackTest:
 
         # Keep only positions such that number of pos < max nb positions
         print(f'Creating all positions and timeserie graph', "\U000023F3", end="\r")
-        self.all_pairs_position()
+        self.all_pairs_real_positions()
+        self.get_performance_graph('all_pairs')
         print(f'Creating all positions and timeserie graph', "\U00002705")
 
-        print(f'Computing statistics', "\U000023F3", end="\r")
+        print(f'Computing all statistics', "\U000023F3", end="\r")
         all_statistics = self.create_full_statistics(since=self.start)
-        print(f'Computing statistics', "\U00002705")
-
-        self.get_performance_graph('all_pairs')
+        print(f'Computing all statistics', "\U00002705")
 
         if save:
             self.df_pairs_stat.to_csv(f'database/analysis/{self.strategy_name}/pairs_analytics.csv',
