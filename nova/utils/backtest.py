@@ -266,6 +266,7 @@ class BackTest:
         # create list of variables that we will have to drop
         lead_sl = []
         lead_tp = []
+        lead_es = []
 
         # creating all leading variables
 
@@ -278,11 +279,17 @@ class BackTest:
                     df.all_entry_point == -1)
             condition_tp_long = (df.all_entry_point == 1) & (df.high.shift(-i) >= df.all_tp) & (
                     df.low.shift(-i) >= df.all_sl)
-
             df[f'sl_lead_{i}'] = np.where(condition_sl_long | condition_sl_short, df.open_time.shift(-i),
                                           np.datetime64('NaT'))
+
             df[f'tp_lead_{i}'] = np.where(condition_tp_short | condition_tp_long, df.open_time.shift(-i),
                                           np.datetime64('NaT'))
+
+            if 'exit_situation' in df.columns:
+                df[f'es_lead_{i}'] = np.where(df['exit_situation'], df.open_time.shift(-i),
+                                              np.datetime64('NaT'))
+                lead_es.append(f'es_lead_{i}')
+
             lead_sl.append(f'sl_lead_{i}')
             lead_tp.append(f'tp_lead_{i}')
 
@@ -290,12 +297,15 @@ class BackTest:
         df['closest_sl'] = df[lead_sl].min(axis=1)
         df['closest_tp'] = df[lead_tp].min(axis=1)
 
+        if 'exit_situation' in df.columns:
+            df['exit_signal_date'] = df[lead_es].min(axis=1)
+
         # get the max holding date
         delta_holding = timedelta(hours=self.max_holding)
         df['max_hold_date'] = np.where(df.all_entry_point.notnull(), df['open_time'] + delta_holding, np.datetime64('NaT'))
 
         # clean dataset
-        df.drop(lead_sl + lead_tp, axis=1, inplace=True)
+        df.drop(lead_sl + lead_tp + lead_es, axis=1, inplace=True)
 
         return df
 
