@@ -286,7 +286,7 @@ class BackTest:
                                           np.datetime64('NaT'))
 
             if 'exit_situation' in df.columns:
-                df[f'es_lead_{i}'] = np.where(df['exit_situation'], df.open_time.shift(-i),
+                df[f'es_lead_{i}'] = np.where(df['exit_situation'].shift(-i).notnull(), df.open_time.shift(-i),
                                               np.datetime64('NaT'))
                 lead_es.append(f'es_lead_{i}')
 
