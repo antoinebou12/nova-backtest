@@ -784,11 +784,11 @@ class BackTest:
         overview['Average loss / losing trade'] = f"{round(avg_loss_losing_trade, 2)} $"
         overview['Average profit / losing trade (%)'] = f"{round(100 * avg_profit_perc_losing_trade, 2)} %"
 
-        avg_long = df_all_pairs_positions[df_all_pairs_positions['entry_point'] == 1]['PL_amt_realized'].sum() / \
+        avg_long = df_all_pairs_positions[df_all_pairs_positions['entry_point'] == 1]['PL_prc_realized'].sum() / \
                    df_all_pairs_positions[df_all_pairs_positions['entry_point'] == 1].shape[0]
         overview['Average Long Profit (%)'] = f"{round(100 * avg_long, 2)} %"
 
-        avg_short = df_all_pairs_positions[df_all_pairs_positions['entry_point'] == -1]['PL_amt_realized'].sum() / \
+        avg_short = df_all_pairs_positions[df_all_pairs_positions['entry_point'] == -1]['PL_prc_realized'].sum() / \
                    df_all_pairs_positions[df_all_pairs_positions['entry_point'] == -1].shape[0]
         overview['Average Short Profit (%)'] = f"{round(100 * avg_short, 2)} %"
 
