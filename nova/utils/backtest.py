@@ -813,7 +813,7 @@ class BackTest:
 
         overview['Worst day loss'] = f"{round(df_daily['daily_percentage_profit'].min(), 1)} %"
 
-        overview['Max Nb Days Underwater'] = df_daily['nb_day_since_last_date_max'].max()
+        overview['Max Nb Days Underwater'] = int(df_daily['nb_day_since_last_date_max'].max())
 
         ################################ Compute statistics #############################
 
