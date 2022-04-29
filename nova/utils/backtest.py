@@ -679,6 +679,8 @@ class BackTest:
             self.get_pair_stats(df=self.df_all_positions[pair],
                                 pair=pair)
 
+        self.df_pairs_stat = self.df_pairs_stat.set_index('pair', drop=False)
+
     def compute_daily_return(self,
                              row,
                              df_all_pairs_positions):
@@ -782,6 +784,17 @@ class BackTest:
         overview['Average loss / losing trade'] = f"{round(avg_loss_losing_trade, 2)} $"
         overview['Average profit / losing trade (%)'] = f"{round(100 * avg_profit_perc_losing_trade, 2)} %"
 
+        avg_long = df_all_pairs_positions[df_all_pairs_positions['entry_point'] == 1]['PL_amt_realized'].sum() / \
+                   df_all_pairs_positions[df_all_pairs_positions['entry_point'] == 1].shape[0]
+        overview['Average Long Profit (%)'] = f"{round(100 * avg_long, 2)} %"
+
+        avg_short = df_all_pairs_positions[df_all_pairs_positions['entry_point'] == -1]['PL_amt_realized'].sum() / \
+                   df_all_pairs_positions[df_all_pairs_positions['entry_point'] == -1].shape[0]
+        overview['Average Short Profit (%)'] = f"{round(100 * avg_short, 2)} %"
+
+        hold = df_all_pairs_positions['nb_minutes_in_position'].mean() / 60
+        overview['Average hold duration (in hours)'] = f"{round(hold, 2)} h"
+
         best_profit = round(df_all_pairs_positions['PL_amt_realized'].max(), 2)
         overview['Best trade profit'] = f"{best_profit} $"
         worst_loss = round(df_all_pairs_positions['PL_amt_realized'].min(), 2)
@@ -848,6 +861,18 @@ class BackTest:
         statistics['Max DrawDown start'] = str(pd.to_datetime(start_max_DD.values[0]).date())
         statistics['Max DrawDown end'] = str(pd.to_datetime(end_max_DD.values[0]).date())
 
+        ################################## Pairs stats ##################################
+        pairs_stats = {}
+
+        pairs_stats['Best return pair'] = self.df_pairs_stat['total_profit_amt'].idxmax()
+        pairs_stats['Best return value'] = f"{round(self.df_pairs_stat['total_profit_amt'].max(), 2)} $"
+
+        pairs_stats['Worst return pair'] = self.df_pairs_stat['total_profit_amt'].idxmin()
+        pairs_stats['Worst return value'] = f"{round(self.df_pairs_stat['total_profit_amt'].min(), 2)} $"
+
+        pairs_stats['Pair with most positions'] = f"{self.df_pairs_stat['total_position'].idxmax()} ({self.df_pairs_stat['total_position'].max()})"
+        pairs_stats['Pair with less positions'] = f"{self.df_pairs_stat['total_position'].idxmin()} ({self.df_pairs_stat['total_position'].min()})"
+
         ################################  Print statistics  #############################
 
         print("#" * 65)
@@ -869,8 +894,17 @@ class BackTest:
             print("#", "-" * 61, "#")
         print("#" * 65)
 
+        print("#" * 65)
+        print("{:<5} {:<35} {:<5} {:<15} {:<1}".format('#', 'Pairs stats:', '|', 'Value', '#'))
+        print("#" * 65)
+        for k, v in pairs_stats.items():
+            print("{:<5} {:<35} {:<5} {:<15} {:<1}".format('#', k, '|', v, '#'))
+            print("#", "-" * 61, "#")
+        print("#" * 65)
+
         all_statistics = {"overview": overview,
-                          "statistics": statistics}
+                          "statistics": statistics,
+                          "pairs_stats": pairs_stats}
 
         return all_statistics
 
