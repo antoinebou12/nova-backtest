@@ -82,7 +82,6 @@ class BackTest:
         for var in ['all_positions', 'total_profit_all_pairs', 'long_profit_all_pairs', 'short_profit_all_pairs']:
             self.df_pos[var] = 0
 
-        self.df_copy = pd.DataFrame()
         self.position_cols = []
         self.df_all_pairs_positions = pd.DataFrame()
 
@@ -993,15 +992,15 @@ class BackTest:
             try:
                 print(f'BACK TESTING {pair}', "\U000023F3", end="\r")
 
-                data = self.get_all_historical_data(pair)
+                df = self.get_all_historical_data(pair)
 
-                indicator_df = self.build_indicators(data)
+                df = self.build_indicators(df)
 
-                entry_df = self.entry_strategy(indicator_df)
+                df = self.entry_strategy(df)
 
-                exit_df = self.exit_strategy(entry_df)
+                df = self.exit_strategy(df)
 
-                self.create_position_df(exit_df, pair)
+                self.create_position_df(df, pair)
 
                 print(f'BACK TESTING {pair}', "\U00002705")
 
