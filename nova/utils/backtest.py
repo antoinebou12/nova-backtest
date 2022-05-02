@@ -36,7 +36,8 @@ class BackTest:
                  end: datetime,
                  fees: float,
                  max_pos: int,
-                 max_holding: int):
+                 max_holding: int,
+                 save_all_pairs_charts: bool=False):
 
         self.start_bk = 1000
         self.actual_bk = self.start_bk
@@ -49,6 +50,7 @@ class BackTest:
         self.last_exit_date = np.nan
         self.max_pos = max_pos
         self.max_holding = max_holding
+        self.save_all_pairs_charts = save_all_pairs_charts
 
         self.exception_pair = EXCEPTION_LIST_BINANCE
 
@@ -442,8 +444,12 @@ class BackTest:
 
         condition_long_pl = (self.df_pos[f'in_position_{pair}'] == 0) & (
                 self.df_pos[f'in_position_{pair}'].shift(1) == 1)
+        condition_long_pl = condition_long_pl | ((self.df_pos[f'in_position_{pair}'] == -1) & (
+                self.df_pos[f'in_position_{pair}'].shift(1) == 1))
         condition_short_pl = (self.df_pos[f'in_position_{pair}'] == 0) & (
                 self.df_pos[f'in_position_{pair}'].shift(1) == -1)
+        condition_short_pl = condition_short_pl | ((self.df_pos[f'in_position_{pair}'] == 1) & (
+                self.df_pos[f'in_position_{pair}'].shift(1) == -1))
 
         # add the long profit and short profit for plot
         self.df_pos['Long_PL_amt_realized'] = np.where(condition_long_pl, self.df_pos['PL_amt_realized'], 0)
@@ -460,6 +466,10 @@ class BackTest:
         self.df_pos['total_profit_all_pairs'] = self.df_pos['total_profit_all_pairs'] + self.df_pos[f'total_profit_{pair}']
         self.df_pos['long_profit_all_pairs'] = self.df_pos['long_profit_all_pairs'] + self.df_pos[f'long_profit_{pair}']
         self.df_pos['short_profit_all_pairs'] = self.df_pos['short_profit_all_pairs'] + self.df_pos[f'short_profit_{pair}']
+
+        if not self.save_all_pairs_charts:
+            self.df_pos = self.df_pos.drop([f'total_profit_{pair}', f'long_profit_{pair}', f'short_profit_{pair}'],
+                                           axis=1)
 
     def get_performance_graph(self, pair: str):
         """
