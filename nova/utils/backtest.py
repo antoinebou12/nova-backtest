@@ -715,7 +715,8 @@ class BackTest:
             t = t + timedelta(hours=hours_step)
 
         ######################  Compute real positions sizes and profits ##########################
-        self.df_all_pairs_positions = self.df_all_pairs_positions.dropna(subset=['slip_5k', 'slipp_10k'])
+        if self.slippage:
+            self.df_all_pairs_positions = self.df_all_pairs_positions.dropna(subset=['slip_5k', 'slipp_10k'])
         self.df_all_pairs_positions = self.df_all_pairs_positions.apply(lambda row: self.compute_geometric_slippage_profits(row),
                                                                         axis=1)
 
