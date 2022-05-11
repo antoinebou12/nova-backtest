@@ -167,7 +167,7 @@ class BackTest:
             df['open_time'] = pd.to_datetime(df.open_time)
             df['close_time'] = pd.to_datetime(df.open_time)
 
-            if self.end > end_date_data + timedelta(days=1):
+            if self.end > end_date_data + timedelta(days=3):
 
                 print("Update data: ", pair)
                 klines = get_klines(pair,
