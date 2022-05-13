@@ -3,7 +3,7 @@ import socketio
 
 from decouple import config
 import pandas as pd
-from datetime import datetime
+from datetime import datetime, timedelta
 import re
 from nova.api.nova_client import NovaClient
 import time
@@ -20,25 +20,53 @@ class Strategy:
 
     def __init__(self,
                  bot_id: str,
+                 is_logging: bool,
+
                  candle: str,
-                 size: float,
-                 window: int,
-                 holding: float,
+                 historical_window: int,
+
                  bankroll: float,
+                 position_size: float,
+                 max_pos: int,
+
                  max_down: float,
-                 is_logging: bool = False
                  ):
 
+        '''
+
+        Args:
+            bot_id: Id given by TUXN (ex: 6258499d619bc5f0c10e69d0)
+
+            is_logging: if True will log to TUXN
+
+            candle: candle size on which the strategy will run (ex: 15m)
+
+            bankroll: the starting amount of USDT (or BUSD) the bot will trade with (ex: 1000$)
+
+            position_size: the percentage of bankroll each position will size (ex: 1/10 => 100$/position)
+
+            max_pos: number maximal of positions the bot is allow to be in at the same time (ex: 30).
+
+            historical_window: minimal number of candles to fetch to compute entry points (ex: 101)
+
+            max_down: maximum percentage loss of the bankroll that'd stop the bot
+
+        '''
+
         self.candle = candle
-        self.size = size
-        self.window_period = window
-        self.max_holding = holding
+        self.position_size = position_size
+        self.historical_window = historical_window
+        self.max_pos = max_pos
         self.position_opened = pd.DataFrame(columns=POSITION_PROD_COLUMNS)
         self.prod_data = {}
         self.nova = NovaClient(config('NovaAPISecret'))
 
         self.bankroll = bankroll
         self.max_down = max_down
+
+        'Leverage is automatically set at the maximum we can setup in function of the max_pos and the position size'
+        self.leverage = int(self.max_pos * self.position_size)
+        self.max_sl_percentage = 1 / self.leverage - 0.02
 
         self.currentPNL = 0
         self.bot_id = bot_id
@@ -57,7 +85,22 @@ class Strategy:
             self.logger_client = socketio.Client()
             self.logger_client.connect('http://167.114.3.100:5000', wait_timeout=10)
 
-    def setup_leverage(self, pair: str, lvl: int = 1):
+        print('Set all margin type to ISOLATED')
+        self.set_isolated_margin()
+
+        self.time_step = self.get_timedelta_unit()
+
+    def set_isolated_margin(self):
+
+        for pair in self.list_pair:
+            try:
+                self.client.futures_change_margin_type(symbol=pair,
+                                                       marginType='ISOLATED',
+                                                       timestamp=int(datetime.timestamp(datetime.now())))
+            except Exception as e:
+                assert str(e) == 'APIError(code=-4046): No need to change margin type.', str(e)
+
+    def setup_leverage(self, pair: str):
         """
         Note: this function execute n API calls with n representing the number of pair in the list
         Args:
@@ -66,24 +109,25 @@ class Strategy:
 
         Returns: None, This function update the leverage setting
         """
-        try:
-            self.client.futures_change_leverage(symbol=pair, leverage=lvl)
-            print(f'Setup leverage for {pair}')
-        except Exception:
-            print('Setting not working')
 
-    def get_unit_multiplier(self) -> tuple:
+        response = self.client.futures_change_leverage(symbol=pair, leverage=self.leverage)
+
+        assert response['leverage'] == self.leverage
+        assert response['symbol'] == pair
+
+    def get_timedelta_unit(self) -> timedelta:
         """
         Returns: a tuple that contains the unit and the multiplier needed to extract the data
         """
         multi = int(float(re.findall(r'\d+', self.candle)[0]))
 
         if 'm' in self.candle:
-            return 'minutes', multi
+            return timedelta(minutes=multi)
         elif 'h' in self.candle:
-            return 'hours', multi
+            return timedelta(hours=multi)
         elif 'd' in self.candle:
-            return 'days', multi
+            return timedelta(days=multi)
+
 
     def _data_fomating(self, kline: list) -> pd.DataFrame:
         """
@@ -102,7 +146,7 @@ class Strategy:
         for var in ["open", "high", "low", "close", "volume"]:
             df[var] = pd.to_numeric(df[var], downcast="float")
 
-        df['timeUTC'] = pd.to_datetime(df['open_time'], unit='ms')
+        df['open_time_datetime'] = pd.to_datetime(df['open_time'], unit='ms')
 
         return df
 
@@ -143,7 +187,7 @@ class Strategy:
 
             for pair in list_pair:
 
-                task = asyncio.ensure_future(self.get_klines_and_prod_data(session, pair, limit=self.window_period + 1))
+                task = asyncio.ensure_future(self.get_klines_and_prod_data(session, pair, limit=self.historical_window + 1))
                 tasks.append(task)
 
             await asyncio.gather(*tasks)
@@ -151,7 +195,13 @@ class Strategy:
     async def get_klines_and_update_data(self, session, pair):
 
         url = "https://fapi.binance.com/fapi/v1/klines"
-        params = dict(symbol=pair, interval=self.candle, limit=2)
+
+        number_sec_missing = int(datetime.timestamp(datetime.now())) - \
+                             self.prod_data[pair]['data']['open_time'].values[-1] // 1000
+
+        number_candle_missing = timedelta(seconds=int(number_sec_missing)) // self.time_step
+
+        params = dict(symbol=pair, interval=self.candle, limit=number_candle_missing)
 
         # Compute the server time
         s_time = self.client.get_server_time()
@@ -164,9 +214,9 @@ class Strategy:
             df = df[df['close_time'] < int(s_time['serverTime'])]
 
             df_new = pd.concat([self.prod_data[pair]['data'], df])
-            df_new = df_new.drop_duplicates(subset=['timeUTC']).sort_values(by=['timeUTC'], ascending=True)
+            df_new = df_new.drop_duplicates(subset=['open_time_datetime']).sort_values(by=['open_time_datetime'], ascending=True)
             self.prod_data[pair]['latest_update'] = s_time['serverTime']
-            self.prod_data[pair]['data'] = df_new.tail(self.window_period)
+            self.prod_data[pair]['data'] = df_new.tail(self.historical_window)
 
         return klines
 
@@ -218,15 +268,15 @@ class Strategy:
             Float that represents the final position size taken by the bot
         """
         futures_balances = self.client.futures_account_balance()
-        balances = 0
+        available = 0
         for balance in futures_balances:
-            if balance['asset'] == 'USDT':
-                balances = float(balance['balance'])
+            if balance['asset'] == 'BUSD':
+                available = float(balance['withdrawAvailable'])
 
-        if balances <= self.size:
-            return balances
-        else:
-            return self.size
+        if available < self.position_size * (self.bankroll + self.currentPNL) / self.leverage:
+            return 0
+
+        return self.position_size * (self.bankroll + self.currentPNL)
 
     def get_actual_position(self) -> dict:
         """
@@ -253,8 +303,8 @@ class Strategy:
             action: this is an integer that can get the value 1 (for long) or -1 (for short)
             pair: is a string the represent the pair we are entering in position.
             bot_name: is the name of the bot that is trading this pair
-            tp: take profit %
-            sl: stop loss %
+            tp: take profit price
+            sl: stop loss price
         Returns:
             Send transaction to the exchange and update the backend and the class
         """
@@ -262,6 +312,12 @@ class Strategy:
         # 1 - get price on exchange, size of position and precision required by exchange
         prc = self.get_price_binance(pair)
         size = self.get_position_size()
+
+        if size == 0:
+
+            self.print_log_send_msg(f'Balance too low')
+            return 0
+
         q_precision, p_precision = self.get_quantity_precision(pair)
 
         # 2 - derive the quantity from the previous variables
@@ -271,14 +327,14 @@ class Strategy:
         # 3 - build the order information {side, tp, sl, type and closing side}
         if action == 1:
             side = 'BUY'
-            prc_tp = float(round(prc * (1 + tp), p_precision))
-            prc_sl = float(round(prc * (1 - sl), p_precision))
+            prc_tp = float(round(tp, p_precision))
+            prc_sl = float(round(sl, p_precision))
             type_pos = 'LONG'
             closing_side = 'SELL'
-        elif action == -1:
+        else:
             side = 'SELL'
-            prc_tp = float(round(prc * (1 - tp), p_precision))
-            prc_sl = float(round(prc * (1 + sl), p_precision))
+            prc_tp = float(round(tp, p_precision))
+            prc_sl = float(round(sl, p_precision))
             type_pos = 'SHORT'
             closing_side = 'BUY'
 
@@ -309,20 +365,20 @@ class Strategy:
         )
 
         # 7 - create the position data in nova labs backend
-        nova_data = self.nova.create_position(
-            bot_name=bot_name,
-            post_type=type_pos,
-            value=size,
-            state='OPENED',
-            entry_price=prc,
-            take_profit=float(tp_open['stopPrice']),
-            stop_loss=float(sl_open['stopPrice']),
-            pair=order['symbol'])
+        # nova_data = self.nova.create_position(
+        #     bot_name=bot_name,
+        #     post_type=type_pos,
+        #     value=quantity,
+        #     state='OPENED',
+        #     entry_price=prc,
+        #     take_profit=float(tp_open['stopPrice']),
+        #     stop_loss=float(sl_open['stopPrice']),
+        #     pair=order['symbol'])
 
         # 8 - update the dataframe position_opened that keeps track of orders
         new_position = pd.DataFrame([{
             'time_entry': str(order['updateTime']),
-            'nova_id': nova_data['newBotPosition']['_id'],
+            # 'nova_id': nova_data['newBotPosition']['_id'],
             'id': order['orderId'],
             'pair': order['symbol'],
             'status': order['status'],
@@ -358,17 +414,17 @@ class Strategy:
                 orderId=row_pos.tp_id
             )
 
-        self.nova.update_position(
-            pos_id=row_pos.nova_id,
-            pos_type=row_pos.side,
-            state='CLOSED',
-            entry_price=0,
-            exit_price=0,
-            exit_type='USER_CHANGES',
-            profit=0,
-            fees=0,
-            pair=row_pos.pair
-        )
+        # self.nova.update_position(
+        #     pos_id=row_pos.nova_id,
+        #     pos_type=row_pos.side,
+        #     state='CLOSED',
+        #     entry_price=0,
+        #     exit_price=0,
+        #     exit_type='USER_CHANGES',
+        #     profit=0,
+        #     fees=0,
+        #     pair=row_pos.pair
+        # )
 
     def verify_positions(self, current_position: list):
         """
@@ -514,9 +570,16 @@ class Strategy:
         type_pos = ''
         pair = entry_tx[0]['symbol']
 
+        prc_bnb = self.get_price_binance('BNBBUSD')
+
         # go through all the tx needed to get in and out of the position
         for tx_one in entry_tx:
-            commission_entry += float(tx_one['commission'])
+
+            if tx_two['commissionAsset'] == 'BUSD':
+                commission_entry += float(tx_one['commission'])
+            else:
+                commission_entry += float(tx_one['commission']) * prc_bnb
+
             entry_quantity += float(tx_one['qty'])
             entry_total += float(tx_one['qty']) * float(tx_one['price'])
             if tx_one['side'] == 'BUY':
@@ -526,30 +589,35 @@ class Strategy:
 
         for tx_two in exit_tx:
             realized_pnl += float(tx_two['realizedPnl'])
-            commission_exit += float(tx_two['commission'])
+
+            if tx_two['commissionAsset'] == 'BUSD':
+                commission_exit += float(tx_two['commission'])
+            else:
+                commission_exit += float(tx_two['commission']) * prc_bnb
+
             exit_quantity += float(tx_two['qty'])
             exit_total += float(tx_two['qty']) * float(tx_two['price'])
 
         # compute the last information needed
         exit_price = exit_total / exit_quantity
         entry_price = entry_total / entry_quantity
-        prc_bnb = self.get_price_binance('BNBUSDT')
-        total_fee_usd = (commission_exit + commission_entry) * prc_bnb
+
+        total_fee_usd = (commission_exit + commission_entry)
 
         # send updates to the backend
-        self.nova.update_position(
-            pos_id=nova_id,
-            pos_type=type_pos,
-            state='CLOSED',
-            entry_price=entry_price,
-            exit_price=exit_price,
-            exit_type=exit_type,
-            profit=realized_pnl,
-            fees=total_fee_usd,
-            pair=pair
-        )
+        # self.nova.update_position(
+        #     pos_id=nova_id,
+        #     pos_type=type_pos,
+        #     state='CLOSED',
+        #     entry_price=entry_price,
+        #     exit_price=exit_price,
+        #     exit_type=exit_type,
+        #     profit=realized_pnl,
+        #     fees=total_fee_usd,
+        #     pair=pair
+        # )
 
-        self.currentPNL += realized_pnl
+        self.currentPNL += realized_pnl - total_fee_usd
 
     def exit_position(self,
                       pair: str,
@@ -591,7 +659,7 @@ class Strategy:
             This method is used to check if the maximum holding time is reached for each open positions.
         """
 
-        self.print_log_send_msg(f'Checking Max Holding')
+        # self.print_log_send_msg(f'Checking Max Holding')
 
         # Compute the server time
         s_time = self.client.get_server_time()
