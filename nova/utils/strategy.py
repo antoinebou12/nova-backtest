@@ -92,13 +92,13 @@ class Strategy:
 
     def set_isolated_margin(self):
 
-        for pair in self.list_pair:
-            try:
-                self.client.futures_change_margin_type(symbol=pair,
+        info_pairs = self.client.futures_position_information()
+
+        for info in info_pairs:
+            if info['marginType'] != 'isolated':
+                self.client.futures_change_margin_type(symbol=info['symbol'],
                                                        marginType='ISOLATED',
                                                        timestamp=int(datetime.timestamp(datetime.now())))
-            except Exception as e:
-                assert str(e) == 'APIError(code=-4046): No need to change margin type.', str(e)
 
     def setup_leverage(self, pair: str):
         """
@@ -128,7 +128,6 @@ class Strategy:
         elif 'd' in self.candle:
             return timedelta(days=multi)
 
-
     def _data_fomating(self, kline: list) -> pd.DataFrame:
         """
         Args:
@@ -137,11 +136,6 @@ class Strategy:
         Returns: dataframe with usable format.
         """
         df = pd.DataFrame(kline, columns=BINANCE_KLINES_COLUMNS)
-        to_keep = [
-            'open_time', 'open', 'high', 'low',
-            'close', 'volume', 'close_time'
-        ]
-        df = df[to_keep]
 
         for var in ["open", "high", "low", "close", "volume"]:
             df[var] = pd.to_numeric(df[var], downcast="float")
@@ -421,7 +415,7 @@ class Strategy:
         #     pair=row_pos.pair
         # )
 
-    def verify_positions(self, current_position: list):
+    def verify_positions(self, current_position: dict):
         """
         Returns:
             This function updates the open position of the bot, checking if there is any TP or SL
