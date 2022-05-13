@@ -196,12 +196,7 @@ class Strategy:
 
         url = "https://fapi.binance.com/fapi/v1/klines"
 
-        number_sec_missing = int(datetime.timestamp(datetime.now())) - \
-                             self.prod_data[pair]['data']['open_time'].values[-1] // 1000
-
-        number_candle_missing = timedelta(seconds=int(number_sec_missing)) // self.time_step
-
-        params = dict(symbol=pair, interval=self.candle, limit=number_candle_missing)
+        params = dict(symbol=pair, interval=self.candle, limit=3)
 
         # Compute the server time
         s_time = self.client.get_server_time()
