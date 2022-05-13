@@ -138,6 +138,36 @@ class BackTest:
 
         return list_pair
 
+    def update_all_pair_hist_data(self,
+                                  market: str = 'futures'
+                                  ):
+        if market == 'futures':
+            get_klines = self.client.futures_historical_klines
+        elif market == 'spot':
+            get_klines = self.client.get_historical_klines
+        else:
+            raise Exception('Please enter a valid market (futures or market)')
+
+        for pair in self.list_pair:
+            print("Update data: ", pair)
+
+            df = pd.read_csv(f'database/{market}/hist_{pair}_{self.candle}.csv')
+
+            end_date_data = df['timestamp'].max()
+            now = int(datetime.utcnow().timestamp())
+
+            klines = get_klines(pair,
+                                self.candle,
+                                str(end_date_data),
+                                str(now))
+
+            new_df = self._data_fomating(klines)
+
+            df = pd.concat([df, new_df])
+            df = df.drop_duplicates(subset=['open_time'])
+
+            df.to_csv(f'database/{market}/hist_{pair}_{self.candle}.csv', index=False)
+
     def get_all_historical_data(self,
                                 pair: str,
                                 market: str = 'futures') -> pd.DataFrame:
