@@ -14,7 +14,6 @@ from nova.utils.constant import EXCEPTION_LIST_BINANCE, VAR_NEEDED_FOR_POSITION,
 from warnings import simplefilter
 simplefilter(action="ignore", category=pd.errors.PerformanceWarning)
 
-from tensorflow.keras import models
 
 class BackTest:
     """
@@ -44,6 +43,13 @@ class BackTest:
                  start_bk: float=10000,
                  slippage: bool=True):
 
+        self.slippage = slippage
+        if self.slippage:
+            from tensorflow.keras import models
+            self.scaler_x = joblib.load('./database/ML_files/scaler_x.gz')
+            self.scaler_y = joblib.load('./database/ML_files/scaler_y.gz')
+            self.model = models.load_model('./database/ML_files/model_slippage_3.h5')
+
         self.start_bk = start_bk
         self.actual_bk = self.start_bk
         self.start = start
@@ -56,11 +62,6 @@ class BackTest:
         self.max_pos = max_pos
         self.max_holding = max_holding
         self.save_all_pairs_charts = save_all_pairs_charts
-
-        self.slippage = slippage
-        self.scaler_x = joblib.load('./database/ML_files/scaler_x.gz')
-        self.scaler_y = joblib.load('./database/ML_files/scaler_y.gz')
-        self.model = models.load_model('./database/ML_files/model_slippage_3.h5')
 
         self.exception_pair = EXCEPTION_LIST_BINANCE
 
