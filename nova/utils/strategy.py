@@ -259,7 +259,7 @@ class Strategy:
         futures_balances = self.client.futures_account_balance()
         available = 0
         for balance in futures_balances:
-            if balance['asset'] == 'BUSD':
+            if balance['asset'] == 'USDT':
                 available = float(balance['withdrawAvailable'])
 
         if available < self.position_size * (self.bankroll + self.currentPNL) / self.leverage:
@@ -559,12 +559,12 @@ class Strategy:
         type_pos = ''
         pair = entry_tx[0]['symbol']
 
-        prc_bnb = self.get_price_binance('BNBBUSD')
+        prc_bnb = self.get_price_binance('BNBUSDT')
 
         # go through all the tx needed to get in and out of the position
         for tx_one in entry_tx:
 
-            if tx_two['commissionAsset'] == 'BUSD':
+            if tx_two['commissionAsset'] == 'USDT':
                 commission_entry += float(tx_one['commission'])
             else:
                 commission_entry += float(tx_one['commission']) * prc_bnb
@@ -579,7 +579,7 @@ class Strategy:
         for tx_two in exit_tx:
             realized_pnl += float(tx_two['realizedPnl'])
 
-            if tx_two['commissionAsset'] == 'BUSD':
+            if tx_two['commissionAsset'] == 'USDT':
                 commission_exit += float(tx_two['commission'])
             else:
                 commission_exit += float(tx_two['commission']) * prc_bnb
