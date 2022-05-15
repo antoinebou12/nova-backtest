@@ -64,5 +64,5 @@ class TelegramBOT:
         self.telegram_bot_sendtext(bot_message=bot_message)
 
 
-self = TelegramBOT(bot_token="5399743657:AAE9nV4cXbzHAGCJZbcKQo_sdxO6AeI4UB0",
-                   bot_chatID="1347365625")
+# self = TelegramBOT(bot_token="5399743657:AAE9nV4cXbzHAGCJZbcKQo_sdxO6AeI4UB0",
+#                    bot_chatID="1347365625")
