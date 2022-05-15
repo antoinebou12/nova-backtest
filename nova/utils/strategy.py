@@ -2,6 +2,7 @@ import socket
 import socketio
 
 from decouple import config
+from telegram_client import TelegramBOT
 import pandas as pd
 from datetime import datetime, timedelta
 import re
@@ -16,7 +17,7 @@ import logging
 import logging.handlers
 
 
-class Strategy:
+class Strategy(TelegramBOT):
 
     def __init__(self,
                  bot_id: str,
@@ -30,6 +31,10 @@ class Strategy:
                  max_pos: int,
 
                  max_down: float,
+
+                 telegram_notification: bool,
+                 bot_token: str='',
+                 bot_chatID: str=''
                  ):
 
         '''
@@ -63,6 +68,12 @@ class Strategy:
 
         self.bankroll = bankroll
         self.max_down = max_down
+        self.telegram_notification = telegram_notification
+
+        if self.telegram_notification:
+            TelegramBOT.__init__(self,
+                                 bot_token=bot_token,
+                                 bot_chatID=bot_chatID)
 
         'Leverage is automatically set at the maximum we can setup in function of the max_pos and the position size'
         self.leverage = int(self.max_pos * self.position_size)
@@ -393,6 +404,15 @@ class Strategy:
         self.position_opened = pd.concat([self.position_opened, new_position])
         self.position_opened.reset_index(inplace=True, drop=True)
 
+        if self.telegram_notification:
+            self.enter_position_message(type=order['type'],
+                                        pair=order['symbol'],
+                                        qty=order['origQty'],
+                                        entry_price=prc,
+                                        tp=tp_open['stopPrice'],
+                                        sl=sl_open['stopPrice'])
+
+
     def _update_user_touched(self, row_pos: dict, df_orders: pd.DataFrame):
 
         if row_pos.sl_id in list(df_orders.orderId):
@@ -496,12 +516,15 @@ class Strategy:
                     exits = df_tx[df_tx['orderId'] == row.tp_id]
                     exits_tx = exits.to_dict('records')
 
-                    self._push_backend(
+                    pnl = self._push_backend(
                         entry_tx=entry_tx,
                         exit_tx=exits_tx,
                         nova_id=row.nova_id,
                         exit_type='TP'
                     )
+
+                    self.takeprofit_message(pair=row.pair,
+                                            pnl=pnl)
 
                 # 3.2 - check if sl has been executed
                 elif row.sl_id in list(df_tx.orderId):
@@ -517,12 +540,15 @@ class Strategy:
                     exits = df_tx[df_tx['orderId'] == row.sl_id]
                     exits_tx = exits.to_dict('records')
 
-                    self._push_backend(
+                    pnl = self._push_backend(
                         entry_tx=entry_tx,
                         exit_tx=exits_tx,
                         nova_id=row.nova_id,
                         exit_type='SL'
                     )
+
+                    self.stoploss_message(pair=row.pair,
+                                          pnl=pnl)
 
                 # 3.3 - update positions
                 else:
@@ -612,6 +638,8 @@ class Strategy:
 
         self.currentPNL += realized_pnl - total_fee_usd
 
+        return realized_pnl - total_fee_usd
+
     def exit_position(self,
                       pair: str,
                       side: str,
@@ -644,7 +672,10 @@ class Strategy:
         exit_tx = self.client.futures_account_trades(orderId=order['orderId'])
 
         # Update the position tx in backend and int the class
-        self._push_backend(entry_tx, exit_tx, nova_id, exit_type)
+        pnl = self._push_backend(entry_tx, exit_tx, nova_id, exit_type)
+
+        self.exitsignal_message(pair=pair,
+                                pnl=pnl)
 
     def is_max_holding(self):
         """
