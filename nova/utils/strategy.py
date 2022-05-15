@@ -33,8 +33,8 @@ class Strategy(TelegramBOT):
                  max_down: float,
 
                  telegram_notification: bool,
-                 bot_token: str='',
-                 bot_chatID: str=''
+                 bot_token: str = '',
+                 bot_chatID: str = ''
                  ):
 
         '''
@@ -191,8 +191,8 @@ class Strategy(TelegramBOT):
             tasks = []
 
             for pair in list_pair:
-
-                task = asyncio.ensure_future(self.get_klines_and_prod_data(session, pair, limit=self.historical_window + 1))
+                task = asyncio.ensure_future(
+                    self.get_klines_and_prod_data(session, pair, limit=self.historical_window + 1))
                 tasks.append(task)
 
             await asyncio.gather(*tasks)
@@ -214,13 +214,14 @@ class Strategy(TelegramBOT):
             df = df[df['close_time'] < int(s_time['serverTime'])]
 
             df_new = pd.concat([self.prod_data[pair]['data'], df])
-            df_new = df_new.drop_duplicates(subset=['open_time_datetime']).sort_values(by=['open_time_datetime'], ascending=True)
+            df_new = df_new.drop_duplicates(subset=['open_time_datetime']).sort_values(by=['open_time_datetime'],
+                                                                                       ascending=True)
             self.prod_data[pair]['latest_update'] = s_time['serverTime']
             self.prod_data[pair]['data'] = df_new.tail(self.historical_window)
 
         return klines
 
-    async def update_prod_data(self,  list_pair: list):
+    async def update_prod_data(self, list_pair: list):
         """
         Notes: This function execute 1 API call
         Args:
@@ -234,7 +235,6 @@ class Strategy(TelegramBOT):
             tasks = []
 
             for pair in list_pair:
-
                 task = asyncio.ensure_future(self.get_klines_and_update_data(session, pair))
                 tasks.append(task)
 
@@ -318,7 +318,6 @@ class Strategy(TelegramBOT):
         self.setup_leverage(pair)
 
         if size == 0:
-
             self.print_log_send_msg(f'Balance too low')
             return 0
 
@@ -412,7 +411,6 @@ class Strategy(TelegramBOT):
                                         tp=tp_open['stopPrice'],
                                         sl=sl_open['stopPrice'])
 
-
     def _update_user_touched(self, row_pos: dict, df_orders: pd.DataFrame):
 
         if row_pos.sl_id in list(df_orders.orderId):
@@ -484,7 +482,6 @@ class Strategy(TelegramBOT):
 
                 # 2.2 - if it has been touched - cancel bot position
                 if len(list_changes) > 0:
-
                     self.print_log_send_msg(f'Cancel Trade Cause an Order has been removed {row.pair}')
 
                     self._update_user_touched(
@@ -737,10 +734,10 @@ class Strategy(TelegramBOT):
                 )
 
     def update_tp(self,
-                      pair: str,
-                      tp_id: str,
-                      new_tp_price: float,
-                      side: str):
+                  pair: str,
+                  tp_id: str,
+                  new_tp_price: float,
+                  side: str):
 
         print(f"Update Take profit order: {pair}")
 

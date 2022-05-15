@@ -28,6 +28,8 @@ class TelegramBOT:
                                tp,
                                sl):
         token = pair[:-4]
+        qty = float(qty)
+        entry_price = float(entry_price)
         bot_message = f"Enter in {type} position on {pair}. " \
                       f"\nQuantity {token} = {qty} " \
                       f"\nQuantity USDT ≈ {round(qty*entry_price,2)} $" \
