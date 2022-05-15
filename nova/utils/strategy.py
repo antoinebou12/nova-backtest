@@ -520,8 +520,10 @@ class Strategy(TelegramBOT):
                         exit_type='TP'
                     )
 
-                    self.takeprofit_message(pair=row.pair,
-                                            pnl=pnl)
+                    if self.telegram_notification:
+                        self.takeprofit_message(pair=row.pair,
+                                                pnl=pnl)
+                        self.telegram_bot_sendtext(f"Current PNL = {self.currentPNL} $")
 
                 # 3.2 - check if sl has been executed
                 elif row.sl_id in list(df_tx.orderId):
@@ -544,8 +546,10 @@ class Strategy(TelegramBOT):
                         exit_type='SL'
                     )
 
-                    self.stoploss_message(pair=row.pair,
-                                          pnl=pnl)
+                    if self.telegram_notification:
+                        self.stoploss_message(pair=row.pair,
+                                              pnl=pnl)
+                        self.telegram_bot_sendtext(f"Current PNL = {self.currentPNL} $")
 
                 # 3.3 - update positions
                 else:
@@ -671,8 +675,10 @@ class Strategy(TelegramBOT):
         # Update the position tx in backend and int the class
         pnl = self._push_backend(entry_tx, exit_tx, nova_id, exit_type)
 
-        self.exitsignal_message(pair=pair,
-                                pnl=pnl)
+        if self.telegram_notification:
+            self.exitsignal_message(pair=pair,
+                                    pnl=pnl)
+            self.telegram_bot_sendtext(f"Current PNL = {self.currentPNL} $")
 
     def is_max_holding(self):
         """
