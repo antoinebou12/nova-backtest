@@ -302,6 +302,10 @@ class Strategy:
         prc = self.get_price_binance(pair)
         size = self.get_position_size()
 
+        # Setup leverage
+
+        self.setup_leverage(pair)
+
         if size == 0:
 
             self.print_log_send_msg(f'Balance too low')
@@ -564,7 +568,7 @@ class Strategy:
         # go through all the tx needed to get in and out of the position
         for tx_one in entry_tx:
 
-            if tx_two['commissionAsset'] == 'USDT':
+            if tx_one['commissionAsset'] == 'USDT':
                 commission_entry += float(tx_one['commission'])
             else:
                 commission_entry += float(tx_one['commission']) * prc_bnb
