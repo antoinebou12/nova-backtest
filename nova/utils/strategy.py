@@ -404,7 +404,7 @@ class Strategy(TelegramBOT):
         self.position_opened.reset_index(inplace=True, drop=True)
 
         if self.telegram_notification:
-            self.enter_position_message(type=order['type'],
+            self.enter_position_message(type=type_pos,
                                         pair=order['symbol'],
                                         qty=order['origQty'],
                                         entry_price=prc,
