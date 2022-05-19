@@ -33,7 +33,7 @@ class TelegramBOT:
         bot_message = f"Enter in {type} position on {pair}. " \
                       f"\nQuantity {token} = {qty} " \
                       f"\nQuantity USDT ≈ {round(qty*entry_price,2)} $" \
-                      f"\nActual price = {round(entry_price, 2)}" \
+                      f"\nActual price = {entry_price}" \
                       f"\nTake profit = {tp} \nStop loss = {sl}"
 
         self.telegram_bot_sendtext(bot_message=bot_message)

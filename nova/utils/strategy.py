@@ -549,7 +549,7 @@ class Strategy(TelegramBOT):
                     if self.telegram_notification:
                         self.stoploss_message(pair=row.pair,
                                               pnl=pnl)
-                        self.telegram_bot_sendtext(f"Current PNL = {self.currentPNL} $")
+                        self.telegram_bot_sendtext(f"Current PNL = {round(self.currentPNL,2)} $")
 
                 # 3.3 - update positions
                 else:
