@@ -121,8 +121,6 @@ class BackTest:
         df['open_time'] = pd.to_datetime(df['open_time'], unit='ms')
         df['close_time'] = pd.to_datetime(df['close_time'], unit='ms')
 
-        df['next_open'] = df['open'].shift(-1)
-
         return df
 
     def get_list_pair(self) -> list:
@@ -155,7 +153,7 @@ class BackTest:
             df = pd.read_csv(f'database/{market}/hist_{pair}_{self.candle}.csv')
 
             end_date_data = df['timestamp'].max()
-            now = int(datetime.utcnow().timestamp())
+            now = int(datetime.utcnow().timestamp()) + 24*60*60
 
             klines = get_klines(pair,
                                 self.candle,
@@ -214,6 +212,7 @@ class BackTest:
                 df.to_csv(f'database/{market}/hist_{pair}_{self.candle}.csv', index=False)
 
             df = df.set_index('timestamp')
+            df['next_open'] = df['open'].shift(-1)
             return df[(df.open_time >= self.start) & (df.open_time <= self.end)]
 
         except:
@@ -229,6 +228,7 @@ class BackTest:
             df.to_csv(f'database/{market}/hist_{pair}_{self.candle}.csv', index=False)
 
             df = df.set_index('timestamp')
+            df['next_open'] = df['open'].shift(-1)
 
             return df[(df.open_time >= self.start) & (df.open_time <= self.end)]
 
