@@ -1,6 +1,7 @@
 import numpy as np
 import pandas as pd
 from datetime import datetime, timedelta
+from tensorflow.keras import models
 import matplotlib.pyplot as plt
 
 import re
@@ -9,7 +10,7 @@ import math
 import json
 import joblib
 
-from nova.utils.constant import EXCEPTION_LIST_BINANCE, VAR_NEEDED_FOR_POSITION, BINANCE_KLINES_COLUMNS
+from nova.utils.constant import EXCEPTION_LIST_BINANCE, VAR_NEEDED_FOR_POSITION, DATA_FORMATING
 
 from warnings import simplefilter
 simplefilter(action="ignore", category=pd.errors.PerformanceWarning)
@@ -45,7 +46,6 @@ class BackTest:
 
         self.slippage = slippage
         if self.slippage:
-            from tensorflow.keras import models
             self.scaler_x = joblib.load('./database/ML_files/scaler_x.gz')
             self.scaler_y = joblib.load('./database/ML_files/scaler_y.gz')
             self.model = models.load_model('./database/ML_files/model_slippage_3.h5')
@@ -62,8 +62,6 @@ class BackTest:
         self.max_pos = max_pos
         self.max_holding = max_holding
         self.save_all_pairs_charts = save_all_pairs_charts
-
-        self.exception_pair = EXCEPTION_LIST_BINANCE
 
         # Get the list of pairs on which we perform the back test
         if type(self.list_pair).__name__ == 'str':
@@ -97,6 +95,10 @@ class BackTest:
         self.df_all_pairs_positions = pd.DataFrame()
 
     def get_freq(self) -> str:
+        """
+        Returns:
+            a string of the frequence needed to build a pandas dataframe
+        """
         if 'm' in self.candle:
             return self.candle.replace('m', 'min')
         else:
@@ -109,17 +111,14 @@ class BackTest:
 
         Returns: dataframe with usable format.
         """
-        df = pd.DataFrame(kline, columns=BINANCE_KLINES_COLUMNS)
-        num_var = [
-            "open", "high", "low", "close", "volume", "quote_asset_volume",
-            "nb_of_trades", "taker_base_volume", "taker_quote_volume"
-        ]
-        for var in num_var:
+        df = pd.DataFrame(kline, columns=DATA_FORMATING['binance']['columns'])
+        for var in DATA_FORMATING['binance']['num_var']:
             df[var] = pd.to_numeric(df[var], downcast="float")
 
         df['timestamp'] = df['open_time']
-        df['open_time'] = pd.to_datetime(df['open_time'], unit='ms')
-        df['close_time'] = pd.to_datetime(df['close_time'], unit='ms')
+
+        for var in DATA_FORMATING['binance']['date_var']:
+            df[var] = pd.to_datetime(df[var], unit='ms')
 
         return df
 
@@ -132,14 +131,14 @@ class BackTest:
         all_pair = self.client.futures_symbol_ticker()
 
         for pair in all_pair:
-            if 'USDT' in pair['symbol'] and pair['symbol'] not in self.exception_pair:
+            if 'USDT' in pair['symbol'] and pair['symbol'] not in EXCEPTION_LIST_BINANCE:
                 list_pair.append(pair['symbol'])
 
         return list_pair
 
     def update_all_pair_hist_data(self,
                                   market: str = 'futures'
-                                  ):
+                                  ) -> None:
         if market == 'futures':
             get_klines = self.client.futures_historical_klines
         elif market == 'spot':
@@ -194,7 +193,7 @@ class BackTest:
             end_date_data = pd.to_datetime(df['timestamp'].max(), unit='ms')
 
             df['open_time'] = pd.to_datetime(df.open_time)
-            df['close_time'] = pd.to_datetime(df.open_time)
+            df['close_time'] = pd.to_datetime(df.close_time)
 
             if self.end > end_date_data + timedelta(days=3):
 
@@ -217,9 +216,9 @@ class BackTest:
 
         except:
             klines = get_klines(pair,
-                               self.candle,
-                               datetime(2018, 1, 1).strftime('%d %b, %Y'),
-                               self.end.strftime('%d %b, %Y'))
+                                self.candle,
+                                datetime(2018, 1, 1).strftime('%d %b, %Y'),
+                                self.end.strftime('%d %b, %Y'))
 
             df = self._data_fomating(klines)
 
@@ -232,10 +231,49 @@ class BackTest:
 
             return df[(df.open_time >= self.start) & (df.open_time <= self.end)]
 
-    def create_all_exit_point(self, df: pd.DataFrame) -> pd.DataFrame:
+    def convert_max_holding_to_candle_nb(self) -> int:
+        """
+
+        Return the number maximum of candle we can hold a position
+
+        """
+        multi = int(float(re.findall(r'\d+', self.candle)[0]))
+
+        if 'm' in self.candle:
+            return int(60 / multi * self.max_holding)
+        if 'h' in self.candle:
+            return int(1 / multi * self.max_holding)
+        if 'd' in self.candle:
+            return int(1 / (multi * 24) * self.max_holding)
+
+
+    @staticmethod
+    def create_entry_prices_times(df: pd.DataFrame) -> pd.DataFrame:
+        """
+        Args:
+            df: dataframe that contains the 'all_entry_point' with the following properties:
+                1 -> enter long position
+                -1 -> enter short position
+                nan -> no actions
+
+        Returns:
+            The function created 4 variables :
+                all_entry_price, all_entry_time
+        """
+
+        df['all_entry_price'] = np.where(df.all_entry_point.notnull(), df.next_open, np.nan)
+        df['all_entry_time'] = np.where(df.all_entry_point.notnull(), df.open_time, np.datetime64('NaT'))
+
+        return df
+
+
+    @staticmethod
+    def create_all_exit_point(df: pd.DataFrame) -> pd.DataFrame:
         """
         Args:
             df:
+        Returns:
+
         Create all exit points (TP, SL, max hold or exit signal)
         """
         all_exit_var = ['closest_sl', 'closest_tp', 'max_hold_date']
@@ -260,39 +298,6 @@ class BackTest:
                                                      np.where(max_hold_date_sl, 'MaxHolding', np.nan)))
 
         return df
-
-    def create_entry_prices_times(self, df: pd.DataFrame) -> pd.DataFrame:
-        """
-        Args:
-            df: dataframe that contains the 'all_entry_point' with the following properties:
-                1 -> enter long position
-                -1 -> enter short position
-                nan -> no actions
-
-        Returns:
-            The function created 4 variables :
-                all_entry_price, all_entry_time
-        """
-
-        df['all_entry_price'] = np.where(df.all_entry_point.notnull(), df.next_open, np.nan)
-        df['all_entry_time'] = np.where(df.all_entry_point.notnull(), df.open_time, np.datetime64('NaT'))
-
-        return df
-
-    def convert_max_holding_to_candle_nb(self) -> int:
-        """
-
-        Return the number maximum of candle we can hold a position
-
-        """
-        multi = int(float(re.findall(r'\d+', self.candle)[0]))
-
-        if 'm' in self.candle:
-            return int(60 / multi * self.max_holding)
-        if 'h' in self.candle:
-            return int(1 / multi * self.max_holding)
-        if 'd' in self.candle:
-            return int(1 / (multi * 24) * self.max_holding)
 
     def create_closest_tp_sl(self, df: pd.DataFrame) -> pd.DataFrame:
         """
