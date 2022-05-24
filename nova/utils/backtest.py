@@ -246,7 +246,6 @@ class BackTest:
         if 'd' in self.candle:
             return int(1 / (multi * 24) * self.max_holding)
 
-
     @staticmethod
     def create_entry_prices_times(df: pd.DataFrame) -> pd.DataFrame:
         """
@@ -257,7 +256,7 @@ class BackTest:
                 nan -> no actions
 
         Returns:
-            The function created 4 variables :
+            The function created 4 variables
                 all_entry_price, all_entry_time
         """
 
@@ -265,7 +264,6 @@ class BackTest:
         df['all_entry_time'] = np.where(df.all_entry_point.notnull(), df.open_time, np.datetime64('NaT'))
 
         return df
-
 
     @staticmethod
     def create_all_exit_point(df: pd.DataFrame) -> pd.DataFrame:
@@ -301,13 +299,11 @@ class BackTest:
 
     def create_closest_tp_sl(self, df: pd.DataFrame) -> pd.DataFrame:
         """
-
         Args:
             df: dataframe that contains the variables all_entry_point, all_sl and all_tp
 
         Returns:
             the dataframe with 3 new variables closest_sl, closest_tp, max_hold_date
-
         """
 
         # create list of variables that we will have to drop
@@ -778,8 +774,8 @@ class BackTest:
 
         self.df_pairs_stat = self.df_pairs_stat.set_index('pair', drop=False)
 
-    def compute_daily_return(self,
-                             row,
+    @staticmethod
+    def compute_daily_return(row,
                              df_all_pairs_positions):
         """
         Need to compute daily returns to compute statistics (Sharpe ratio, Sortino ratio, volatility...)
@@ -803,7 +799,8 @@ class BackTest:
 
         return row
 
-    def compute_drawdown(self,
+    @staticmethod
+    def compute_drawdown(
                         row,
                         df_daily):
 

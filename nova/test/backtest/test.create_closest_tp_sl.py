@@ -2,10 +2,13 @@ from nova.utils.backtest import BackTest
 from datetime import datetime
 from binance.client import Client
 from decouple import config
+import pandas as pd
 import numpy as np
+import os
 
 
-def test_create_all_exit_point() -> None:
+def test_create_closest_tp_sl() -> None:
+
     start_date = datetime(2022, 1, 1)
     end_date = datetime(2022, 4, 10)
 
@@ -59,15 +62,11 @@ def test_create_all_exit_point() -> None:
     data['all_tp'] = np.where(data['all_entry_point'].notna(), data['close'] + 2.61 * (data['close'] - data['all_sl']),
                               np.nan)
 
-    data = test_class.create_closest_tp_sl(df=data)
+    new_data = test_class.create_closest_tp_sl(df=data)
 
-    new_data = test_class.create_all_exit_point(df=data)
-
-    assert 'all_exit_point' in new_data.columns
-
-
-test_create_all_exit_point()
+    assert 'closest_sl' in new_data.columns
+    assert 'closest_tp' in new_data.columns
+    assert 'max_hold_date' in new_data.columns
 
 
-
-
+test_create_closest_tp_sl()

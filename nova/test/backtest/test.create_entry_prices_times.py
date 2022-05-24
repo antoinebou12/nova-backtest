@@ -2,10 +2,13 @@ from nova.utils.backtest import BackTest
 from datetime import datetime
 from binance.client import Client
 from decouple import config
+import pandas as pd
 import numpy as np
+import os
 
 
-def test_create_all_exit_point() -> None:
+def test_create_entry_price_times() -> None:
+
     start_date = datetime(2022, 1, 1)
     end_date = datetime(2022, 4, 10)
 
@@ -51,23 +54,15 @@ def test_create_all_exit_point() -> None:
     data['all_entry_point'] = np.where(data['entry_long'] < entry_long_prob, 1,
                                        np.where(data['entry_short'] < entry_short_prob, -1, np.nan))
 
-    data = test_class.create_entry_prices_times(df=data)
+    new_data = test_class.create_entry_prices_times(df=data)
 
-    data['all_sl'] = np.where(data['all_entry_point'] == -1, 1.005 * data['all_entry_price'], np.nan)
-    data['all_sl'] = np.where(data['all_entry_point'] == 1, 0.995 * data['all_entry_price'], data['all_sl'])
+    print(new_data.all_entry_price.dtypes)
+    assert 'all_entry_price' in new_data.columns
+    assert 'all_entry_time' in new_data.columns
 
-    data['all_tp'] = np.where(data['all_entry_point'].notna(), data['close'] + 2.61 * (data['close'] - data['all_sl']),
-                              np.nan)
-
-    data = test_class.create_closest_tp_sl(df=data)
-
-    new_data = test_class.create_all_exit_point(df=data)
-
-    assert 'all_exit_point' in new_data.columns
-
-
-test_create_all_exit_point()
+    assert new_data.all_entry_time.dtypes == 'datetime64[ns]'
+    assert new_data.all_entry_price.dtypes == 'float64'
 
 
 
-
+test_create_entry_price_times()
