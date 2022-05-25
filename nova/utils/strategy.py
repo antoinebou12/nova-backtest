@@ -2,7 +2,7 @@ import socket
 import socketio
 
 from decouple import config
-from nova.utils.telegram_client import TelegramBOT
+from nova.utils.telegram import TelegramBOT
 import pandas as pd
 from datetime import datetime, timedelta
 import re

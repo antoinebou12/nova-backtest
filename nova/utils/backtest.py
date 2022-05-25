@@ -474,7 +474,7 @@ class BackTest:
 
         self.df_all_positions[pair] = all_pos_pair
 
-    def create_timeserie(self, df: pd.DataFrame, pair: str) -> pd.DataFrame:
+    def create_timeserie(self, df: pd.DataFrame, pair: str):
         """
         Args:
             df: it's the position dataframes with all the statistics per positions
@@ -561,7 +561,7 @@ class BackTest:
         plt.title(f"Backtest {self.strategy_name} strategy for {pair}")
         plt.show()
 
-    def get_pair_stats(self, df: pd.DataFrame, pair: str) -> pd.DataFrame:
+    def get_pair_stats(self, df: pd.DataFrame, pair: str):
         """
         Args:
             df : position dataframe that contains all the statistics needed
@@ -635,7 +635,7 @@ class BackTest:
         self.df_pairs_stat = pd.concat([self.df_pairs_stat, stat_perf])
 
     def compute_geometric_slippage_profits(self,
-                                          row):
+                                           row):
         """
         Used only if we backtest with geometric profits: the size of our positions increase (or decrease) as the
         bankroll increase (or decrease). The proportion of each position size compared to the size of the bankroll
