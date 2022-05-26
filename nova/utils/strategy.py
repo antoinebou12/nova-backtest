@@ -523,7 +523,7 @@ class Strategy(TelegramBOT):
                     if self.telegram_notification:
                         self.takeprofit_message(pair=row.pair,
                                                 pnl=pnl)
-                        self.telegram_bot_sendtext(f"Current PNL = {round(self.currentPNL,2)} $")
+                        self.telegram_bot_sendtext(f"Current PNL = {round(self.currentPNL, 2)} $")
 
                 # 3.2 - check if sl has been executed
                 elif row.sl_id in list(df_tx.orderId):

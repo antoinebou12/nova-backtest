@@ -9,6 +9,7 @@ import random
 import math
 import json
 import joblib
+import requests
 
 from nova.utils.constant import EXCEPTION_LIST_BINANCE, VAR_NEEDED_FOR_POSITION, DATA_FORMATING
 
@@ -46,9 +47,9 @@ class BackTest:
 
         self.slippage = slippage
         if self.slippage:
-            self.scaler_x = joblib.load('./database/ML_files/scaler_x.gz')
-            self.scaler_y = joblib.load('./database/ML_files/scaler_y.gz')
-            self.model = models.load_model('./database/ML_files/model_slippage_3.h5')
+            self.scaler_x = joblib.load('./models/slippage/scaler_x.gz')
+            self.scaler_y = joblib.load('./models/slippage/scaler_y.gz')
+            self.model = models.load_model('./models/slippage/model_slippage_3.h5')
 
         self.start_bk = start_bk
         self.actual_bk = self.start_bk
@@ -553,10 +554,16 @@ class BackTest:
         Returns:
             Creates the plots with the total return, long return and short return
         """
+        begin = np.where(self.df_pos[f'total_profit_{pair}'] != 0)[0].tolist()[0] - 1
+
         plt.figure(figsize=(10, 10))
-        plt.plot(self.df_pos.open_time, self.df_pos[f'total_profit_{pair}'], label='Total Profit')
-        plt.plot(self.df_pos.open_time, self.df_pos[f'long_profit_{pair}'], label='Long Profit')
-        plt.plot(self.df_pos.open_time, self.df_pos[f'short_profit_{pair}'], label='Short Profit')
+        plt.plot(self.df_pos.open_time[self.df_pos.index > begin],
+                 self.df_pos[f'total_profit_{pair}'][self.df_pos.index > begin], label='Total Profit')
+        plt.plot(self.df_pos.open_time[self.df_pos.index > begin],
+                 self.df_pos[f'long_profit_{pair}'][self.df_pos.index > begin], label='Long Profit')
+        plt.plot(self.df_pos.open_time[self.df_pos.index > begin],
+                 self.df_pos[f'short_profit_{pair}'][self.df_pos.index > begin], label='Short Profit')
+
         plt.legend()
         plt.title(f"Backtest {self.strategy_name} strategy for {pair}")
         plt.show()
@@ -1118,4 +1125,63 @@ class BackTest:
 
         return all_statistics
 
+    def backtest_last_days(self,
+                           nb_candle: int):
 
+        url = "https://fapi.binance.com/fapi/v1/klines"
+
+        i = 0
+        while i < len(self.list_pair):
+            pair = self.list_pair[i]
+
+            try:
+
+                print(f'BACK TESTING {pair}', "\U000023F3", end="\r")
+
+                ########### Download klines and create dataframe ###########
+
+                params = dict(symbol=pair, interval=self.candle, limit=nb_candle)
+
+                klines = requests.get(url=url, params=params).json()
+
+                df = self._data_fomating(klines)
+
+                df = df.dropna()
+
+                df = df.set_index('timestamp')
+
+                df['next_open'] = df['open'].shift(-1)
+
+                ########### Strategy logic and backtest ###########
+
+                df = self.build_indicators(df)
+
+                df = self.entry_strategy(df)
+
+                df = self.exit_strategy(df)
+
+                self.create_position_df(df, pair)
+
+                if self.slippage:
+                    self.compute_slippage(pair)
+
+                print(f'BACK TESTING {pair}', "\U00002705")
+
+            except Exception as e:
+                print(f'BACK TESTING {pair}', "\U0000274C")
+                self.list_pair.remove(pair)
+                continue
+
+            i += 1
+
+        # Keep only positions such that number of pos < max nb positions
+        print(f'Creating all positions and timeserie graph', "\U000023F3", end="\r")
+        self.all_pairs_real_positions()
+        self.get_performance_graph('all_pairs')
+        print(f'Creating all positions and timeserie graph', "\U00002705")
+
+        print(f'Computing all statistics', "\U000023F3", end="\r")
+        all_statistics = self.create_full_statistics(since=self.start)
+        print(f'Computing all statistics', "\U00002705")
+
+        return all_statistics
