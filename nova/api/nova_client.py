@@ -1,8 +1,8 @@
 from gql import Client
 from gql.transport.aiohttp import AIOHTTPTransport
 
-from nova.api.mutation import GraphMutation
-from nova.api.query import GraphQuery
+from nova.api.mutation import GraphMutation as Mutation
+from nova.api.query import GraphQuery as Query
 
 
 class NovaClient:
@@ -19,21 +19,34 @@ class NovaClient:
             fetch_schema_from_transport=True
         )
 
-    def create_pairs(self, pair: str) -> dict:
+    # Pairs
+    def create_pairs(
+        self,
+        value: str,
+        name: str,
+        fiat: str,
+        strategies: list,
+        exchanges: list
+    ) -> dict:
+
         params = {
             "input": {
-                "name": pair
+                "value": value,
+                "name": name,
+                "fiat": fiat,
+                "available_strategy": strategies,
+                "available_exchanges": exchanges
             }
         }
 
         data = self._client.execute(
-            GraphMutation.create_pair_query(),
+            Mutation.create_pair_query(),
             variable_values=params
         )
         return data
 
     def read_pairs(self) -> dict:
-        return self._client.execute(GraphQuery.read_pairs())
+        return self._client.execute(Query.read_pairs())
 
     def update_pairs(self) -> dict:
         pass
@@ -45,7 +58,7 @@ class NovaClient:
             }
         }
 
-        self._client.execute(GraphMutation.delete_pair(), variable_values=params)
+        self._client.execute(Mutation.delete_pair(), variable_values=params)
 
     def create_strategy(self,
                         name: str,
@@ -60,10 +73,10 @@ class NovaClient:
                 "avg_reel_return": avg_return_r
             }
         }
-        return self._client.execute(GraphMutation.create_strategy(), variable_values=params)
+        return self._client.execute(Mutation.create_strategy(), variable_values=params)
 
     def read_strategy(self) -> dict:
-        return self._client.execute(GraphQuery.read_strategy())
+        return self._client.execute(Query.read_strategy())
 
     def update_strategy(self) -> dict:
         pass
@@ -86,14 +99,14 @@ class NovaClient:
                 },
             }
         }
-        data = self._client.execute(GraphMutation.create_bot_query(), variable_values=params)
+        data = self._client.execute(Mutation.create_bot_query(), variable_values=params)
         return data
 
     def read_bots(self):
-        return self._client.execute(GraphQuery.read_bots())
+        return self._client.execute(Query.read_bots())
 
     def read_bot(self, _bot_id) -> dict:
-        return self._client.execute(GraphQuery.read_bot(_bot_id))
+        return self._client.execute(Query.read_bot(_bot_id))
 
     def update_bot(self):
         pass
@@ -126,13 +139,13 @@ class NovaClient:
             }
         }
         data = self._client.execute(
-            GraphMutation.new_bot_position_query(),
+            Mutation.new_bot_position_query(),
             variable_values=params
         )
         return data
 
     def read_positions(self):
-        return self._client.execute(GraphQuery.read_positions())
+        return self._client.execute(Query.read_positions())
 
     def update_position(self,
                         pos_id: str,
@@ -162,7 +175,7 @@ class NovaClient:
         }
 
         data = self._client.execute(
-            GraphMutation.update_bot_position_query(),
+            Mutation.update_bot_position_query(),
             variable_values=params
         )
 
@@ -175,5 +188,5 @@ class NovaClient:
             }
         }
 
-        self._client.execute(GraphMutation.delete_position(), variable_values=params)
+        self._client.execute(Mutation.delete_position(), variable_values=params)
         pass

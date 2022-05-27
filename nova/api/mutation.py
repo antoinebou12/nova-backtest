@@ -2,9 +2,12 @@ from gql import gql
 
 
 class GraphMutation:
-    
+
+    # PAIRS
     @staticmethod
     def create_pair():
+        """
+        """
         return gql(
             """
             mutation createPair($input: PairInput!){

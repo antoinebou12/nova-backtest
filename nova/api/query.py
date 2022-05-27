@@ -72,7 +72,6 @@ class GraphQuery:
             }
             ''')
 
-
     @staticmethod
     def read_position(_bot_id: str):
         return gql('''

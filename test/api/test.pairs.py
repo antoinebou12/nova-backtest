@@ -17,30 +17,13 @@ def get_binance_pairs():
     return list_pair
 
 
-# list_pair = get_binance_pairs()
+
+nova_client.create_pairs(
+
+)
 
 
-# Create
-def create_new_pair(pairs: list):
-    for pair in pairs:
-        nova_client.create_pairs(pair=pair)
 
-
-# Read
-def read_pairs():
-    return nova_client.read_pairs()
-
-
-# Update
-def update_pairs():
-    pass
-
-
-# Delete
-def delete_pair(pairs: list):
-    for pair in pairs:
-        nova_client.delete_pairs(pair_id=pair['_id'])
-    pass
 
 
 
