@@ -43,7 +43,8 @@ class BackTest:
                  max_holding: int,
                  save_all_pairs_charts: bool=False,
                  start_bk: float=10000,
-                 slippage: bool=True):
+                 slippage: bool=True,
+                 update_data: bool=False):
 
         self.slippage = slippage
         if self.slippage:
@@ -63,6 +64,7 @@ class BackTest:
         self.max_pos = max_pos
         self.max_holding = max_holding
         self.save_all_pairs_charts = save_all_pairs_charts
+        self.update_data = update_data
 
         # Get the list of pairs on which we perform the back test
         if type(self.list_pair).__name__ == 'str':
@@ -194,15 +196,16 @@ class BackTest:
             end_date_data = pd.to_datetime(df['timestamp'].max(), unit='ms')
 
             df['open_time'] = pd.to_datetime(df.open_time)
-            df['close_time'] = pd.to_datetime(df.close_time)
+            df['close_time'] = pd.to_datetime(df.open_time)
 
-            if self.end > end_date_data + timedelta(days=3):
-
+            if (self.end > end_date_data + timedelta(days=3)) or (self.update_data and (self.end - end_date_data > self.time_step)):
                 print("Update data: ", pair)
-                klines = get_klines(pair,
-                                    self.candle,
-                                    end_date_data.strftime('%d %b, %Y'),
-                                    self.end.strftime('%d %b, %Y'))
+
+                nb_candle = int((self.end - end_date_data) / self.time_step + 2)
+
+                params = dict(symbol=pair, interval=self.candle, limit=nb_candle)
+
+                klines = requests.get(url=self.url_api, params=params).json()
 
                 new_df = self._data_fomating(klines)
 
@@ -1122,66 +1125,5 @@ class BackTest:
 
             with open(f'database/analysis/{self.strategy_name}/all_statistics.json', 'w') as fp:
                 json.dump(all_statistics, fp)
-
-        return all_statistics
-
-    def backtest_last_days(self,
-                           nb_candle: int):
-
-        url = "https://fapi.binance.com/fapi/v1/klines"
-
-        i = 0
-        while i < len(self.list_pair):
-            pair = self.list_pair[i]
-
-            try:
-
-                print(f'BACK TESTING {pair}', "\U000023F3", end="\r")
-
-                ########### Download klines and create dataframe ###########
-
-                params = dict(symbol=pair, interval=self.candle, limit=nb_candle)
-
-                klines = requests.get(url=url, params=params).json()
-
-                df = self._data_fomating(klines)
-
-                df = df.dropna()
-
-                df = df.set_index('timestamp')
-
-                df['next_open'] = df['open'].shift(-1)
-
-                ########### Strategy logic and backtest ###########
-
-                df = self.build_indicators(df)
-
-                df = self.entry_strategy(df)
-
-                df = self.exit_strategy(df)
-
-                self.create_position_df(df, pair)
-
-                if self.slippage:
-                    self.compute_slippage(pair)
-
-                print(f'BACK TESTING {pair}', "\U00002705")
-
-            except Exception as e:
-                print(f'BACK TESTING {pair}', "\U0000274C")
-                self.list_pair.remove(pair)
-                continue
-
-            i += 1
-
-        # Keep only positions such that number of pos < max nb positions
-        print(f'Creating all positions and timeserie graph', "\U000023F3", end="\r")
-        self.all_pairs_real_positions()
-        self.get_performance_graph('all_pairs')
-        print(f'Creating all positions and timeserie graph', "\U00002705")
-
-        print(f'Computing all statistics', "\U000023F3", end="\r")
-        all_statistics = self.create_full_statistics(since=self.start)
-        print(f'Computing all statistics', "\U00002705")
 
         return all_statistics
