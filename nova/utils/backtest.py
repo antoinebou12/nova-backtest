@@ -1,7 +1,6 @@
 import numpy as np
 import pandas as pd
 from datetime import datetime, timedelta
-from tensorflow.keras import models
 import matplotlib.pyplot as plt
 
 import re
@@ -48,6 +47,8 @@ class BackTest:
 
         self.slippage = slippage
         if self.slippage:
+            from tensorflow.keras import models
+
             self.scaler_x = joblib.load('./models/slippage/scaler_x.gz')
             self.scaler_y = joblib.load('./models/slippage/scaler_y.gz')
             self.model = models.load_model('./models/slippage/model_slippage_3.h5')
@@ -65,6 +66,8 @@ class BackTest:
         self.max_holding = max_holding
         self.save_all_pairs_charts = save_all_pairs_charts
         self.update_data = update_data
+
+        self.url_api = "https://fapi.binance.com/fapi/v1/klines"
 
         # Get the list of pairs on which we perform the back test
         if type(self.list_pair).__name__ == 'str':
