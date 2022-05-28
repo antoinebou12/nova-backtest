@@ -66,6 +66,10 @@ class Strategy(TelegramBOT):
         self.prod_data = {}
         self.nova = NovaClient(config('NovaAPISecret'))
 
+        # Get bot name
+        # self.bot_name = self.nova.read_bot(bot_id)
+        # bot_name = data['bot']['name']
+
         self.bankroll = bankroll
         self.max_down = max_down
         self.telegram_notification = telegram_notification
@@ -680,7 +684,7 @@ class Strategy(TelegramBOT):
                                     pnl=pnl)
             self.telegram_bot_sendtext(f"Current PNL = {self.currentPNL} $")
 
-    def is_max_holding(self):
+    def is_max_holding_or_exit_signal(self):
         """
         Returns:
             This method is used to check if the maximum holding time is reached for each open positions.
@@ -701,10 +705,15 @@ class Strategy(TelegramBOT):
             diff = server + self.time_step / 10 - entry_time_date
             diff_in_hours = diff.total_seconds() / 3600
 
-            # Condition if the number of hours holding is greater than the max holding
-            if diff_in_hours >= self.max_holding:
+            exit_signal = self.exit_signals_prod(self, pair=row.pair)
+            max_holding_condition = diff_in_hours >= self.max_holding
 
-                self.print_log_send_msg(msg=f'Max Holding For {row.pair}')
+            # Condition if the number of hours holding is greater than the max holding
+            if exit_signal or max_holding_condition:
+
+                exit_type = 'MAX_HOLDING' if max_holding_condition else 'EXIT_SIGNAL'
+
+                self.print_log_send_msg(msg=f'Exit {row.pair} with exit type: {exit_type}')
 
                 # determine the exit side
                 exit_side = 'BUY'
@@ -718,10 +727,10 @@ class Strategy(TelegramBOT):
                     quantity=row.quantity,
                     entry_order_id=row.id,
                     nova_id=row.nova_id,
-                    exit_type='MAX_HOLDING'
+                    exit_type=exit_type
                 )
 
-                # update the
+                # update the dataframe
                 self.position_opened.drop(
                     index=index,
                     inplace=True
@@ -845,6 +854,23 @@ class Strategy(TelegramBOT):
         if error:
             self.log.error(msg, exc_info=True)
 
+    def is_opening_candle(self):
+        multi = int(float(re.findall(r'\d+', self.candle)[0]))
+        unit = self.candle[-1]
+
+        if multi == 1:
+            if unit == 'm':
+                return datetime.utcnow().second == 0
+            elif unit == 'h':
+                return datetime.utcnow().minute == 0
+            elif unit == 'd':
+                return datetime.utcnow().hour == 0
+        else:
+            if unit == 'm':
+                return datetime.utcnow().minute == 0
+            elif unit == 'h':
+                return datetime.utcnow().hour == 0
+
     def security_check_max_down(self):
         """
         Returns:
@@ -855,3 +881,116 @@ class Strategy(TelegramBOT):
         if self.currentPNL <= max_down_amount:
             self.print_log_send_msg('Max Down Reached -> Closing all positions')
             self.security_close_all(exit_type="MAX_LOSS")
+
+    def production_run(self):
+
+        last_crashed_time = datetime.utcnow()
+
+        # 1 - Print and send telegram message
+        self.print_log_send_msg(f'Nova L@bs {self.bot_name} starting')
+        self.telegram_bot_sendtext(bot_message=f'Nova L@bs {self.bot_name} starting')
+
+        time.sleep(1)
+
+        # 2 - Download the production data
+        self.print_log_send_msg(f'Fetching historical data')
+        asyncio.run(self.get_prod_data(self.list_pair))
+
+        # 3 - Begin the infinite loop
+        while True:
+
+            try:
+
+                # Start the logic at each candle opening
+                if self.is_opening_candle():
+
+                    print('---------------')
+
+                    # 4 - Update dataframes
+                    print(datetime.utcnow())
+                    self.print_log_send_msg('Updating Data')
+                    t0 = time.time()
+                    asyncio.run(self.update_prod_data(list_pair=self.list_pair))
+                    t1 = time.time()
+                    self.print_log_send_msg(f"Updated data in {round(t1 - t0, 3)} s")
+
+                    # 5 - Get current positions and update if tp or sl has been filled
+                    current_position = self.get_actual_position()
+                    self.verify_positions(current_position)
+
+                    # 6 - Check if we have to exit positions and if so execute the orders
+                    self.is_max_holding_or_exit_signal()
+
+                    # 8 - Check if there the bot loss the maximum amount
+                    self.security_check_max_down()
+
+                    # 9 - Shuffle list_pair to change prioritized pairs
+                    random.shuffle(self.list_pair)
+
+                    for pair in self.list_pair:
+
+                        # 10 - stop the loop if we reached max positions
+                        if self.position_opened.shape[0] >= self.max_pos:
+                            break
+
+                        # 11 - if pair not in position yet
+                        if float(current_position[pair]['positionAmt']) == 0:
+
+                            # 12 - compute bot action with sl and tp
+                            entry_strategy = self.entry_signals_prod(pair)
+                            action = entry_strategy['action']
+                            take_profit_price = entry_strategy['tp_price']
+                            stop_loss_price = entry_strategy['sl_price']
+
+                            # 13 - if action is different from 0
+                            if action != 0:
+
+                                # 14 - send entering position
+                                self.setup_leverage(pair)
+
+                                # 15 - send entering position
+                                self.print_log_send_msg(f'{pair} action is {action}')
+
+                                self.enter_position(action=action,
+                                                    pair=pair,
+                                                    bot_name=self.bot_name,
+                                                    tp=take_profit_price,
+                                                    sl=stop_loss_price
+                                                    )
+
+                    # 16 - print current PNL
+                    self.print_log_send_msg(f'Current bot PNL is {self.currentPNL}')
+
+                    print("Waiting for next candle to close")
+
+                    time.sleep(self.time_step.seconds // 1.5)
+
+            except Exception as e:
+
+                self.print_log_send_msg(f'{self.bot_name} crashed with the error:\n{str(e)[:100]}')
+
+                since_last_crash = datetime.utcnow() - last_crashed_time
+
+                if since_last_crash < timedelta(minutes=20):
+                    self.security_close_all(exit_type='ERROR')
+
+                    self.telegram_bot_sendtext(
+                        bot_message=f"{self.bot_name} crashed with the following error:\n\n{str(e)[:100]}"
+                    )
+
+                    self.telegram_bot_sendtext(
+
+                        bot_message=f"{self.bot_name} crashed again.\n\nAll positions have been closed\n\n"             
+                                    f"We recommend you to check your account"
+                                    f"Bot stopped \U0001F6D1."
+                    )
+
+                    return 0
+
+                self.telegram_bot_sendtext(
+                    bot_message=f"{self.bot_name} crashed with the following error:\n\n{str(e)[:100]}\n\nTry to restart..."
+                )
+
+                last_crashed_time = datetime.utcnow()
+
+                time.sleep(60)
