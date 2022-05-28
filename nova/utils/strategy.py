@@ -698,7 +698,7 @@ class Strategy(TelegramBOT):
 
             # get the number of hours since opening
             entry_time_date = datetime.fromtimestamp(int(row.time_entry[:-3]))
-            diff = server - entry_time_date
+            diff = server + self.time_step / 10 - entry_time_date
             diff_in_hours = diff.total_seconds() / 3600
 
             # Condition if the number of hours holding is greater than the max holding
