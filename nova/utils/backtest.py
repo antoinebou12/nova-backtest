@@ -66,6 +66,7 @@ class BackTest:
         self.max_holding = max_holding
         self.save_all_pairs_charts = save_all_pairs_charts
         self.update_data = update_data
+        self.time_step = self.get_timedelta_unit()
 
         self.url_api = "https://fapi.binance.com/fapi/v1/klines"
 
@@ -110,6 +111,19 @@ class BackTest:
         else:
             return self.candle
 
+    def get_timedelta_unit(self) -> timedelta:
+        """
+        Returns: a tuple that contains the unit and the multiplier needed to extract the data
+        """
+        multi = int(float(re.findall(r'\d+', self.candle)[0]))
+
+        if 'm' in self.candle:
+            return timedelta(minutes=multi)
+        elif 'h' in self.candle:
+            return timedelta(hours=multi)
+        elif 'd' in self.candle:
+            return timedelta(days=multi)
+
     def _data_fomating(self, kline: list) -> pd.DataFrame:
         """
         Args:
@@ -137,7 +151,8 @@ class BackTest:
         all_pair = self.client.futures_symbol_ticker()
 
         for pair in all_pair:
-            if 'USDT' in pair['symbol'] and pair['symbol'] not in EXCEPTION_LIST_BINANCE:
+            if 'USDT' in pair['symbol'] and pair['symbol'] not in EXCEPTION_LIST_BINANCE\
+                    and '_2' not in pair['symbol']:
                 list_pair.append(pair['symbol'])
 
         return list_pair
@@ -199,7 +214,7 @@ class BackTest:
             end_date_data = pd.to_datetime(df['timestamp'].max(), unit='ms')
 
             df['open_time'] = pd.to_datetime(df.open_time)
-            df['close_time'] = pd.to_datetime(df.open_time)
+            df['close_time'] = pd.to_datetime(df.close_time)
 
             if (self.end > end_date_data + timedelta(days=3)) or (self.update_data and (self.end - end_date_data > self.time_step)):
                 print("Update data: ", pair)
