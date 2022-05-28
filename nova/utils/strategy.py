@@ -100,8 +100,8 @@ class Strategy(TelegramBOT):
             self.logger_client = socketio.Client()
             self.logger_client.connect('http://167.114.3.100:5000', wait_timeout=10)
 
-        print('Set all margin type to ISOLATED')
-        self.set_isolated_margin()
+        # print('Set all margin type to ISOLATED')
+        # self.set_isolated_margin()
 
         self.time_step = self.get_timedelta_unit()
 
