@@ -5,6 +5,7 @@ from decouple import config
 from nova.utils.telegram import TelegramBOT
 import pandas as pd
 from datetime import datetime, timedelta
+import random
 import re
 from nova.api.nova_client import NovaClient
 import time
@@ -867,9 +868,9 @@ class Strategy(TelegramBOT):
                 return datetime.utcnow().hour == 0
         else:
             if unit == 'm':
-                return datetime.utcnow().minute == 0
+                return datetime.utcnow().minute % multi == 0
             elif unit == 'h':
-                return datetime.utcnow().hour == 0
+                return datetime.utcnow().hour % multi == 0
 
     def security_check_max_down(self):
         """
@@ -889,8 +890,6 @@ class Strategy(TelegramBOT):
         # 1 - Print and send telegram message
         self.print_log_send_msg(f'Nova L@bs {self.bot_name} starting')
         self.telegram_bot_sendtext(bot_message=f'Nova L@bs {self.bot_name} starting')
-
-        time.sleep(1)
 
         # 2 - Download the production data
         self.print_log_send_msg(f'Fetching historical data')
