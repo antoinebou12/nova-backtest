@@ -706,7 +706,7 @@ class Strategy(TelegramBOT):
             diff = server + self.time_step / 10 - entry_time_date
             diff_in_hours = diff.total_seconds() / 3600
 
-            exit_signal = self.exit_signals_prod(self, pair=row.pair)
+            exit_signal = self.exit_signals_prod(pair=row.pair)
             max_holding_condition = diff_in_hours >= self.max_holding
 
             # Condition if the number of hours holding is greater than the max holding
