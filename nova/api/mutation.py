@@ -6,8 +6,6 @@ class GraphMutation:
     # PAIRS
     @staticmethod
     def create_pair():
-        """
-        """
         return gql(
             """
             mutation createPair($input: PairInput!){
@@ -25,7 +23,6 @@ class GraphMutation:
             """
             mutation deletePair($pairId: ObjectId!){
                 deletePair(pairId: $pairId)
-                
             }
             """
         )
@@ -35,20 +32,37 @@ class GraphMutation:
         pass
 
     @staticmethod
-    def create_strategy_query():
+    def create_strategy():
         return gql(
         """
             mutation createStrategy($input: StrategyInput!){
                 createStrategy(input: $input) {
                     _id
                     name
-                    candles
-                    avg_expd_return
-                    avg_reel_return
                 }
             }
         """)
-    
+
+    @staticmethod
+    def delete_strategy():
+        return gql(
+        """
+            mutation createStrategy($input: StrategyInput!){
+                createStrategy(input: $input) {
+                }
+            }
+        """)
+
+    @staticmethod
+    def update_strategy():
+        return gql(
+            """
+                mutation createStrategy($input: StrategyInput!){
+                    createStrategy(input: $input) {
+                    }
+                }
+            """)
+
     @staticmethod
     def create_bot_query():
         return gql(

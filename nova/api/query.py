@@ -24,9 +24,23 @@ class GraphQuery:
                 strategies {
                     _id
                     name
+                    backtestStartAt
+                    backtestEndAt
+                    description
+                    version
                     candles
-                    avg_expd_return
-                    avg_reel_return
+                    leverage
+                    maxPosition
+                    trades
+                    maxDayUnderwater
+                    ratioWinning
+                    ratioSortino
+                    ratioSharp
+                    maxDrawdown
+                    monthlyFee
+                    avgProfit
+                    avgHoldTime
+                    score
                 }
             }
             """

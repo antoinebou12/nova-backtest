@@ -40,40 +40,70 @@ class NovaClient:
         }
 
         data = self._client.execute(
-            Mutation.create_pair_query(),
+            Mutation.create_pair(),
             variable_values=params
         )
         return data
 
-    def read_pairs(self) -> dict:
-        return self._client.execute(Query.read_pairs())
-
-    def update_pairs(self) -> dict:
+    def update_pairs(self):
         pass
 
-    def delete_pairs(self, pair_id: str) -> dict:
+    def delete_pairs(self, pair_id: str):
         params = {
             "pairId": {
                 'id': pair_id
             }
         }
-
         self._client.execute(Mutation.delete_pair(), variable_values=params)
+
+    def read_pairs(self) -> dict:
+        return self._client.execute(Query.read_pairs())
 
     def create_strategy(self,
                         name: str,
-                        candle: str,
-                        avg_return_e: float,
-                        avg_return_r: float) -> dict:
+                        start_time: int,
+                        end_time: int,
+                        version: str,
+                        candles: str,
+                        leverage: int,
+                        max_position: int,
+                        trades: int,
+                        max_day_underwater: int,
+                        ratio_winning: float,
+                        ratio_sortino: float,
+                        ratio_sharp: float,
+                        max_down: float,
+                        monthly_fee: float,
+                        avg_profit: float,
+                        avg_hold_time: float,
+                        score: float
+                        ) -> dict:
         params = {
             "input": {
                 "name": name,
-                "candles": candle,
-                "avg_expd_return": avg_return_e,
-                "avg_reel_return": avg_return_r
+                "backtestStartAt": start_time,
+                "backtestEndAt": end_time,
+                "version": version,
+                "candles": candles,
+                "leverage": leverage,
+                "maxPosition": max_position,
+                "trades": trades,
+                "maxDayUnderwater": max_day_underwater,
+                "ratioWinning": ratio_winning,
+                "ratioSharp": ratio_sortino,
+                "ratioSortino": ratio_sharp,
+                "maxDrawdown": max_down,
+                "monthlyFee": monthly_fee,
+                "avgProfit":avg_profit,
+                "avgHoldTime": avg_hold_time,
+                "score": score
             }
         }
-        return self._client.execute(Mutation.create_strategy(), variable_values=params)
+
+        return self._client.execute(
+            document=Mutation.create_strategy(),
+            variable_values=params
+        )
 
     def read_strategy(self) -> dict:
         return self._client.execute(Query.read_strategy())
