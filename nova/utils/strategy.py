@@ -26,6 +26,7 @@ class Strategy(TelegramBOT):
 
                  candle: str,
                  historical_window: int,
+                 list_pair: str,
 
                  bankroll: float,
                  position_size: float,
@@ -71,6 +72,17 @@ class Strategy(TelegramBOT):
         # self.bot_name = self.nova.read_bot(bot_id)
         # bot_name = data['bot']['name']
 
+        # Get the list of pairs on which we perform the back test
+        self.list_pair = list_pair
+        if type(self.list_pair).__name__ == 'str':
+            raw_list_pair = self.get_list_pair()
+
+            if self.list_pair != 'All pairs':
+                raise Exception("Please enter valid list_pair")
+
+            else:
+                self.list_pair = raw_list_pair
+
         self.bankroll = bankroll
         self.max_down = max_down
         self.telegram_notification = telegram_notification
@@ -101,8 +113,8 @@ class Strategy(TelegramBOT):
             self.logger_client = socketio.Client()
             self.logger_client.connect('http://167.114.3.100:5000', wait_timeout=10)
 
-        # print('Set all margin type to ISOLATED')
-        # self.set_isolated_margin()
+        print('Set all margin type to ISOLATED')
+        self.set_isolated_margin()
 
         self.time_step = self.get_timedelta_unit()
 
@@ -115,6 +127,26 @@ class Strategy(TelegramBOT):
                 self.client.futures_change_margin_type(symbol=info['symbol'],
                                                        marginType='ISOLATED',
                                                        timestamp=int(datetime.timestamp(datetime.now())))
+
+    def get_list_pair(self):
+
+        raw_list = []
+
+        # Pick list of trading pairs
+        EXCEPTION_LIST_BINANCE = ['BTCSTUSDT',
+                                  'BTCDOMUSDT',
+                                  '1000SHIBUSDT',
+                                  '1000XECUSDT',
+                                  'DODOUSDT',
+                                  'AKROUSDT']
+
+        all_pair = self.client.futures_symbol_ticker()
+        for pair in all_pair:
+            if pair['symbol'][-4:] == 'USDT' and pair['symbol'] not in EXCEPTION_LIST_BINANCE \
+                    and '_2' not in pair['symbol']:
+                raw_list.append(pair['symbol'])
+
+        return raw_list
 
     def setup_leverage(self, pair: str):
         """
@@ -324,6 +356,7 @@ class Strategy(TelegramBOT):
 
         if size == 0:
             self.print_log_send_msg(f'Balance too low')
+            self.telegram_bot_sendtext(f'Tried to enter in position for {pair} but balance is too low')
             return 0
 
         q_precision, p_precision = self.get_quantity_precision(pair)
@@ -683,7 +716,7 @@ class Strategy(TelegramBOT):
         if self.telegram_notification:
             self.exitsignal_message(pair=pair,
                                     pnl=pnl)
-            self.telegram_bot_sendtext(f"Current PNL = {self.currentPNL} $")
+            self.telegram_bot_sendtext(f"Current PNL = {round(self.currentPNL,2)} $")
 
     def is_max_holding_or_exit_signal(self):
         """
@@ -970,7 +1003,7 @@ class Strategy(TelegramBOT):
 
                 since_last_crash = datetime.utcnow() - last_crashed_time
 
-                if since_last_crash < timedelta(minutes=20):
+                if since_last_crash < self.time_step * 1.5:
                     self.security_close_all(exit_type='ERROR')
 
                     self.telegram_bot_sendtext(
