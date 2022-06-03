@@ -3,7 +3,6 @@ from gql import gql
 
 class GraphMutation:
 
-    # PAIRS
     @staticmethod
     def create_pair():
         return gql(
@@ -29,7 +28,16 @@ class GraphMutation:
 
     @staticmethod
     def update_pair():
-        pass
+        return gql(
+            """
+            mutation updatePair($input: PairInput!){
+                updatePair(input: $input){
+                    _id
+                    name
+                }
+            }
+            """
+        )
 
     @staticmethod
     def create_strategy():
@@ -47,9 +55,8 @@ class GraphMutation:
     def delete_strategy():
         return gql(
         """
-            mutation createStrategy($input: StrategyInput!){
-                createStrategy(input: $input) {
-                }
+            mutation deleteStrategy($strategyId: ObjectId!){
+                deleteStrategy(strategyId: $strategyId)
             }
         """)
 
@@ -57,47 +64,65 @@ class GraphMutation:
     def update_strategy():
         return gql(
             """
-                mutation createStrategy($input: StrategyInput!){
-                    createStrategy(input: $input) {
+                mutation editStrategy($input: StrategyInput!){
+                    editStrategy(input: $input) {
+                        _id
+                        name
                     }
                 }
             """)
 
     @staticmethod
-    def create_bot_query():
+    def create_bot():
         return gql(
         """
             mutation createBot($input: BotInput!) {
                 createBot(input: $input) {
+                    _id
                     name
-                    exchange
-                    strategy {
-                        name
-                        candles
-                    }
                 }
             }
         """)
 
     @staticmethod
-    def new_bot_position_query():
+    def update_bot():
+        return gql(
+        """
+            mutation updateBot($input: BotInput!) {
+                updateBot(input: $input) {
+                    _id
+                    name
+                }
+            }
+        """)
+
+    @staticmethod
+    def delete_bot():
+        return gql(
+        """
+            mutation deleteBot($botId: ObjectId!) {
+                deleteBot(botId: $botId)
+            }
+        """)
+
+    @staticmethod
+    def create_position():
         return gql(
             """
-            mutation newBotPosition($name: String!, $input: PositionInput!) {
-                newBotPosition(name: $name, input: $input) {
+            mutation createPosition($name: String!, $input: PositionInput!) {
+                createPosition(name: $name, input: $input) {
                     _id
                 }
             }
             """)
         
     @staticmethod
-    def update_bot_position_query():
+    def update_position():
         return gql(
             """
-            mutation editPosition($input: PositionInput!){
-                editPosition(input: $input){
+            mutation updatePosition($input: PositionInput!){
+                updatePosition(input: $input){
                     _id
-                    state
                 }
             }
             """)
@@ -108,7 +133,6 @@ class GraphMutation:
             """
             mutation deletePosition($positionId: ObjectId!){
                 deletePosition(positionId: $positionId)
-
             }
             """
         )

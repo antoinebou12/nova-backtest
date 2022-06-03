@@ -51,42 +51,48 @@ def test_create_strategy():
 
     assert data['createStrategy']['name'] == 'ichimokuV1'
 
-
 def test_read_strategy():
-    pass
+    name_test = "random"
 
-nova_client.read_strategy()
+    data = nova_client.read_strategy(strat_name=name_test)
 
-# Update
-nova_client.update_strategy()
-
-# Delete
-nova_client.delete_strategy()
+    print(data)
 
 
+def test_read_strategies():
+
+    data = nova_client.read_strategies()
+
+    print(data)
+
+def test_update_strategy():
+
+    id_to_update = "62923c588a810ee6a20fefa3"
+
+    to_update = {
+        "input": {
+            "id": id_to_update,
+            "name": "ichimokuV2"
+
+        }
+    }
+
+    data = nova_client.update_strategy(params=to_update)
+
+    print(data)
 
 
+def test_delete_strategy():
 
-"""
-_id: ObjectId!
-name: String!
-backtestStartAt: Timestamp!
-backtestEndAt: Timestamp!
-description: String!
-version: String!
-candles: String!
-leverage: Int!
-maxPosition: Int!
-trades: Int!
-maxDayUnderwater: Int!
-ratioWinning: Float!
-ratioSortino: Float!
-ratioSharp: Float!
-maxDrawdown: Float!
-monthlyFee: Float!
-avgProfit: Float!
-avgHoldTime: Float!
-score: Int!
-}
+    id_to_delete = "6298de4b8a810ee6a20fefb0"
 
-"""
+    to_delete = {
+        "strategyId": id_to_delete,
+    }
+
+    data = nova_client.delete_strategy(params=to_delete)
+
+    print(data)
+
+
+test_delete_strategy()
