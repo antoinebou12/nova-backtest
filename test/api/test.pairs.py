@@ -1,48 +1,89 @@
 from nova.api.nova_client import NovaClient
 from decouple import config
-from binance.client import Client
 
 
 nova_client = NovaClient(config('NovaAPISecret'))
 
 
-# For testing
-def get_binance_pairs():
-    binance_client = Client(config("BinanceAPIKey"), config("BinanceAPISecret"))
-    all_pair = binance_client.futures_position_information()
-    list_pair = []
-    for pair in all_pair:
-        if 'USDT' in pair['symbol']:
-            list_pair.append(pair['symbol'].replace('USDT', '/USDT'))
-    return list_pair
+value = "TEST"
+name = "TEST"
+fiat = "USDT"
+available_st = [{"name": "ichimokuV1"}]
+available_ex = ['binance', 'ftx']
 
 
-# list_pair = get_binance_pairs()
+def test_create_pair():
+
+    data = nova_client.create_pair(
+        value=value,
+        name=name,
+        fiat=fiat,
+        strategies=available_st,
+        exchanges=available_ex
+    )
+
+    assert data['createPair']['name'] == 'TEST'
+
+# test_create_pair()
 
 
-# Create
-def create_new_pair(pairs: list):
-    for pair in pairs:
-        nova_client.create_pairs(pair=pair)
+def test_delete_pair():
+
+    id_to_delete = "6298deeb8a810ee6a20fefbb"
+
+    data = nova_client.delete_pair(
+        pair_id=id_to_delete
+    )
+
+    print(data)
+
+# test_delete_pair()
 
 
-# Read
-def read_pairs():
-    return nova_client.read_pairs()
+def test_update_pair():
+
+    id_to_update = "629902b245dfda60b91b9c77"
+    original_value = "TEST"
+    original_name = "TEST"
+    original_fiat = "USDT"
+
+    to_update = {
+        "input": {
+            "id": id_to_update,
+            "value": original_value,
+            "name": original_name,
+            "fiat": original_fiat,
+            "available_exchange": ['kraken'],
+            "available_strategy": [{"name": "random"}]
+
+        }
+    }
+
+    data = nova_client.update_pair(
+        params=to_update
+    )
+
+    print(data)
+
+# test_update_pair()
 
 
-# Update
-def update_pairs():
-    pass
+def test_read_pair():
+
+    id_to_claim = "629902b245dfda60b91b9c77"
+
+    data = nova_client.read_pair(pair_id=id_to_claim)
+
+    print(data)
+
+# test_read_pair()
 
 
-# Delete
-def delete_pair(pairs: list):
-    for pair in pairs:
-        nova_client.delete_pairs(pair_id=pair['_id'])
-    pass
+def test_read_pairs():
 
+    data = nova_client.read_pairs()
 
+    print(data)
 
-
+# test_read_pairs()
 
