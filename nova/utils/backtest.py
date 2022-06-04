@@ -9,7 +9,7 @@ import math
 import json
 import joblib
 import requests
-
+import os
 from nova.utils.constant import EXCEPTION_LIST_BINANCE, VAR_NEEDED_FOR_POSITION, DATA_FORMATING
 
 from warnings import simplefilter
@@ -49,9 +49,9 @@ class BackTest:
         if self.slippage:
             from tensorflow.keras import models
 
-            self.scaler_x = joblib.load('nova/models/slippage/scaler_x.gz')
-            self.scaler_y = joblib.load('nova/models/slippage/scaler_y.gz')
-            self.model = models.load_model('nova/models/slippage/model_slippage_3.h5')
+            self.scaler_x = joblib.load('../models/slippage/scaler_x.gz')
+            self.scaler_y = joblib.load('../models/slippage/scaler_y.gz')
+            self.model = models.load_model('../models/slippage/model_slippage_3.h5')
 
         self.start_bk = start_bk
         self.actual_bk = self.start_bk
