@@ -5,7 +5,7 @@ with open("README.md", "r") as fh:
 
 setuptools.setup(
     name="novalabs",
-    version="0.5.63",
+    version="0.5.64",
     author="Nova Labs",
     author_email="devteam@novalabs.ai",
     description="Nova Labs aims to facilitate the development of algorithmic trading and this package help to backtest and productionize technical strategies on Crypto Market",
@@ -16,4 +16,6 @@ setuptools.setup(
         "License :: OSI Approved :: MIT License",
         "Operating System :: OS Independent",
     ],
+    include_package_data=True,
+    setup_requires=['setuptools_scm']
 )
