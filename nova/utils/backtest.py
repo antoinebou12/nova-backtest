@@ -447,7 +447,25 @@ class BackTest:
 
     def compute_slippage(self, pair):
 
-        df_1m = pd.read_csv(f'database/futures/hist_{pair}_1m.csv')
+        try:
+            df_1m = pd.read_csv(f'database/futures/hist_{pair}_1m.csv')
+        except:
+            print(f'DOWNLOAD {pair} 1m')
+            klines = self.client.futures_historical_klines(pair,
+                                '1m',
+                                datetime(2018, 1, 1).strftime('%d %b, %Y'),
+                                self.end.strftime('%d %b, %Y'))
+
+            df_1m = self._data_fomating(klines)
+
+            df_1m = df_1m.dropna()
+
+            df_1m.to_csv(f'database/futures/hist_{pair}_1m.csv', index=False)
+
+            df_1m = df_1m.set_index('timestamp')
+            df_1m['next_open'] = df_1m['open'].shift(-1)
+
+
         df_1m['open_time'] = pd.to_datetime(df_1m.open_time)
         df_1m['last_24h_volume'] = df_1m['quote_asset_volume'].rolling(min_periods=1, window=60*24).sum()
 
