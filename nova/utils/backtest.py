@@ -134,6 +134,10 @@ class BackTest:
 
         Returns: dataframe with usable format.
         """
+
+        if self.client.get_server_time()['serverTime'] < kline[-1][6]:
+            del kline[-1]
+
         df = pd.DataFrame(kline, columns=DATA_FORMATING['binance']['columns'])
         for var in DATA_FORMATING['binance']['num_var']:
             df[var] = pd.to_numeric(df[var], downcast="float")
@@ -159,36 +163,6 @@ class BackTest:
                 list_pair.append(pair['symbol'])
 
         return list_pair
-
-    def update_all_pair_hist_data(self,
-                                  market: str = 'futures'
-                                  ) -> None:
-        if market == 'futures':
-            get_klines = self.client.futures_historical_klines
-        elif market == 'spot':
-            get_klines = self.client.get_historical_klines
-        else:
-            raise Exception('Please enter a valid market (futures or market)')
-
-        for pair in self.list_pair:
-            print("Update data: ", pair)
-
-            df = pd.read_csv(f'database/{market}/hist_{pair}_{self.candle}.csv')
-
-            end_date_data = df['timestamp'].max()
-            now = int(datetime.utcnow().timestamp()) + 24*60*60
-
-            klines = get_klines(pair,
-                                self.candle,
-                                str(end_date_data),
-                                str(now))
-
-            new_df = self._data_fomating(klines)
-
-            df = pd.concat([df, new_df])
-            df = df.drop_duplicates(subset=['open_time'])
-
-            df.to_csv(f'database/{market}/hist_{pair}_{self.candle}.csv', index=False)
 
     def get_all_historical_data(self,
                                 pair: str,
@@ -222,7 +196,7 @@ class BackTest:
             if (self.end > end_date_data + timedelta(days=3)) or (self.update_data and (self.end - end_date_data > self.time_step)):
                 print("Update data: ", pair)
 
-                nb_candle = int((self.end - end_date_data) / self.time_step + 2)
+                nb_candle = int((self.end - end_date_data + timedelta(days=1)) / self.time_step)
 
                 params = dict(symbol=pair, interval=self.candle, limit=nb_candle)
 
@@ -236,13 +210,18 @@ class BackTest:
                 df.to_csv(f'database/{market}/hist_{pair}_{self.candle}.csv', index=False)
 
             df = df.set_index('timestamp')
+
+            # Make sure we don't miss a row
+            assert not(False in (df['open_time'] == df['open_time'].shift(1) + self.time_step).values[1:]), \
+                'Missing a row in historical DataFrame'
+
             df['next_open'] = df['open'].shift(-1)
-            return df[(df.open_time >= self.start) & (df.open_time <= self.end)]
+            return df[(df.open_time >= self.start)]
 
         except:
             klines = get_klines(pair,
                                 self.candle,
-                                datetime(2018, 1, 1).strftime('%d %b, %Y'),
+                                datetime(2019, 1, 1).strftime('%d %b, %Y'),
                                 self.end.strftime('%d %b, %Y'))
 
             df = self._data_fomating(klines)
@@ -254,7 +233,7 @@ class BackTest:
             df = df.set_index('timestamp')
             df['next_open'] = df['open'].shift(-1)
 
-            return df[(df.open_time >= self.start) & (df.open_time <= self.end)]
+            return df[(df.open_time >= self.start)]
 
     def convert_max_holding_to_candle_nb(self) -> int:
         """
