@@ -15,7 +15,7 @@ from nova.utils.constant import EXCEPTION_LIST_BINANCE, VAR_NEEDED_FOR_POSITION,
 from warnings import simplefilter
 simplefilter(action="ignore", category=pd.errors.PerformanceWarning)
 
-directory_fin = __file__.replace("utils/backtest.py", "models")
+# directory_fin = __file__.replace("utils/backtest.py", "models")
 
 
 class BackTest:
@@ -142,10 +142,12 @@ class BackTest:
         for var in DATA_FORMATING['binance']['num_var']:
             df[var] = pd.to_numeric(df[var], downcast="float")
 
-        df['timestamp'] = df['open_time']
+        df['next_open'] = df['open'].shift(-1)
 
-        for var in DATA_FORMATING['binance']['date_var']:
-            df[var] = pd.to_datetime(df[var], unit='ms')
+        # df['timestamp'] = df['open_time']
+
+        # for var in DATA_FORMATING['binance']['date_var']:
+        #     df[var] = pd.to_datetime(df[var], unit='ms')
 
         return df
 
@@ -188,15 +190,15 @@ class BackTest:
         try:
             df = pd.read_csv(f'database/{market}/hist_{pair}_{self.candle}.csv')
 
-            end_date_data = pd.to_datetime(df['timestamp'].max(), unit='ms')
+            end_date_data_ts = df['open_time'].max()
+            # milliseconds
+            end_ts = int(1000 * datetime.timestamp(self.end))
+            last_update_seconds = (end_ts - end_date_data_ts) // 1000
 
-            df['open_time'] = pd.to_datetime(df.open_time)
-            df['close_time'] = pd.to_datetime(df.close_time)
-
-            if (self.end > end_date_data + timedelta(days=3)) or (self.update_data and (self.end - end_date_data > self.time_step)):
+            if self.update_data:
                 print("Update data: ", pair)
 
-                nb_candle = int((self.end - end_date_data + timedelta(days=1)) / self.time_step)
+                nb_candle = last_update_seconds // self.time_step.seconds + 3
 
                 params = dict(symbol=pair, interval=self.candle, limit=nb_candle)
 
@@ -209,15 +211,6 @@ class BackTest:
 
                 df.to_csv(f'database/{market}/hist_{pair}_{self.candle}.csv', index=False)
 
-            df = df.set_index('timestamp')
-
-            # Make sure we don't miss a row
-            assert not(False in (df['open_time'] == df['open_time'].shift(1) + self.time_step).values[1:]), \
-                'Missing a row in historical DataFrame'
-
-            df['next_open'] = df['open'].shift(-1)
-            return df[(df.open_time >= self.start)]
-
         except:
             klines = get_klines(pair,
                                 self.candle,
@@ -226,14 +219,18 @@ class BackTest:
 
             df = self._data_fomating(klines)
 
-            df = df.dropna()
-
             df.to_csv(f'database/{market}/hist_{pair}_{self.candle}.csv', index=False)
 
-            df = df.set_index('timestamp')
-            df['next_open'] = df['open'].shift(-1)
+        for var in DATA_FORMATING['binance']['date_var']:
+            df[var] = pd.to_datetime(df[var], unit='ms')
 
-            return df[(df.open_time >= self.start)]
+        df = df.set_index('open_time', drop=False)
+
+        # Make sure we don't miss a row
+        assert not (False in (df['open_time'] == df['open_time'].shift(1) + self.time_step).values[1:]), \
+            'Missing a row in historical DataFrame'
+
+        return df[(df.open_time >= self.start)]
 
     def convert_max_holding_to_candle_nb(self) -> int:
         """
