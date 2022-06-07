@@ -15,7 +15,6 @@ from nova.utils.constant import EXCEPTION_LIST_BINANCE, VAR_NEEDED_FOR_POSITION,
 from warnings import simplefilter
 simplefilter(action="ignore", category=pd.errors.PerformanceWarning)
 
-# directory_fin = __file__.replace("utils/backtest.py", "models")
 
 
 class BackTest:
@@ -50,6 +49,7 @@ class BackTest:
         self.slippage = slippage
         if self.slippage:
             from tensorflow.keras import models
+            directory_fin = __file__.replace("utils/backtest.py", "models")
 
             self.scaler_x = joblib.load(f'{directory_fin}/slippage/scaler_x.gz')
             self.scaler_y = joblib.load(f'{directory_fin}/slippage/scaler_y.gz')
