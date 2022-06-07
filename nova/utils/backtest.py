@@ -1023,7 +1023,9 @@ class BackTest:
 
         all_statistics = {"overview": overview,
                           "statistics": statistics,
-                          "pairs_stats": pairs_stats}
+                          "pairs_stats": pairs_stats,
+                          "start": self.start,
+                          "end": self.end}
 
         return all_statistics
 
