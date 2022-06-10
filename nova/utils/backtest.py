@@ -51,6 +51,8 @@ class BackTest:
             from tensorflow.keras import models
             directory_fin = __file__.replace("utils/backtest.py", "models")
 
+            print(directory_fin)
+
             self.scaler_x = joblib.load(f'{directory_fin}/slippage/scaler_x.gz')
             self.scaler_y = joblib.load(f'{directory_fin}/slippage/scaler_y.gz')
             self.model = models.load_model(f'{directory_fin}/slippage/model_slippage_3.h5')
