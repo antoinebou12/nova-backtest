@@ -30,6 +30,7 @@ class Strategy(TelegramBOT):
 
                  bankroll: float,
                  position_size: float,
+                 geometric_size: bool,
                  max_pos: int,
 
                  max_down: float,
@@ -62,6 +63,7 @@ class Strategy(TelegramBOT):
 
         self.candle = candle
         self.position_size = position_size
+        self.geometric_size = geometric_size
         self.historical_window = historical_window
         self.max_pos = max_pos
         self.position_opened = pd.DataFrame(columns=POSITION_PROD_COLUMNS)
@@ -304,16 +306,21 @@ class Strategy(TelegramBOT):
         Returns:
             Float that represents the final position size taken by the bot
         """
+        if not(self.geometric_size):
+            pos_size = self.position_size * self.bankroll
+        else:
+            pos_size = self.position_size * (self.bankroll + self.currentPNL)
+
         futures_balances = self.client.futures_account_balance()
         available = 0
         for balance in futures_balances:
             if balance['asset'] == 'USDT':
                 available = float(balance['withdrawAvailable'])
 
-        if available < self.position_size * (self.bankroll + self.currentPNL) / self.leverage:
+        if available < pos_size / self.leverage:
             return 0
 
-        return self.position_size * (self.bankroll + self.currentPNL)
+        return pos_size
 
     def get_actual_position(self) -> dict:
         """
