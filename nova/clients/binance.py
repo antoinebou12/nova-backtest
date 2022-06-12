@@ -16,9 +16,9 @@ class Binance:
 
     def _get_earliest_valid_timestamp(self, symbol: str, interval: str):
         """
-        Get earliest valid open timestamp from Binance
+        Get the earliest valid open timestamp from Binance
         Args:
-            symbol: Name of symbol pair e.g BNBBTC
+            symbol: Name of symbol pair -- BNBBTC
             interval: Binance Kline interval
 
         :return: first valid timestamp
@@ -32,25 +32,22 @@ class Binance:
         )
         return kline[0][0]
 
-    def get_historical(self, pair: str, timeframe: str, start_time: str, end_time: str):
+    def get_historical(self, pair: str, interval: str, start_time: str, end_time: str):
         """
-
-
         Args:
             pair:
-            timeframe:
+            interval:
             start_time:
             end_time:
 
         Returns:
-
         """
 
         # init our list
         output_data = []
 
         # convert interval to useful value in seconds
-        timeframe = interval_to_milliseconds(timeframe)
+        timeframe = interval_to_milliseconds(interval)
 
         # if a start time was passed convert it
         start_ts = convert_ts_str(start_time)
@@ -59,7 +56,7 @@ class Binance:
         if start_ts is not None:
             first_valid_ts = self._get_earliest_valid_timestamp(
                 symbol=pair,
-                interval=timeframe
+                interval=interval
             )
             start_ts = max(start_ts, first_valid_ts)
 
@@ -73,7 +70,7 @@ class Binance:
             # fetch the klines from start_ts up to max 500 entries or the end_ts if set
             temp_data = self.client.klines(
                 symbol=pair,
-                interval=timeframe,
+                interval=interval,
                 limit=self.historical_limit,
                 startTime=start_ts,
                 endTime=end_ts
@@ -101,13 +98,7 @@ class Binance:
             if idx % 3 == 0:
                 time.sleep(1)
 
-        return self.client.klines(
-            symbol=pair,
-            interval=timeframe,
-            startTime=start_time,
-            endTime=end_time,
-            limit=1000
-        )
+        return output_data
 
 
 client = Binance(key=config("BinanceAPIKey"), secret=config("BinanceAPISecret"))
@@ -115,12 +106,13 @@ client = Binance(key=config("BinanceAPIKey"), secret=config("BinanceAPISecret"))
 start = datetime(2020, 1, 1).strftime('%d %b, %Y')
 end = datetime(2022, 1, 1).strftime('%d %b, %Y')
 
-
 data = client.get_historical(
     pair='BTCUSDT',
-    timeframe='1d',
+    interval='15m',
     start_time=start,
     end_time=end
 )
+
+
 
 
