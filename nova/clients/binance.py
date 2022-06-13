@@ -11,9 +11,10 @@ class Binance:
                  key: str,
                  secret: str):
 
-        self.client = UMFutures(key=key, secret=secret)
+        self._client = UMFutures(key=key, secret=secret)
         self.historical_limit = 1000
 
+    # MARKET DATA ENDPOINTS
     def _get_earliest_valid_timestamp(self, symbol: str, interval: str):
         """
         Get the earliest valid open timestamp from Binance
@@ -23,7 +24,7 @@ class Binance:
 
         :return: first valid timestamp
         """
-        kline = self.client.klines(
+        kline = self._client.klines(
             symbol=symbol,
             interval=interval,
             limit=1,
@@ -68,7 +69,7 @@ class Binance:
         idx = 0
         while True:
             # fetch the klines from start_ts up to max 500 entries or the end_ts if set
-            temp_data = self.client.klines(
+            temp_data = self._client.klines(
                 symbol=pair,
                 interval=interval,
                 limit=self.historical_limit,
@@ -100,19 +101,97 @@ class Binance:
 
         return output_data
 
+    def get_tickers_price(self):
+        return self._client.ticker_price()
+
+    def get_server_time(self) -> dict:
+        return self._client.time()
+
+    def get_all_pairs(self) -> list:
+        info = self._client.exchange_info()
+        return info['symbols']
+
+    # ACCOUNT AND TRADING ENDPOINTS
+    def get_balance(self) -> dict:
+        return self._client.balance(recvWindow=6000)
+
+    def get_account(self):
+        return self._client.account(recvWindow=6000)
+
+    def change_leverage(self, pair: str, leverage: int):
+        return self._client.change_leverage(
+            symbol=pair,
+            leverage=leverage,
+            recvWindow=6000
+        )
+
+    def change_position_mode(self, is_dual_side: str) -> dict:
+        return self._client.change_position_mode(
+            dualSidePosition=is_dual_side,
+            recvWindow=5000
+        )
+
+    def change_margin_type(self, pair: str, margin_type: str):
+        return self._client.change_margin_type(
+            symbol=pair,
+            marginType=margin_type,
+            recvWindow=5000
+        )
+
+    def get_position_mode(self):
+        return self._client.get_position_mode(recvWindow=2000)
+
+    def get_positions(self):
+        return self._client.get_position_risk(recvWindow=6000)
+
+    def get_income_history(self):
+        return self._client.get_income_history(recvWindow=6000)
+
+    def open_order(self, pair: str, side: str, side_type: str, quantity: float, price: float):
+        return self._client.new_order(
+            symbol=pair,
+            side=side,
+            type=side_type,
+            quantity=quantity,
+            timeInForce="GTC",
+            price=price,
+        )
+
+    def take_profit_order(self):
+        pass
+
+    def stop_loss_order(self):
+        pass
+
+    def close_position_order(self):
+        pass
+
+    def cancel_order(self):
+        pass
+
+    def cancel_all_orders(self):
+        pass
+
 
 client = Binance(key=config("BinanceAPIKey"), secret=config("BinanceAPISecret"))
 
-start = datetime(2020, 1, 1).strftime('%d %b, %Y')
-end = datetime(2022, 1, 1).strftime('%d %b, %Y')
 
-data = client.get_historical(
-    pair='BTCUSDT',
-    interval='15m',
-    start_time=start,
-    end_time=end
-)
+balance = client.get_balance()
 
+account = client.get_account()
 
+positions = client.get_positions()
 
+# start = datetime(2020, 1, 1).strftime('%d %b, %Y')
+# end = datetime(2022, 1, 1).strftime('%d %b, %Y')
+#
+# data = client.get_current_account()
+#
+# for x in data['positions']:
+#     if x['symbol'] == 'ETHUSDT':
+#         print(x)
+#
+# tickers = client.get_tickers_price()
+
+# change_position_mode = client.change_position_mode(is_dual_side="false")
 
