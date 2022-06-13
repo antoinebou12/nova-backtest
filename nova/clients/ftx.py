@@ -43,7 +43,6 @@ class FTX:
         response = self._session.send(_prepared)
         return response.json()
 
-    def get_historical(self):
 
 
 
