@@ -9,7 +9,7 @@ import random
 import re
 from nova.api.nova_client import NovaClient
 import time
-from nova.utils.constant import POSITION_PROD_COLUMNS, BINANCE_KLINES_COLUMNS
+from nova.utils.constant import POSITION_PROD_COLUMNS, BINANCE_KLINES_COLUMNS, EXCEPTION_LIST_BINANCE
 
 import aiohttp
 import asyncio
@@ -133,14 +133,6 @@ class Strategy(TelegramBOT):
     def get_list_pair(self):
 
         raw_list = []
-
-        # Pick list of trading pairs
-        EXCEPTION_LIST_BINANCE = ['BTCSTUSDT',
-                                  'BTCDOMUSDT',
-                                  '1000SHIBUSDT',
-                                  '1000XECUSDT',
-                                  'DODOUSDT',
-                                  'AKROUSDT']
 
         all_pair = self.client.futures_symbol_ticker()
         for pair in all_pair:
