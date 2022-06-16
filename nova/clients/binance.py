@@ -14,7 +14,7 @@ class Binance:
         self._client = UMFutures(key=key, secret=secret)
         self.historical_limit = 1000
 
-    # MARKET DATA ENDPOINTS
+    # STANDARDIZED FUNCTIONS
     def _get_earliest_valid_timestamp(self, symbol: str, interval: str):
         """
         Get the earliest valid open timestamp from Binance
@@ -111,7 +111,6 @@ class Binance:
         info = self._client.exchange_info()
         return info['symbols']
 
-    # ACCOUNT AND TRADING ENDPOINTS
     def get_balance(self) -> dict:
         return self._client.balance(recvWindow=6000)
 
@@ -131,6 +130,7 @@ class Binance:
             recvWindow=5000
         )
 
+    # BINANCE SPECIFIC FUNCTIONS
     def change_margin_type(self, pair: str, margin_type: str):
         return self._client.change_margin_type(
             symbol=pair,
@@ -153,8 +153,6 @@ class Binance:
             side=side,
             type=side_type,
             quantity=quantity,
-            timeInForce="GTC",
-            price=price,
         )
 
     def take_profit_order(self):
@@ -176,11 +174,15 @@ class Binance:
 client = Binance(key=config("BinanceAPIKey"), secret=config("BinanceAPISecret"))
 
 
-balance = client.get_balance()
+# balance = client.get_balance()
+#
+# account = client.get_account()
+#
+# positions = client.get_positions()å
+#
+# client.change_position_mode(is_dual_side="false")
 
-account = client.get_account()
-
-positions = client.get_positions()
+# client.open_order(pair="ETHUSDT", side="BUY", side_type="MARKET", quantity=0.01, price=0)
 
 # start = datetime(2020, 1, 1).strftime('%d %b, %Y')
 # end = datetime(2022, 1, 1).strftime('%d %b, %Y')
