@@ -19,8 +19,17 @@ def test_all_pairs(exchange: str):
     return all_pairs
 
 
-test_all_pairs('binance')
+data = test_all_pairs('binance')
+
+
 test_all_pairs('ftx')
+
+perp = []
+
+for x in data:
+    if 'USDT' in x:
+        perp.append(x)
+
 
 
 

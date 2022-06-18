@@ -4,6 +4,7 @@ from decouple import config
 
 from binance.client import Client
 from datetime import datetime
+from nova.utils.constant import DATA_FORMATING
 
 
 def test_get_historical(exchange: str, pair: str, interval: str, start_time: str, end_time: str):
@@ -46,13 +47,15 @@ def test_get_historical(exchange: str, pair: str, interval: str, start_time: str
 
     assert ref_timestamp == data_timestamp
 
+    return data
+
 
 _pair = "BTCUSDT"
 _interval = "1h"
 start_timing = datetime(2022, 1, 1).strftime('%d %b, %Y')
 end_timing = datetime(2022, 4, 1).strftime('%d %b, %Y')
 
-test_get_historical(
+binance_data = test_get_historical(
     exchange="binance",
     pair=_pair,
     interval=_interval,
@@ -62,7 +65,7 @@ test_get_historical(
 
 _pair = "BTC-PERP"
 
-test_get_historical(
+ftx_data = test_get_historical(
     exchange="ftx",
     pair=_pair,
     interval=_interval,

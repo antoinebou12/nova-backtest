@@ -10,11 +10,14 @@ import json
 import joblib
 import requests
 import os
-from nova.utils.constant import EXCEPTION_LIST_BINANCE, VAR_NEEDED_FOR_POSITION, DATA_FORMATING
+from nova.utils.constant import EXCEPTION_LIST_BINANCE, VAR_NEEDED_FOR_POSITION, DATA_FORMATING, \
+    FTX_PAIRS, BINANCE_PAIRS
+from nova.clients.binance import Binance
+from nova.clients.ftx import FTX
+
 
 from warnings import simplefilter
 simplefilter(action="ignore", category=pd.errors.PerformanceWarning)
-
 
 
 class BackTest:
@@ -34,6 +37,9 @@ class BackTest:
     """
 
     def __init__(self,
+                 exchange: str,
+                 key: str,
+                 secret: str,
                  candle: str,
                  list_pair,
                  start: datetime,
@@ -46,6 +52,8 @@ class BackTest:
                  slippage: bool=True,
                  update_data: bool=False):
 
+        self.exchange = exchange
+
         self.slippage = slippage
         if self.slippage:
             from tensorflow.keras import models
@@ -55,6 +63,7 @@ class BackTest:
             self.scaler_y = joblib.load(f'{directory_fin}/slippage/scaler_y.gz')
             self.model = models.load_model(f'{directory_fin}/slippage/model_slippage_3.h5')
 
+        self.client = self.get_client(key=key, secret=secret)
 
         self.start_bk = start_bk
         self.actual_bk = self.start_bk
@@ -104,6 +113,12 @@ class BackTest:
         self.position_cols = []
         self.df_all_pairs_positions = pd.DataFrame()
 
+    def get_client(self, key: str, secret: str):
+        if self.exchange == "binance":
+            return Binance(key=key, secret=secret)
+        elif self.exchange == "ftx":
+            return FTX(key=key, secret=secret)
+
     def get_freq(self) -> str:
         """
         Returns:
@@ -135,19 +150,22 @@ class BackTest:
         Returns: dataframe with usable format.
         """
 
-        if self.client.get_server_time()['serverTime'] < kline[-1][6]:
-            del kline[-1]
+        if self.exchange == "binance":
 
-        df = pd.DataFrame(kline, columns=DATA_FORMATING['binance']['columns'])
-        for var in DATA_FORMATING['binance']['num_var']:
-            df[var] = pd.to_numeric(df[var], downcast="float")
+            if self.client.get_server_time() < kline[-1][6]:
+                del kline[-1]
 
-        df['next_open'] = df['open'].shift(-1)
+            df = pd.DataFrame(kline, columns=DATA_FORMATING['binance']['columns'])
+            for var in DATA_FORMATING['binance']['num_var']:
+                df[var] = pd.to_numeric(df[var], downcast="float")
 
-        # df['timestamp'] = df['open_time']
+            df['next_open'] = df['open'].shift(-1)
 
-        # for var in DATA_FORMATING['binance']['date_var']:
-        #     df[var] = pd.to_datetime(df[var], unit='ms')
+        elif self.exchange == "ftx":
+            df = pd.DataFrame(kline)
+            df.drop('startTime', axis=1, inplace=True)
+            df.columns = ['open_time', 'open', 'high', 'low', 'close', 'volume']
+            df['close_time'] = df['open_time'].shift(-1) - 1
 
         return df
 
@@ -156,19 +174,16 @@ class BackTest:
         Returns:
             all the futures pairs we can to trade.
         """
-        list_pair = []
-        all_pair = self.client.futures_symbol_ticker()
+        all_pair = self.client.get_all_pairs()
 
-        for pair in all_pair:
-            if 'USDT' in pair['symbol'] and pair['symbol'] not in EXCEPTION_LIST_BINANCE\
-                    and '_2' not in pair['symbol']:
-                list_pair.append(pair['symbol'])
-
-        return list_pair
+        if self.exchange == 'ftx':
+            return FTX_PAIRS
+        elif self.exchange == 'binance':
+            return BINANCE_PAIRS
 
     def get_all_historical_data(self,
                                 pair: str,
-                                market: str = 'futures') -> pd.DataFrame:
+                                ) -> pd.DataFrame:
         """
         Args:
             market: spot or futures
@@ -180,15 +195,8 @@ class BackTest:
             all the data since 1st January 2017 to 1st January 2022.
         """
 
-        if market == 'futures':
-            get_klines = self.client.futures_historical_klines
-        elif market == 'spot':
-            get_klines = self.client.get_historical_klines
-        else:
-            raise Exception('Please enter a valid market (futures or market)')
-
         try:
-            df = pd.read_csv(f'database/{market}/hist_{pair}_{self.candle}.csv')
+            df = pd.read_csv(f'database/{self.exchange}/hist_{pair}_{self.candle}.csv')
 
             end_date_data_ts = df['open_time'].max()
             # milliseconds
@@ -209,17 +217,19 @@ class BackTest:
                 df = pd.concat([df, new_df])
                 df = df.drop_duplicates(subset=['open_time'])
 
-                df.to_csv(f'database/{market}/hist_{pair}_{self.candle}.csv', index=False)
+                df.to_csv(f'database/{self.exchange}/hist_{pair}_{self.candle}.csv', index=False)
 
         except:
-            klines = get_klines(pair,
-                                self.candle,
-                                datetime(2019, 1, 1).strftime('%d %b, %Y'),
-                                self.end.strftime('%d %b, %Y'))
+            klines = self.client.get_historical(
+                pair=pair,
+                interval=self.candle,
+                start_time=datetime(2019, 1, 1).strftime('%d %b, %Y'),
+                end_time=self.end.strftime('%d %b, %Y')
+            )
 
             df = self._data_fomating(klines)
 
-            df.to_csv(f'database/{market}/hist_{pair}_{self.candle}.csv', index=False)
+            df.to_csv(f'database/{self.exchange}/hist_{pair}_{self.candle}.csv', index=False)
 
         for var in DATA_FORMATING['binance']['date_var']:
             df[var] = pd.to_datetime(df[var], unit='ms')
@@ -448,10 +458,12 @@ class BackTest:
             df_1m = pd.read_csv(f'database/futures/hist_{pair}_1m.csv')
         except:
             print(f'DOWNLOAD {pair} 1m')
-            klines = self.client.futures_historical_klines(pair,
-                                '1m',
-                                datetime(2018, 1, 1).strftime('%d %b, %Y'),
-                                self.end.strftime('%d %b, %Y'))
+            klines = self.client.get_historical(
+                pair=pair,
+                interval='1m',
+                start_time=datetime(2019, 1, 1).strftime('%d %b, %Y'),
+                end_time=self.end.strftime('%d %b, %Y')
+            )
 
             df_1m = self._data_fomating(klines)
 
@@ -461,7 +473,6 @@ class BackTest:
 
             df_1m = df_1m.set_index('timestamp')
             df_1m['next_open'] = df_1m['open'].shift(-1)
-
 
         df_1m['open_time'] = pd.to_datetime(df_1m.open_time)
         df_1m['last_24h_volume'] = df_1m['quote_asset_volume'].rolling(min_periods=1, window=60*24).sum()
