@@ -15,6 +15,21 @@ class Binance:
         self.historical_limit = 1000
 
     # STANDARDIZED FUNCTIONS
+
+    def get_server_time(self) -> int:
+        response = self._client.time()
+        return response['serverTime']
+
+    def get_all_pairs(self) -> list:
+        info = self._client.exchange_info()
+
+        list_pairs = []
+
+        for pair in info['symbols']:
+            list_pairs.append(pair['symbol'])
+
+        return list_pairs
+
     def _get_earliest_valid_timestamp(self, symbol: str, interval: str):
         """
         Get the earliest valid open timestamp from Binance
@@ -104,13 +119,6 @@ class Binance:
     def get_tickers_price(self):
         return self._client.ticker_price()
 
-    def get_server_time(self) -> dict:
-        return self._client.time()
-
-    def get_all_pairs(self) -> list:
-        info = self._client.exchange_info()
-        return info['symbols']
-
     def get_balance(self) -> dict:
         return self._client.balance(recvWindow=6000)
 
@@ -172,28 +180,4 @@ class Binance:
 
 
 client = Binance(key=config("BinanceAPIKey"), secret=config("BinanceAPISecret"))
-
-
-# balance = client.get_balance()
-#
-# account = client.get_account()
-#
-# positions = client.get_positions()å
-#
-# client.change_position_mode(is_dual_side="false")
-
-# client.open_order(pair="ETHUSDT", side="BUY", side_type="MARKET", quantity=0.01, price=0)
-
-# start = datetime(2020, 1, 1).strftime('%d %b, %Y')
-# end = datetime(2022, 1, 1).strftime('%d %b, %Y')
-#
-# data = client.get_current_account()
-#
-# for x in data['positions']:
-#     if x['symbol'] == 'ETHUSDT':
-#         print(x)
-#
-# tickers = client.get_tickers_price()
-
-# change_position_mode = client.change_position_mode(is_dual_side="false")
 

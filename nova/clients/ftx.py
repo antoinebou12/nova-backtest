@@ -5,6 +5,7 @@ import hmac
 from decouple import config
 import re
 from datetime import datetime
+import calendar
 
 
 class FTX:
@@ -31,18 +32,44 @@ class FTX:
         prepared.headers['FTX-TS'] = str(ts)
         return request, prepared
 
-    def get_sub_accounts(self):
-        _request, _prepared = self._create_request(end_point="/subaccounts", request_type="GET")
-        response = self._session.send(_prepared)
-        return response.json()
+    # STANDARDIZED FUNCTIONS
+    @staticmethod
+    def get_server_time() -> int:
+        return int(time.time() * 1000)
 
-    def get_sub_accounts_balance(self, sub_account_name: str):
+    def get_all_pairs(self):
         _request, _prepared = self._create_request(
-            end_point=f"/subaccounts/{sub_account_name}/balances",
+            end_point=f"/futures",
             request_type="GET"
         )
         response = self._session.send(_prepared)
-        return response.json()
+        data = response.json()
+
+        list_pairs = []
+        for pair in data['result']:
+            list_pairs.append(pair['name'])
+        return list_pairs
+
+    def _get_earliest_valid_timestamp(self, pair: str):
+        """
+        Get the earliest valid open timestamp from Binance
+        Args:
+            symbol: Name of symbol pair -- BNBBTC
+            interval: Binance Kline interval
+
+        :return: first valid timestamp
+        """
+
+        request_name = f"/markets/{pair}/candles?resolution=172800&start_time={0}&end_time={int(time.time())}"
+
+        _request, _prepared = self._create_request(
+            end_point=f"{request_name}",
+            request_type="GET"
+        )
+
+        response = self._session.send(_prepared)
+        data = response.json()
+        return int(data['result'][0]['time'] / 1000)
 
     @staticmethod
     def _get_interval_time(interval: str):
@@ -69,29 +96,9 @@ class FTX:
     @staticmethod
     def _get_timestamp_time(str_time: str):
         date = datetime.strptime(str_time, "%d %b, %Y")
+
         trans = date.timetuple()
-        return int(time.mktime(trans))
-
-    def _get_earliest_valid_timestamp(self, pair: str):
-        """
-        Get the earliest valid open timestamp from Binance
-        Args:
-            symbol: Name of symbol pair -- BNBBTC
-            interval: Binance Kline interval
-
-        :return: first valid timestamp
-        """
-
-        request_name = f"/markets/{pair}/candles?resolution=172800&start_time={0}&end_time={int(time.time())}"
-
-        _request, _prepared = self._create_request(
-            end_point=f"{request_name}",
-            request_type="GET"
-        )
-
-        response = self._session.send(_prepared)
-        data = response.json()
-        return int(data['result'][0]['time']/1000)
+        return int(calendar.timegm(trans))
 
     def get_historical(self, pair: str, interval: str, start_time: str, end_time: str):
         """
@@ -122,8 +129,9 @@ class FTX:
         while True:
 
             end_ts = start_ts + interval_time * self.historical_limit
+            end_t = min(end_ts, end)
 
-            request_name = f"/markets/{pair}/candles?resolution={interval_time}&start_time={start_ts}&end_time={end_ts}"
+            request_name = f"/markets/{pair}/candles?resolution={interval_time}&start_time={start_ts}&end_time={end_t}"
 
             _request, _prepared = self._create_request(
                 end_point=f"{request_name}",
@@ -139,7 +147,7 @@ class FTX:
                 output_data += data['result']
 
             # increment next call by our timeframe
-            start_ts = int(data['result'][-1]['time']/1000)
+            start_ts = int(data['result'][-1]['time']/1000) + interval_time
 
             # exit loop if we reached end_ts before reaching <limit> klines
             if end_ts and start_ts >= end:
@@ -152,9 +160,14 @@ class FTX:
 
         return output_data
 
-    def get_all_pairs(self):
+    def get_sub_accounts(self):
+        _request, _prepared = self._create_request(end_point="/subaccounts", request_type="GET")
+        response = self._session.send(_prepared)
+        return response.json()
+
+    def get_sub_accounts_balance(self, sub_account_name: str):
         _request, _prepared = self._create_request(
-            end_point=f"/futures",
+            end_point=f"/subaccounts/{sub_account_name}/balances",
             request_type="GET"
         )
         response = self._session.send(_prepared)
