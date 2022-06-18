@@ -301,33 +301,6 @@ class FTX:
         pass
 
 
-client = FTX(key=config("ftxAPIkey"), secret=config("ftxAPIsecret"))
-
-
-start_timing = datetime(2020, 1, 1).strftime('%d %b, %Y')
-end_timing = datetime(2022, 1, 1).strftime('%d %b, %Y')
-
-# accounts = client.get_account()
-# accounts['result']
-#
-# position = client.get_positions()
-# position['result']
-
-
-change_leverage = client.change_leverage(leverage=5)
-
-orders = client.get_opened_orders_pair(pair="SRM-PERP")
-
-# data_extracted = client.get_historical(
-#     pair="SRM-PERP",
-#     interval="1h",
-#     start_time=start_timing,
-#     end_time=end_timing
-# )
-
-
-
-
 
 
 

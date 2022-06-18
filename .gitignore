@@ -1,3 +1,5 @@
 .idea
-.env
+../nova-algo/.env
 database/
+.env
+.env

@@ -179,5 +179,4 @@ class Binance:
         pass
 
 
-client = Binance(key=config("BinanceAPIKey"), secret=config("BinanceAPISecret"))
 
