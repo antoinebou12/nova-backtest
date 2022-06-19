@@ -167,6 +167,8 @@ class BackTest:
             df.columns = ['open_time', 'open', 'high', 'low', 'close', 'volume']
             df['close_time'] = df['open_time'].shift(-1) - 1
 
+            df['next_open'] = df['open'].shift(-1)
+
         return df
 
     def get_list_pair(self) -> list:
