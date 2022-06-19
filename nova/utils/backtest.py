@@ -236,9 +236,9 @@ class BackTest:
 
         df = df.set_index('open_time', drop=False)
 
-        # Make sure we don't miss a row
-        assert not (False in (df['open_time'] == df['open_time'].shift(1) + self.time_step).values[1:]), \
-            'Missing a row in historical DataFrame'
+        # # Make sure we don't miss a row
+        # assert not (False in (df['open_time'] == df['open_time'].shift(1) + self.time_step).values[1:]), \
+        #     'Missing a row in historical DataFrame'
 
         return df[(df.open_time >= self.start)]
 
