@@ -34,6 +34,7 @@ jobs:
       - name: Update novalabs venv
         run: |
           . /root/miniconda3/bin/activate novalabs
+          pip uninstall novalabs
           pip install novalabs
           conda deactivate
       
