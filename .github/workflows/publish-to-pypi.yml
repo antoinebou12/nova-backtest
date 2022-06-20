@@ -33,7 +33,7 @@ jobs:
     steps:
       - name: Update novalabs venv
         run: |
-          conda activate novalabs
+          $CONDA/bin/activate novalabs
           pip install novalabs
           conda deactivate
       
