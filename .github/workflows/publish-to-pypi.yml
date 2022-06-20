@@ -35,7 +35,7 @@ jobs:
         run: |
           . /root/miniconda3/bin/activate novalabs
           pip uninstall -y novalabs
-          pip install -y novalabs
+          pip install novalabs
           conda deactivate
       
     
