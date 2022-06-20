@@ -26,4 +26,15 @@ jobs:
         uses: pypa/gh-action-pypi-publish@master
         with:
           password: ${{ secrets.PYPI_API_TOKEN }}
+          
+  update-production:
+    name: Update 📦 nova-python on production server
+    runs-on: self-hosted
+    steps:
+      - name: Update novalabs venv
+        run: |
+          conda activate novalabs
+          pip install novalabs
+          conda deactivate
+      
     
