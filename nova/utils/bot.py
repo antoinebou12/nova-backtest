@@ -8,8 +8,11 @@ from datetime import datetime, timedelta
 import random
 import re
 from nova.api.nova_client import NovaClient
+from nova.clients.binance import Binance
+from nova.clients.ftx import FTX
 import time
-from nova.utils.constant import POSITION_PROD_COLUMNS, BINANCE_KLINES_COLUMNS, EXCEPTION_LIST_BINANCE
+from nova.utils.constant import POSITION_PROD_COLUMNS, BINANCE_KLINES_COLUMNS, FTX_PAIRS, BINANCE_PAIRS
+
 
 import aiohttp
 import asyncio
@@ -18,9 +21,12 @@ import logging
 import logging.handlers
 
 
-class Strategy(TelegramBOT):
+class Bot(TelegramBOT):
 
     def __init__(self,
+                 exchange: str,
+                 key: str,
+                 secret: str,
                  bot_id: str,
                  is_logging: bool,
 
@@ -69,6 +75,9 @@ class Strategy(TelegramBOT):
         self.position_opened = pd.DataFrame(columns=POSITION_PROD_COLUMNS)
         self.prod_data = {}
         self.nova = NovaClient(config('NovaAPISecret'))
+
+        self.exchange = exchange
+        self.client = self.get_client(key=key, secret=secret)
 
         # Get bot name
         # self.bot_name = self.nova.read_bot(bot_id)
@@ -120,42 +129,42 @@ class Strategy(TelegramBOT):
 
         self.time_step = self.get_timedelta_unit()
 
-    def set_isolated_margin(self):
+    def get_client(self, key: str, secret: str):
+        if self.exchange == "binance":
+            return Binance(key=key, secret=secret)
+        elif self.exchange == "ftx":
+            return FTX(key=key, secret=secret)
 
-        info_pairs = self.client.futures_position_information()
+    def setup_binance(self):
 
-        for info in info_pairs:
+        # ISOLATE MARGIN TYPE -> ISOLATED
+
+        positions_info = self.client.get_positions()
+
+        for info in positions_info:
             if info['marginType'] != 'isolated':
-                self.client.futures_change_margin_type(symbol=info['symbol'],
-                                                       marginType='ISOLATED',
-                                                       timestamp=int(datetime.timestamp(datetime.now())))
+                self.client.change_margin_type(
+                    symbol=info['symbol'],
+                    marginType='ISOLATED'
+                )
+
+            if int(info['leverage']) != self.leverage:
+                self.client.change_leverage(
+                    pair=info['symbol'],
+                    leverage=self.leverage
+                )
 
     def get_list_pair(self):
-
-        raw_list = []
-
-        all_pair = self.client.futures_symbol_ticker()
-        for pair in all_pair:
-            if pair['symbol'][-4:] == 'USDT' and pair['symbol'] not in EXCEPTION_LIST_BINANCE \
-                    and '_2' not in pair['symbol']:
-                raw_list.append(pair['symbol'])
-
-        return raw_list
-
-    def setup_leverage(self, pair: str):
         """
-        Note: this function execute n API calls with n representing the number of pair in the list
-        Args:
-            pair: string that represent the pair you want to setup the leverage
-            lvl: integer that increase
-
-        Returns: None, This function update the leverage setting
+        Returns:
+            all the futures pairs we can to trade.
         """
+        all_pair = self.client.get_all_pairs()
 
-        response = self.client.futures_change_leverage(symbol=pair, leverage=self.leverage)
-
-        assert response['leverage'] == self.leverage
-        assert response['symbol'] == pair
+        if self.exchange == 'ftx':
+            return FTX_PAIRS
+        elif self.exchange == 'binance':
+            return BINANCE_PAIRS
 
     def get_timedelta_unit(self) -> timedelta:
         """
@@ -271,19 +280,7 @@ class Strategy(TelegramBOT):
 
             await asyncio.gather(*tasks)
 
-    def get_quantity_precision(self, pair: str) -> tuple:
-        """
-        Note: => This function execute 1 API call to binance
-        Args:
-            pair: string variable that represent the pair ex: 'BTCUSDT'
-        Returns: a tuple containing the quantity precision and the price precision needed for the pair
-        """
-        info = self.client.futures_exchange_info()
-        for x in info['symbols']:
-            if x['pair'] == pair:
-                return x['quantityPrecision'], x['pricePrecision']
-
-    def get_price_binance(self, pair: str) -> float:
+    def get_last_price(self, pair: str) -> float:
         """
         Args:
             pair: string variable that represent the pair ex: 'BTCUSDT'
@@ -298,7 +295,7 @@ class Strategy(TelegramBOT):
         Returns:
             Float that represents the final position size taken by the bot
         """
-        if not(self.geometric_size):
+        if not self.geometric_size:
             pos_size = self.position_size * self.bankroll
         else:
             pos_size = self.position_size * (self.bankroll + self.currentPNL)
@@ -331,14 +328,12 @@ class Strategy(TelegramBOT):
     def enter_position(self,
                        action: int,
                        pair: str,
-                       bot_name: str,
                        tp: float,
                        sl: float):
         """
         Args:
             action: this is an integer that can get the value 1 (for long) or -1 (for short)
             pair: is a string the represent the pair we are entering in position.
-            bot_name: is the name of the bot that is trading this pair
             tp: take profit price
             sl: stop loss price
         Returns:
@@ -349,59 +344,49 @@ class Strategy(TelegramBOT):
         prc = self.get_price_binance(pair)
         size = self.get_position_size()
 
-        # Setup leverage
-
-        self.setup_leverage(pair)
-
         if size == 0:
             self.print_log_send_msg(f'Balance too low')
             self.telegram_bot_sendtext(f'Tried to enter in position for {pair} but balance is too low')
             return 0
 
-        q_precision, p_precision = self.get_quantity_precision(pair)
-
         # 2 - derive the quantity from the previous variables
         quantity = (size / prc)
-        quantity = float(round(quantity, q_precision))
 
         # 3 - build the order information {side, tp, sl, type and closing side}
         if action == 1:
             side = 'BUY'
-            prc_tp = float(round(tp, p_precision))
-            prc_sl = float(round(sl, p_precision))
+            prc_tp = tp
+            prc_sl = sl
             type_pos = 'LONG'
             closing_side = 'SELL'
         else:
             side = 'SELL'
-            prc_tp = float(round(tp, p_precision))
-            prc_sl = float(round(sl, p_precision))
+            prc_tp = tp
+            prc_sl = sl
             type_pos = 'SHORT'
             closing_side = 'BUY'
 
         # 4 - send the order to the exchange
-        order = self.client.futures_create_order(
-            symbol=pair,
+        order = self.client.open_order(
+            pair=pair,
             side=side,
-            type='MARKET',
             quantity=quantity
         )
 
         # 5 - send the tp order to the exchange
-        tp_open = self.client.futures_create_order(
-            symbol=pair,
+        tp_open = self.client.take_profit_order(
+            pair=pair,
             side=closing_side,
-            type='TAKE_PROFIT_MARKET',
-            stopPrice=prc_tp,
-            closePosition=True
+            quantity=quantity,
+            tp_price=prc_tp
         )
 
         # 6 - send the sl order to the exchange
-        sl_open = self.client.futures_create_order(
-            symbol=pair,
+        sl_open = self.client.stop_loss_order(
+            pair=pair,
             side=closing_side,
-            type='STOP_MARKET',
-            stopPrice=prc_sl,
-            closePosition=True
+            quantity=quantity,
+            sl_price=prc_sl,
         )
 
         # 7 - create the position data in nova labs backend
@@ -451,15 +436,15 @@ class Strategy(TelegramBOT):
     def _update_user_touched(self, row_pos: dict, df_orders: pd.DataFrame):
 
         if row_pos.sl_id in list(df_orders.orderId):
-            self.client.futures_cancel_order(
-                symbol=row_pos.pair,
-                orderId=row_pos.sl_id
+            self.client.cancel_order(
+                pair=row_pos.pair,
+                order_id=row_pos.sl_id
             )
 
         if row_pos.tp_id in list(df_orders.orderId):
-            self.client.futures_cancel_order(
-                symbol=row_pos.pair,
-                orderId=row_pos.tp_id
+            self.client.cancel_order(
+                pair=row_pos.pair,
+                order_id=row_pos.tp_id
             )
 
         # self.nova.update_position(
@@ -542,9 +527,9 @@ class Strategy(TelegramBOT):
 
                     # 3.1.1 if the sl order still exit -> close it
                     if row.sl_id in list(df_orders.orderId):
-                        self.client.futures_cancel_order(
-                            symbol=row.pair,
-                            orderId=row.sl_id
+                        self.client.cancel_order(
+                            pair=row.pair,
+                            order_id=row.sl_id
                         )
 
                     exits = df_tx[df_tx['orderId'] == row.tp_id]
@@ -568,9 +553,9 @@ class Strategy(TelegramBOT):
                     self.print_log_send_msg(f'SL {row.pair}')
 
                     if row.tp_id in list(df_orders.orderId):
-                        self.client.futures_cancel_order(
-                            symbol=row.pair,
-                            orderId=row.tp_id
+                        self.client.cancel_order(
+                            pair=row.pair,
+                            order_id=row.tp_id
                         )
 
                     exits = df_tx[df_tx['orderId'] == row.sl_id]
@@ -696,10 +681,9 @@ class Strategy(TelegramBOT):
         """
 
         # Exit send on the market
-        order = self.client.futures_create_order(
-            symbol=pair,
+        order = self.client.close_position_order(
+            pair=pair,
             side=side,
-            type='MARKET',
             quantity=quantity
         )
 
@@ -770,38 +754,38 @@ class Strategy(TelegramBOT):
                 )
 
                 # cancel sl order
-                self.client.futures_cancel_order(
-                    symbol=row.pair,
-                    orderId=row.sl_id
+                self.client.cancel_order(
+                    pair=row.pair,
+                    order_id=row.sl_id
                 )
 
                 # cancel tp order
-                self.client.futures_cancel_order(
-                    symbol=row.pair,
-                    orderId=row.tp_id
+                self.client.cancel_order(
+                    pair=row.pair,
+                    order_id=row.tp_id
                 )
 
     def update_tp(self,
                   pair: str,
                   tp_id: str,
                   new_tp_price: float,
+                  quantity: float,
                   side: str):
 
         print(f"Update Take profit order: {pair}")
 
         # Cancel old Take profit order
-        self.client.futures_cancel_order(
-            symbol=pair,
-            orderId=tp_id
+        self.client.cancel_order(
+            pair=pair,
+            order_id=tp_id
         )
 
         # Create new Take profit order
-        tp_open = self.client.futures_create_order(
-            symbol=pair,
+        tp_open = self.client.take_profit_order(
+            pair=pair,
             side=side,
-            type='TAKE_PROFIT_MARKET',
-            stopPrice=new_tp_price,
-            closePosition=True
+            tp_price=new_tp_price,
+            quantity=quantity
         )
 
         self.position_opened[pair]['tp_id'] = tp_open['orderId']
@@ -811,23 +795,23 @@ class Strategy(TelegramBOT):
                   pair: str,
                   sl_id: str,
                   new_sl_price: float,
+                  quantity: float,
                   side: str):
 
         print(f"Update Stop loss order: {pair}")
 
         # Cancel old Stop loss order
-        self.client.futures_cancel_order(
-            symbol=pair,
-            orderId=sl_id
+        self.client.cancel_order(
+            pair=pair,
+            order_id=sl_id
         )
 
         # Create new Stop loss order
-        sl_open = self.client.futures_create_order(
-            symbol=pair,
+        sl_open = self.client.stop_loss_order(
+            pair=pair,
             side=side,
-            type='STOP_MARKET',
-            stopPrice=new_sl_price,
-            closePosition=True
+            sl_price=new_sl_price,
+            quantity=quantity
         )
 
         self.position_opened[pair]['tp_id'] = sl_open['orderId']
@@ -850,18 +834,6 @@ class Strategy(TelegramBOT):
                 entry_order_id=row.id,
                 nova_id=row.nova_id,
                 exit_type=exit_type
-            )
-
-            # cancel sl order
-            self.client.futures_cancel_order(
-                symbol=row.pair,
-                orderId=row.sl_id
-            )
-
-            # cancel tp order
-            self.client.futures_cancel_order(
-                symbol=row.pair,
-                orderId=row.tp_id
             )
 
     def print_log_send_msg(self, msg: str, error: bool = False):
@@ -976,15 +948,11 @@ class Strategy(TelegramBOT):
                             # 13 - if action is different from 0
                             if action != 0:
 
-                                # 14 - send entering position
-                                self.setup_leverage(pair)
-
                                 # 15 - send entering position
                                 self.print_log_send_msg(f'{pair} action is {action}')
 
                                 self.enter_position(action=action,
                                                     pair=pair,
-                                                    bot_name=self.bot_name,
                                                     tp=take_profit_price,
                                                     sl=stop_loss_price
                                                     )

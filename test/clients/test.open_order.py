@@ -1,14 +1,14 @@
 from nova.clients.binance import Binance
 from decouple import config
 
-from datetime import datetime
-
 client = Binance(key=config("BinanceAPIKey"), secret=config("BinanceAPISecret"))
 
+_pair = "BTCUSDT"
+_side = "BUY"
+_quantity = 0.000731
 
-positions = client.get_positions()
-
-for x in positions:
-    print(x)
-
-
+response = client.open_position_order(
+    pair=_pair,
+    side=_side,
+    quantity=_quantity
+)

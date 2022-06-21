@@ -1,6 +1,4 @@
 from binance.um_futures import UMFutures
-from decouple import config
-from datetime import datetime
 from nova.clients.helpers import interval_to_milliseconds, convert_ts_str
 import time
 
@@ -14,8 +12,21 @@ class Binance:
         self._client = UMFutures(key=key, secret=secret)
         self.historical_limit = 1000
 
-    # STANDARDIZED FUNCTIONS
+        self.pair_info = self._get_pair_info()
 
+    def _get_pair_info(self):
+        info = self._client.exchange_info()
+
+        output = {}
+
+        for x in info['symbols']:
+            output[x['symbol']] = {}
+            output[x['symbol']]['quantityPrecision'] = x['quantityPrecision']
+            output[x['symbol']]['pricePrecision'] = x['pricePrecision']
+
+        return output
+
+    # STANDARDIZED FUNCTIONS
     def get_server_time(self) -> int:
         response = self._client.time()
         return response['serverTime']
@@ -155,28 +166,93 @@ class Binance:
     def get_income_history(self):
         return self._client.get_income_history(recvWindow=6000)
 
-    def open_order(self, pair: str, side: str, side_type: str, quantity: float, price: float):
+    def open_position_order(self, pair: str, side: str, quantity: float):
+        """
+        Note -> Each Open Order
+        Args:
+            pair:
+            side:
+            quantity:
+
+        Returns:
+
+        """
+
+        _quantity = float(round(quantity, self.pair_info[pair]['quantityPrecision']))
+
         return self._client.new_order(
             symbol=pair,
             side=side,
-            type=side_type,
-            quantity=quantity,
+            type='MARKET',
+            quantity=_quantity,
         )
 
-    def take_profit_order(self):
-        pass
+    def take_profit_order(self, pair: str, side: str, quantity: float, tp_price: float):
+        """
+        Notes -> When using closing position we don't need to specify the quantity
+        Args:
+            pair:
+            side:
+            quantity:
+            tp_price:
 
-    def stop_loss_order(self):
-        pass
+        Returns:
 
-    def close_position_order(self):
-        pass
+        """
+        _quantity = float(round(quantity, self.pair_info[pair]['quantityPrecision']))
+        _price = float(round(tp_price,  self.pair_info[pair]['pricePrecision']))
 
-    def cancel_order(self):
-        pass
+        return self._client.new_order(
+            symbol=pair,
+            side=side,
+            type='TAKE_PROFIT_MARKET',
+            stopPrice=_price,
+            closePosition=True
+        )
+
+    def stop_loss_order(self,  pair: str, side: str, quantity: float, sl_price: float):
+        _quantity = float(round(quantity, self.pair_info[pair]['quantityPrecision']))
+        _price = float(round(sl_price, self.pair_info[pair]['pricePrecision']))
+
+        return self._client.new_order(
+            symbol=pair,
+            side=side,
+            type='STOP_MARKET',
+            stopPrice=_price,
+            closePosition=True
+        )
+
+    def close_position_order(self, pair: str, side: str, quantity: float):
+        """
+        Note : it's the exact function as open_position_order but it is used to close position
+
+        Args:
+            pair:
+            side:
+            quantity:
+
+        Returns:
+
+        """
+        _quantity = float(round(quantity, self.pair_info[pair]['quantityPrecision']))
+
+        return self._client.new_order(
+            symbol=pair,
+            side=side,
+            type='MARKET',
+            quantity=_quantity,
+        )
+
+    def cancel_order(self, pair: str, order_id: str):
+        return self._client.cancel_order(
+            symbol=pair,
+            orderId=order_id,
+            recvWindow=2000
+        )
 
     def cancel_all_orders(self):
         pass
 
-
+    def close_all_positions(self):
+        pass
 
