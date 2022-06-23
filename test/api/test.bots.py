@@ -29,7 +29,7 @@ def test_create_bot():
             "bankRoll": bankRoll,
             "totalProfit": totalProfit,
             "status": status,
-            "strategy": strategy,
+            "bot": strategy,
             "exchangeKey": exchangeKey,
             "pairs": pairs,
         }
@@ -52,7 +52,7 @@ def test_update_bot():
             "bankRoll": 2000,
             "totalProfit": totalProfit,
             "status": status,
-            "strategy": strategy,
+            "bot": strategy,
         }
     }
 

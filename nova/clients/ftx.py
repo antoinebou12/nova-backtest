@@ -1,8 +1,6 @@
-import pandas as pd
 from requests import Request, Session
 import time
 import hmac
-from decouple import config
 import re
 from datetime import datetime
 import calendar
@@ -19,6 +17,7 @@ class FTX:
         self._session = Session()
         self.historical_limit = 1500
 
+    # API REQUEST FORMAT
     def _create_request(self, end_point: str, request_type: str, **kwargs):
         ts = int(time.time() * 1000)
         request = Request(request_type, f'{self.based_endpoint}{end_point}', **kwargs)

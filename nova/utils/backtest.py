@@ -22,7 +22,7 @@ simplefilter(action="ignore", category=pd.errors.PerformanceWarning)
 
 class BackTest:
     """
-    This class helps for back testing a strategy.
+    This class helps for back testing a bot.
     :parameter
         - candle : the candle size (ex: '15m')
         - list_pair : the list of pairs we want to back test
@@ -596,7 +596,7 @@ class BackTest:
                  self.df_pos[f'short_profit_{pair}'][self.df_pos.index > begin], label='Short Profit')
 
         plt.legend()
-        plt.title(f"Backtest {self.strategy_name} strategy for {pair}")
+        plt.title(f"Backtest {self.strategy_name} bot for {pair}")
         plt.show()
 
     def get_pair_stats(self, df: pd.DataFrame, pair: str):
@@ -605,7 +605,7 @@ class BackTest:
             df : position dataframe that contains all the statistics needed
             pair : string representing the pair we are currently backtesting
         Returns:
-            aggregated statistics pair by pair to evaluate the current strategy and add it to
+            aggregated statistics pair by pair to evaluate the current bot and add it to
             df_stat  dataframe
         """
 
@@ -857,7 +857,7 @@ class BackTest:
     def create_full_statistics(self,
                                since: datetime):
         """
-        This method computes all the statistics on the overall strategy's performances.
+        This method computes all the statistics on the overall bot's performances.
         It prints all theses values in a table and return the dictionary with all the stats.
         """
 

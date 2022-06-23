@@ -53,7 +53,7 @@ class Bot(TelegramBOT):
 
             is_logging: if True will log to TUXN
 
-            candle: candle size on which the strategy will run (ex: 15m)
+            candle: candle size on which the bot will run (ex: 15m)
 
             bankroll: the starting amount of USDT (or BUSD) the bot will trade with (ex: 1000$)
 
@@ -123,9 +123,6 @@ class Bot(TelegramBOT):
         if self.logger:
             self.logger_client = socketio.Client()
             self.logger_client.connect('http://167.114.3.100:5000', wait_timeout=10)
-
-        print('Set all margin type to ISOLATED')
-        self.set_isolated_margin()
 
         self.time_step = self.get_timedelta_unit()
 

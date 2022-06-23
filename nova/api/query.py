@@ -130,7 +130,7 @@ class GraphQuery:
                 pairs{
                     pair
                 }
-                strategy{
+                bot{
                     name
                 }
             }

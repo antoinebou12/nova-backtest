@@ -1,6 +1,8 @@
-from binance.um_futures import UMFutures
-from nova.clients.helpers import interval_to_milliseconds, convert_ts_str
+from nova.clients.helpers import interval_to_milliseconds, convert_ts_str, get_timestamp
 import time
+from requests import Request, Session
+from binance.um_futures import UMFutures
+import hmac
 
 
 class Binance:
@@ -8,14 +10,38 @@ class Binance:
     def __init__(self,
                  key: str,
                  secret: str):
+        self.client = UMFutures(key=key, secret=secret)
 
-        self._client = UMFutures(key=key, secret=secret)
+        self.based_endpoint = "https://fapi.binance.com"
+        self._session = Session()
+
         self.historical_limit = 1000
-
         self.pair_info = self._get_pair_info()
 
-    def _get_pair_info(self):
-        info = self._client.exchange_info()
+    # API REQUEST FORMAT
+    def _create_request(self, end_point: str, request_type: str, **kwargs):
+        ts = get_timestamp()
+        request = Request(request_type, f'{self.based_endpoint}{end_point}', **kwargs)
+        prepared = request.prepare()
+        signature_payload = f'{ts}{prepared.method}{prepared.path_url}'.encode()
+        if prepared.body:
+            signature_payload += prepared.body
+        signature = hmac.new(self.api_secret.encode(), signature_payload, 'sha256').hexdigest()
+        prepared.headers['FTX-KEY'] = self.api_key
+        prepared.headers['FTX-SIGN'] = signature
+        prepared.headers['FTX-TS'] = str(ts)
+        return request, prepared
+
+    # BINANCE SPECIFIC FUNCTION
+    def _get_pair_info(self) -> dict:
+        """
+        Note: This output is used for standardization purpose because binance order api has decimal restriction per
+        pair.
+        Returns:
+            a dict where the key is equal to the pair symbol and the value is a dict that contains
+            the following information "quantityPrecision" and "quantityPrecision".
+        """
+        info = self.client.exchange_info()
 
         output = {}
 
@@ -27,12 +53,63 @@ class Binance:
         return output
 
     # STANDARDIZED FUNCTIONS
+    def setup_account(self, base_asset: str, leverage: int, bankroll: float):
+        """
+        Note: This function is used to setup the parameters of the bot and assert the status
+
+        Args:
+            base_asset:
+            leverage:
+            bankroll:
+
+        Returns:
+        """
+
+        accounts = self.client.account(recvWindow=6000)
+        positions_info = self.client.get_position_risk(recvWindow=6000)
+        position_mode = self.client.get_position_mode(recvWindow=2000)
+
+        for info in positions_info:
+
+            # ISOLATE MARGIN TYPE -> ISOLATED
+            if info['marginType'] != 'isolated':
+                self.client.change_margin_type(
+                    symbol=info['symbol'],
+                    marginType="ISOLATED",
+                    recvWindow=5000
+                )
+
+            # SET LEVERAGE
+            if int(info['leverage']) != leverage:
+                self.client.change_leverage(
+                    symbol=info['symbol'],
+                    leverage=leverage,
+                    recvWindow=6000
+                )
+
+        if position_mode['dualSidePosition']:
+            self.client.change_position_mode(
+                dualSidePosition="false",
+                recvWindow=5000
+            )
+
+        for x in accounts["assets"]:
+
+            if x["asset"] == base_asset:
+                # Assert_1: The account need to have the minimum bankroll
+                assert float(x['availableBalance']) >= bankroll
+                # Assert_2: The account has margin available
+                assert x['marginAvailable']
+
+            if x['asset'] == "BNB" and float(x["availableBalance"]) == 0:
+                print(f"You can save Tx Fees if you transfer BNB in your Future Account")
+
     def get_server_time(self) -> int:
-        response = self._client.time()
+        response = self.client.time()
         return response['serverTime']
 
     def get_all_pairs(self) -> list:
-        info = self._client.exchange_info()
+        info = self.client.exchange_info()
 
         list_pairs = []
 
@@ -50,7 +127,7 @@ class Binance:
 
         :return: first valid timestamp
         """
-        kline = self._client.klines(
+        kline = self.client.klines(
             symbol=symbol,
             interval=interval,
             limit=1,
@@ -95,7 +172,7 @@ class Binance:
         idx = 0
         while True:
             # fetch the klines from start_ts up to max 500 entries or the end_ts if set
-            temp_data = self._client.klines(
+            temp_data = self.client.klines(
                 symbol=pair,
                 interval=interval,
                 limit=self.historical_limit,
@@ -128,43 +205,19 @@ class Binance:
         return output_data
 
     def get_tickers_price(self):
-        return self._client.ticker_price()
+        return self.client.ticker_price()
 
     def get_balance(self) -> dict:
-        return self._client.balance(recvWindow=6000)
+        return self.client.balance(recvWindow=6000)
 
     def get_account(self):
-        return self._client.account(recvWindow=6000)
-
-    def change_leverage(self, pair: str, leverage: int):
-        return self._client.change_leverage(
-            symbol=pair,
-            leverage=leverage,
-            recvWindow=6000
-        )
-
-    def change_position_mode(self, is_dual_side: str) -> dict:
-        return self._client.change_position_mode(
-            dualSidePosition=is_dual_side,
-            recvWindow=5000
-        )
-
-    # BINANCE SPECIFIC FUNCTIONS
-    def change_margin_type(self, pair: str, margin_type: str):
-        return self._client.change_margin_type(
-            symbol=pair,
-            marginType=margin_type,
-            recvWindow=5000
-        )
-
-    def get_position_mode(self):
-        return self._client.get_position_mode(recvWindow=2000)
+        return self.client.account(recvWindow=6000)
 
     def get_positions(self):
-        return self._client.get_position_risk(recvWindow=6000)
+        return self.client.get_position_risk(recvWindow=6000)
 
     def get_income_history(self):
-        return self._client.get_income_history(recvWindow=6000)
+        return self.client.get_income_history(recvWindow=6000)
 
     def open_position_order(self, pair: str, side: str, quantity: float):
         """
@@ -180,7 +233,7 @@ class Binance:
 
         _quantity = float(round(quantity, self.pair_info[pair]['quantityPrecision']))
 
-        return self._client.new_order(
+        return self.client.new_order(
             symbol=pair,
             side=side,
             type='MARKET',
@@ -202,10 +255,10 @@ class Binance:
         _quantity = float(round(quantity, self.pair_info[pair]['quantityPrecision']))
         _price = float(round(tp_price,  self.pair_info[pair]['pricePrecision']))
 
-        return self._client.new_order(
+        return self.client.new_order(
             symbol=pair,
             side=side,
-            type='TAKE_PROFIT_MARKET',
+            type='TAKE_PROFIT',
             stopPrice=_price,
             closePosition=True
         )
@@ -214,7 +267,7 @@ class Binance:
         _quantity = float(round(quantity, self.pair_info[pair]['quantityPrecision']))
         _price = float(round(sl_price, self.pair_info[pair]['pricePrecision']))
 
-        return self._client.new_order(
+        return self.client.new_order(
             symbol=pair,
             side=side,
             type='STOP_MARKET',
@@ -232,11 +285,10 @@ class Binance:
             quantity:
 
         Returns:
-
         """
         _quantity = float(round(quantity, self.pair_info[pair]['quantityPrecision']))
 
-        return self._client.new_order(
+        return self.client.new_order(
             symbol=pair,
             side=side,
             type='MARKET',
@@ -244,7 +296,7 @@ class Binance:
         )
 
     def cancel_order(self, pair: str, order_id: str):
-        return self._client.cancel_order(
+        return self.client.cancel_order(
             symbol=pair,
             orderId=order_id,
             recvWindow=2000
