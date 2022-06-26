@@ -16,9 +16,12 @@ def test_get_server_time(exchange: str):
     assert type(server_time) == int
     assert (server_time > min_dif) and (server_time < max_dif)
 
+#
+# test_get_server_time('binance')
+# test_get_server_time('ftx')
 
-test_get_server_time('binance')
-test_get_server_time('ftx')
 
+client = FTX(key=config("ftxAPIkey"), secret=config("ftxAPIsecret"))
+client.change_leverage(leverage=2)
 
 

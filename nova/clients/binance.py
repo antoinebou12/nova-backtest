@@ -1,8 +1,9 @@
-from nova.clients.helpers import interval_to_milliseconds, convert_ts_str, get_timestamp
+from nova.clients.helpers import interval_to_milliseconds, convert_ts_str
 import time
 from requests import Request, Session
-from binance.um_futures import UMFutures
 import hmac
+from urllib.parse import urlencode
+import hashlib
 
 
 class Binance:
@@ -10,7 +11,9 @@ class Binance:
     def __init__(self,
                  key: str,
                  secret: str):
-        self.client = UMFutures(key=key, secret=secret)
+
+        self.api_key = key
+        self.api_secret = secret
 
         self.based_endpoint = "https://fapi.binance.com"
         self._session = Session()
@@ -19,20 +22,49 @@ class Binance:
         self.pair_info = self._get_pair_info()
 
     # API REQUEST FORMAT
-    def _create_request(self, end_point: str, request_type: str, **kwargs):
-        ts = get_timestamp()
+    def _add_signature(self, payload: dict):
+        payload['timestamp'] = int(time.time() * 1000)
+        query_string = urlencode(payload, True).replace("%40", "@")
+        m = hmac.new(self.api_secret.encode("utf-8"), query_string.encode("utf-8"), hashlib.sha256)
+        payload['signature'] = m.hexdigest()
+        return payload
+
+    def _send_request(self, end_point: str, request_type: str, **kwargs):
         request = Request(request_type, f'{self.based_endpoint}{end_point}', **kwargs)
         prepared = request.prepare()
-        signature_payload = f'{ts}{prepared.method}{prepared.path_url}'.encode()
-        if prepared.body:
-            signature_payload += prepared.body
-        signature = hmac.new(self.api_secret.encode(), signature_payload, 'sha256').hexdigest()
-        prepared.headers['FTX-KEY'] = self.api_key
-        prepared.headers['FTX-SIGN'] = signature
-        prepared.headers['FTX-TS'] = str(ts)
-        return request, prepared
+        prepared.headers['Content-Type'] = "application/json;charset=utf-8"
+        prepared.headers['User-Agent'] = "NovaLabs"
+        prepared.headers['X-MBX-APIKEY'] = self.api_key
+        response = self._session.send(prepared)
+        return response.json()
 
     # BINANCE SPECIFIC FUNCTION
+    def change_position_mode(self, dual_position: str):
+        _params = self._add_signature(payload={"dualSidePosition": dual_position})
+        response = self._send_request(
+            end_point=f"/fapi/v1/positionSide/dual",
+            request_type="POST",
+            params=urlencode(_params, True).replace("%40", "@")
+        )
+        print(response['msg'])
+
+    def get_position_mode(self):
+        _params = self._add_signature(payload={})
+        return self._send_request(
+            end_point=f"/fapi/v1/positionSide/dual",
+            request_type="GET",
+            params=urlencode(_params, True).replace("%40", "@")
+        )
+
+    def change_margin_type(self, pair: str, margin_type: str):
+        _params = self._add_signature(payload={"symbol": pair, "marginType": margin_type})
+        response = self._send_request(
+            end_point=f"/fapi/v1/marginType",
+            request_type="POST",
+            params=urlencode(_params, True).replace("%40", "@")
+        )
+        print(f"{response['msg']}")
+
     def _get_pair_info(self) -> dict:
         """
         Note: This output is used for standardization purpose because binance order api has decimal restriction per
@@ -41,7 +73,7 @@ class Binance:
             a dict where the key is equal to the pair symbol and the value is a dict that contains
             the following information "quantityPrecision" and "quantityPrecision".
         """
-        info = self.client.exchange_info()
+        info = self.get_exchange_info()
 
         output = {}
 
@@ -53,30 +85,49 @@ class Binance:
         return output
 
     # STANDARDIZED FUNCTIONS
+    def change_leverage(self, pair: str, leverage: int):
+        _params = self._add_signature(payload={"symbol": pair, "leverage": leverage})
+        data = self._send_request(
+            end_point=f"/fapi/v1/leverage",
+            request_type="POST",
+            params=urlencode(_params, True).replace("%40", "@")
+        )
+        print(f"{pair} leverage is now set to : x{data['leverage']} with max notional to {data['maxNotionalValue']}")
+
+    def get_exchange_info(self):
+        return self._send_request(
+            end_point=f"/fapi/v1/exchangeInfo",
+            request_type="GET",
+        )
+
+    def get_position_info(self):
+        _params = self._add_signature(payload={})
+        return self._send_request(
+            end_point=f"/fapi/v2/positionRisk",
+            request_type="GET",
+            params=urlencode(_params, True).replace("%40", "@")
+        )
+
+    def get_account_info(self):
+        _params = self._add_signature(payload={})
+        return self._send_request(
+            end_point=f"/fapi/v2/account",
+            request_type="GET",
+            params=urlencode(_params, True).replace("%40", "@")
+        )
+
     def setup_account(self, base_asset: str, leverage: int, bankroll: float):
-        """
-        Note: This function is used to setup the parameters of the bot and assert the status
-
-        Args:
-            base_asset:
-            leverage:
-            bankroll:
-
-        Returns:
-        """
-
-        accounts = self.client.account(recvWindow=6000)
-        positions_info = self.client.get_position_risk(recvWindow=6000)
-        position_mode = self.client.get_position_mode(recvWindow=2000)
+        accounts = self.get_account_info()
+        positions_info = self.get_position_info()
+        position_mode = self.get_position_mode()
 
         for info in positions_info:
 
             # ISOLATE MARGIN TYPE -> ISOLATED
             if info['marginType'] != 'isolated':
-                self.client.change_margin_type(
-                    symbol=info['symbol'],
-                    marginType="ISOLATED",
-                    recvWindow=5000
+                self.change_margin_type(
+                    pair=info['symbol'],
+                    margin_type="ISOLATED",
                 )
 
             # SET LEVERAGE
@@ -88,9 +139,8 @@ class Binance:
                 )
 
         if position_mode['dualSidePosition']:
-            self.client.change_position_mode(
-                dualSidePosition="false",
-                recvWindow=5000
+            self.change_position_mode(
+                dual_position="false",
             )
 
         for x in accounts["assets"]:
@@ -105,20 +155,36 @@ class Binance:
                 print(f"You can save Tx Fees if you transfer BNB in your Future Account")
 
     def get_server_time(self) -> int:
-        response = self.client.time()
-        return response['serverTime']
+        return self._send_request(
+            end_point=f"/fapi/v1/time",
+            request_type="GET"
+        )
 
     def get_all_pairs(self) -> list:
-        info = self.client.exchange_info()
-
+        info = self.get_exchange_info()
         list_pairs = []
-
         for pair in info['symbols']:
             list_pairs.append(pair['symbol'])
-
         return list_pairs
 
-    def _get_earliest_valid_timestamp(self, symbol: str, interval: str):
+    def get_candles(self, pair: str, interval: str, start_time: int, end_time: int, limit: int = None):
+
+        _limit = limit if limit else self.historical_limit
+
+        _params = {
+            "symbol": pair,
+            "interval": interval,
+            "startTime": start_time,
+            "endTime": end_time,
+            "limit": _limit
+        }
+        return self._send_request(
+            end_point=f"/fapi/v1/klines",
+            request_type="GET",
+            params=urlencode(_params, True).replace("%40", "@")
+        )
+
+    def _get_earliest_valid_timestamp(self, pair: str, interval: str):
         """
         Get the earliest valid open timestamp from Binance
         Args:
@@ -127,12 +193,12 @@ class Binance:
 
         :return: first valid timestamp
         """
-        kline = self.client.klines(
-            symbol=symbol,
+        kline = self.get_candles(
+            pair=pair,
             interval=interval,
-            limit=1,
-            startTime=0,
-            endTime=int(time.time() * 1000)
+            start_time=0,
+            end_time=int(time.time() * 1000),
+            limit=1
         )
         return kline[0][0]
 
@@ -159,7 +225,7 @@ class Binance:
         # establish first available start timestamp
         if start_ts is not None:
             first_valid_ts = self._get_earliest_valid_timestamp(
-                symbol=pair,
+                pair=pair,
                 interval=interval
             )
             start_ts = max(start_ts, first_valid_ts)
@@ -172,12 +238,12 @@ class Binance:
         idx = 0
         while True:
             # fetch the klines from start_ts up to max 500 entries or the end_ts if set
-            temp_data = self.client.klines(
-                symbol=pair,
+            temp_data = self.get_candles(
+                pair=pair,
                 interval=interval,
                 limit=self.historical_limit,
-                startTime=start_ts,
-                endTime=end_ts
+                start_time=start_ts,
+                end_time=end_ts
             )
 
             # append this loops data to our output data
@@ -204,107 +270,99 @@ class Binance:
 
         return output_data
 
-    def get_tickers_price(self):
-        return self.client.ticker_price()
+    def get_tickers_price(self, pair: str):
+        _params = {"symbol": pair}
+        return self._send_request(
+            end_point=f"/fapi/v1/ticker/price",
+            request_type="GET",
+            params=urlencode(_params, True).replace("%40", "@")
+        )
 
     def get_balance(self) -> dict:
-        return self.client.balance(recvWindow=6000)
+        _params = self._add_signature(payload={})
+        return self._send_request(
+            end_point=f"/fapi/v2/balance",
+            request_type="GET",
+            params=urlencode(_params, True).replace("%40", "@")
+        )
 
-    def get_account(self):
-        return self.client.account(recvWindow=6000)
+    def open_close_order(self, pair: str, side: str, quantity: float):
+        _params = self._add_signature(
+            payload={
+                "symbol": pair,
+                "side": side,
+                "quantity": float(round(quantity, self.pair_info[pair]['quantityPrecision'])),
+                "type": "MARKET"
+            }
+        )
 
-    def get_positions(self):
-        return self.client.get_position_risk(recvWindow=6000)
-
-    def get_income_history(self):
-        return self.client.get_income_history(recvWindow=6000)
-
-    def open_position_order(self, pair: str, side: str, quantity: float):
-        """
-        Note -> Each Open Order
-        Args:
-            pair:
-            side:
-            quantity:
-
-        Returns:
-
-        """
-
-        _quantity = float(round(quantity, self.pair_info[pair]['quantityPrecision']))
-
-        return self.client.new_order(
-            symbol=pair,
-            side=side,
-            type='MARKET',
-            quantity=_quantity,
+        return self._send_request(
+            end_point=f"/fapi/v1/order",
+            request_type="POST",
+            params=urlencode(_params, True).replace("%40", "@")
         )
 
     def take_profit_order(self, pair: str, side: str, quantity: float, tp_price: float):
-        """
-        Notes -> When using closing position we don't need to specify the quantity
-        Args:
-            pair:
-            side:
-            quantity:
-            tp_price:
 
-        Returns:
-
-        """
         _quantity = float(round(quantity, self.pair_info[pair]['quantityPrecision']))
-        _price = float(round(tp_price,  self.pair_info[pair]['pricePrecision']))
+        _params = self._add_signature(
+            payload={
+                "symbol": pair,
+                "side": side,
+                "type": "TAKE_PROFIT",
+                "stopPrice": float(round(tp_price,  self.pair_info[pair]['pricePrecision'])),
+                "quantity ": True
+            }
+        )
 
-        return self.client.new_order(
-            symbol=pair,
-            side=side,
-            type='TAKE_PROFIT',
-            stopPrice=_price,
-            closePosition=True
+        return self._send_request(
+            end_point=f"/fapi/v1/order",
+            request_type="POST",
+            params=urlencode(_params, True).replace("%40", "@")
         )
 
     def stop_loss_order(self,  pair: str, side: str, quantity: float, sl_price: float):
-        _quantity = float(round(quantity, self.pair_info[pair]['quantityPrecision']))
-        _price = float(round(sl_price, self.pair_info[pair]['pricePrecision']))
 
-        return self.client.new_order(
-            symbol=pair,
-            side=side,
-            type='STOP_MARKET',
-            stopPrice=_price,
-            closePosition=True
+        _quantity = float(round(quantity, self.pair_info[pair]['quantityPrecision']))
+        _params = self._add_signature(
+            payload={
+                "symbol": pair,
+                "side": side,
+                "type": "STOP_MARKET",
+                "stopPrice": float(round(sl_price,  self.pair_info[pair]['pricePrecision'])),
+                "closePosition": True
+            }
         )
 
-    def close_position_order(self, pair: str, side: str, quantity: float):
-        """
-        Note : it's the exact function as open_position_order but it is used to close position
-
-        Args:
-            pair:
-            side:
-            quantity:
-
-        Returns:
-        """
-        _quantity = float(round(quantity, self.pair_info[pair]['quantityPrecision']))
-
-        return self.client.new_order(
-            symbol=pair,
-            side=side,
-            type='MARKET',
-            quantity=_quantity,
+        return self._send_request(
+            end_point=f"/fapi/v1/order",
+            request_type="POST",
+            params=urlencode(_params, True).replace("%40", "@")
         )
 
     def cancel_order(self, pair: str, order_id: str):
-        return self.client.cancel_order(
-            symbol=pair,
-            orderId=order_id,
-            recvWindow=2000
+        _params = self._add_signature(
+            payload={
+                "symbol": pair,
+                "orderId": order_id,
+            }
         )
 
-    def cancel_all_orders(self):
-        pass
+        return self._send_request(
+            end_point=f"/fapi/v1/order",
+            request_type="DELETE",
+            params=urlencode(_params, True).replace("%40", "@")
+        )
 
-    def close_all_positions(self):
-        pass
+    def cancel_pair_orders(self, pair: str):
+        _params = self._add_signature(
+            payload={
+                "symbol": pair,
+            }
+        )
 
+        return self._send_request(
+            end_point=f"/fapi/v1/order",
+            request_type="DELETE",
+            params=urlencode(_params, True).replace("%40", "@")
+        )

@@ -25,6 +25,7 @@ class FTX:
         signature_payload = f'{ts}{prepared.method}{prepared.path_url}'.encode()
         if prepared.body:
             signature_payload += prepared.body
+            print(signature_payload)
         signature = hmac.new(self.api_secret.encode(), signature_payload, 'sha256').hexdigest()
         prepared.headers['FTX-KEY'] = self.api_key
         prepared.headers['FTX-SIGN'] = signature
@@ -54,7 +55,6 @@ class FTX:
         Get the earliest valid open timestamp from Binance
         Args:
             symbol: Name of symbol pair -- BNBBTC
-            interval: Binance Kline interval
 
         :return: first valid timestamp
         """
@@ -195,6 +195,8 @@ class FTX:
             request_type="POST",
             json={"leverage": leverage}
         )
+
+        print(_prepared.body)
 
         response = self._session.send(_prepared)
         return response.json()
