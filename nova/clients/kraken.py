@@ -1,4 +1,3 @@
-from nova.clients.helpers import interval_to_milliseconds, convert_ts_str
 import time
 from requests import Request, Session
 import hmac
@@ -18,7 +17,7 @@ class Kraken:
         self.api_key = key
         self.api_secret = secret
 
-        self.based_url = "https://futures.kraken.com/derivatives"
+        self.based_endpoint = "https://futures.kraken.com/derivatives"
         self._session = Session()
 
         self.historical_limit = 1000
@@ -38,7 +37,7 @@ class Kraken:
         return rebase.decode(), nonce
 
     def _send_request(self, end_point: str, request_type: str, is_signed: bool = False, post_data: str = ""):
-        request = Request(request_type, f'{self.based_url}{end_point}')
+        request = Request(request_type, f'{self.based_endpoint}{end_point}')
         prepared = request.prepare()
         prepared.headers['Content-Type'] = "application/json;charset=utf-8"
         prepared.headers['User-Agent'] = "NovaLabs"
