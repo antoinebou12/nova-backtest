@@ -3,6 +3,11 @@ from decouple import config
 
 
 client = Gate(
-    key=config("coinbaseAPIKey"),
-    secret=config("coinbaseAPISecret"),
+    key=config("gateAPIKey"),
+    secret=config("gateAPISecret"),
 )
+
+data = client.get_pairs()
+
+
+
