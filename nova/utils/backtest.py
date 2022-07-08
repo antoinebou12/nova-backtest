@@ -8,33 +8,15 @@ import random
 import math
 import json
 import joblib
-import requests
-import os
-from nova.utils.constant import EXCEPTION_LIST_BINANCE, VAR_NEEDED_FOR_POSITION, DATA_FORMATING, \
-    FTX_PAIRS, BINANCE_PAIRS
-from nova.clients.binance import Binance
-from nova.clients.ftx import FTX
+from nova.utils.constant import VAR_NEEDED_FOR_POSITION, DATA_FORMATING
 
+from nova.clients.clients import clients
 
 from warnings import simplefilter
 simplefilter(action="ignore", category=pd.errors.PerformanceWarning)
 
 
 class BackTest:
-    """
-    This class helps for back testing a bot.
-    :parameter
-        - candle : the candle size (ex: '15m')
-        - list_pair : the list of pairs we want to back test
-                      * "All pairs" will select all the Binance Futures pairs
-                      * "Random x" will select int(x) random Binance Futures pairs
-                      * ['BTCUSDT', 'ETHUSDT', 'ADAUSDT'] will backtest on those pairs
-        - start : the starting day of the back test
-        - end : the ending day of the back test
-        - fees : fees applied by the exchange (0.04% for binance in taker)
-        - max_pos : maximum number of position holding at the same time
-        - max_holding: number maximum of hours we can hold a position
-    """
 
     def __init__(self,
                  exchange: str,
@@ -47,10 +29,11 @@ class BackTest:
                  fees: float,
                  max_pos: int,
                  max_holding: int,
-                 save_all_pairs_charts: bool=False,
-                 start_bk: float=10000,
-                 slippage: bool=True,
-                 update_data: bool=False):
+                 save_all_pairs_charts: bool = False,
+                 start_bk: float = 10000,
+                 slippage: bool = True,
+                 update_data: bool = False,
+                 pass_phrase: str = ""):
 
         self.exchange = exchange
 
@@ -63,7 +46,7 @@ class BackTest:
             self.scaler_y = joblib.load(f'{directory_fin}/slippage/scaler_y.gz')
             self.model = models.load_model(f'{directory_fin}/slippage/model_slippage_3.h5')
 
-        self.client = self.get_client(key=key, secret=secret)
+        self.client = clients(exchange=exchange, key=key, secret=secret, passphrase=pass_phrase)
 
         self.start_bk = start_bk
         self.actual_bk = self.start_bk
@@ -79,8 +62,6 @@ class BackTest:
         self.save_all_pairs_charts = save_all_pairs_charts
         self.update_data = update_data
         self.time_step = self.get_timedelta_unit()
-
-        self.url_api = "https://fapi.binance.com/fapi/v1/klines"
 
         # Get the list of pairs on which we perform the back test
         if type(self.list_pair).__name__ == 'str':
@@ -113,12 +94,6 @@ class BackTest:
         self.position_cols = []
         self.df_all_pairs_positions = pd.DataFrame()
 
-    def get_client(self, key: str, secret: str):
-        if self.exchange == "binance":
-            return Binance(key=key, secret=secret)
-        elif self.exchange == "ftx":
-            return FTX(key=key, secret=secret)
-
     def get_freq(self) -> str:
         """
         Returns:
@@ -150,18 +125,7 @@ class BackTest:
         Returns: dataframe with usable format.
         """
 
-        if self.exchange == "binance":
-
-            if self.client.get_server_time() < kline[-1][6]:
-                del kline[-1]
-
-            df = pd.DataFrame(kline, columns=DATA_FORMATING['binance']['columns'])
-            for var in DATA_FORMATING['binance']['num_var']:
-                df[var] = pd.to_numeric(df[var], downcast="float")
-
-            df['next_open'] = df['open'].shift(-1)
-
-        elif self.exchange == "ftx":
+        if self.exchange == "ftx":
             df = pd.DataFrame(kline)
             df.drop('startTime', axis=1, inplace=True)
             df.columns = ['open_time', 'open', 'high', 'low', 'close', 'volume']
@@ -169,19 +133,14 @@ class BackTest:
 
             df['next_open'] = df['open'].shift(-1)
 
-        return df
+            return df
 
     def get_list_pair(self) -> list:
         """
         Returns:
             all the futures pairs we can to trade.
         """
-        all_pair = self.client.get_all_pairs()
-
-        if self.exchange == 'ftx':
-            return FTX_PAIRS
-        elif self.exchange == 'binance':
-            return BINANCE_PAIRS
+        return self.client.get_all_pairs()
 
     def get_all_historical_data(self,
                                 pair: str,
@@ -199,59 +158,33 @@ class BackTest:
 
         try:
             df = pd.read_csv(f'database/{self.exchange}/hist_{pair}_{self.candle}.csv')
-
-            end_date_data_ts = df['open_time'].max()
-            # milliseconds
-            end_ts = int(1000 * datetime.timestamp(self.end))
-            last_update_seconds = (end_ts - end_date_data_ts) // 1000
-
             if self.update_data:
                 print("Update data: ", pair)
-
-                nb_candle = last_update_seconds // self.time_step.seconds + 3
-
-                params = dict(symbol=pair, interval=self.candle, limit=nb_candle)
-
-                klines = requests.get(url=self.url_api, params=params).json()
-
-                new_df = self._data_fomating(klines)
-
-                df = pd.concat([df, new_df])
-                df = df.drop_duplicates(subset=['open_time'])
-
+                df = self.client.update_historical(
+                    pair=pair,
+                    interval=self.candle,
+                    current_df=df
+                )
                 df.to_csv(f'database/{self.exchange}/hist_{pair}_{self.candle}.csv', index=False)
-
         except:
-            klines = self.client.get_historical(
+            df = self.client.get_historical(
                 pair=pair,
                 interval=self.candle,
                 start_time=datetime(2019, 1, 1).strftime('%d %b, %Y'),
                 end_time=self.end.strftime('%d %b, %Y')
             )
 
-            df = self._data_fomating(klines)
-
             df.to_csv(f'database/{self.exchange}/hist_{pair}_{self.candle}.csv', index=False)
 
-        for var in DATA_FORMATING['binance']['date_var']:
-            df[var] = pd.to_datetime(df[var], unit='ms')
-
         df = df.set_index('open_time', drop=False)
-
-        # # Make sure we don't miss a row
-        # assert not (False in (df['open_time'] == df['open_time'].shift(1) + self.time_step).values[1:]), \
-        #     'Missing a row in historical DataFrame'
-
         return df[(df.open_time >= self.start)]
 
     def convert_max_holding_to_candle_nb(self) -> int:
         """
-
-        Return the number maximum of candle we can hold a position
-
+        Return:
+            the number maximum of candle we can hold a position
         """
         multi = int(float(re.findall(r'\d+', self.candle)[0]))
-
         if 'm' in self.candle:
             return int(60 / multi * self.max_holding)
         if 'h' in self.candle:
@@ -269,13 +202,10 @@ class BackTest:
                 nan -> no actions
 
         Returns:
-            The function created 4 variables
-                all_entry_price, all_entry_time
+            The function created 2 variables: all_entry_price, all_entry_time
         """
-
         df['all_entry_price'] = np.where(df.all_entry_point.notnull(), df.next_open, np.nan)
         df['all_entry_time'] = np.where(df.all_entry_point.notnull(), df.open_time, np.datetime64('NaT'))
-
         return df
 
     @staticmethod
@@ -284,8 +214,7 @@ class BackTest:
         Args:
             df:
         Returns:
-
-        Create all exit points (TP, SL, max hold or exit signal)
+            Create all exit points (TP, SL, max hold or exit signal)
         """
         all_exit_var = ['closest_sl', 'closest_tp', 'max_hold_date']
 
@@ -314,7 +243,6 @@ class BackTest:
         """
         Args:
             df: dataframe that contains the variables all_entry_point, all_sl and all_tp
-
         Returns:
             the dataframe with 3 new variables closest_sl, closest_tp, max_hold_date
         """

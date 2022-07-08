@@ -4,8 +4,10 @@ from datetime import datetime
 from nova.clients.helpers import convert_ts_str
 
 
-client = Binance(key=config("BinanceAPIKey"), secret=config("BinanceAPISecret"))
+client = Binance(key=config("binanceAPIKey"), secret=config("binanceAPISecret"))
 
+
+# data = client.change_position_mode(dual_position="false")
 # data = client.get_position_info()
 #
 # data = client.get_balance()
@@ -15,27 +17,42 @@ client = Binance(key=config("BinanceAPIKey"), secret=config("BinanceAPISecret"))
 #     leverage=4,
 # )
 
-# start_timing = datetime(2022, 1, 1).strftime('%d %b, %Y')
-# end_timing = datetime(2022, 4, 1).strftime('%d %b, %Y')
-#
-# start_ts = convert_ts_str(start_timing)
-# end_ts = convert_ts_str(end_timing)
-#
+start_timing = datetime(2022, 1, 1).strftime('%d %b, %Y')
+end_timing = datetime(2022, 4, 1).strftime('%d %b, %Y')
+
+start_ts = convert_ts_str(start_timing)
+end_ts = convert_ts_str(end_timing)
+
 # data = client.get_candles(
 #     pair="BTCUSDT",
-#     interval="1d",
+#     interval="15m",
 #     start_time=start_ts,
 #     end_time=end_ts
 # )
 
-# data = client.get_tickers_price("BTCUSDT")
-
-data = client.open_position_order(
+data = client.get_historical(
     pair="BTCUSDT",
-    side="BUY",
-    quantity=0.0012
+    interval="15m",
+    start_time=start_ts,
+    end_time=end_ts
 )
 
+
+data_updated = client.update_historical(
+    pair="BTCUSDT",
+    interval="15m",
+    current_df=data
+)
+
+
+# data = client.get_tickers_price("BTCUSDT")
+
+# data = client.open_position_order(
+#     pair="BTCUSDT",
+#     side="BUY",
+#     quantity=0.0012
+# )
+#
 
 
 
