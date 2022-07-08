@@ -30,7 +30,7 @@ end_ts = convert_ts_str(end_timing)
 #     end_time=end_ts
 # )
 
-data = client.get_historical(
+data_b = client.get_historical(
     pair="BTCUSDT",
     interval="15m",
     start_time=start_ts,

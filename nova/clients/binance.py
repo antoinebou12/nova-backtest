@@ -122,7 +122,7 @@ class Binance:
         )
         return kline[0][0]
 
-    def _combine_history(self, pair: str, interval: str, start_time: str, end_time: str):
+    def _combine_history(self, pair: str, interval: str, start_time: int, end_time: int):
         """
         Args:
             pair: pair to get information from
@@ -209,7 +209,7 @@ class Binance:
 
         return df[STD_CANDLE_FORMAT]
 
-    def get_historical(self, pair: str, interval: str, start_time: str, end_time: str) -> pd.DataFrame:
+    def get_historical(self, pair: str, interval: str, start_time: int, end_time: int) -> pd.DataFrame:
         """
         Args:
             pair: pair to get information from
@@ -242,7 +242,7 @@ class Binance:
         """
 
         end_date_data_ts = current_df['open_time'].max()
-        now_date_ts = str(int(time.time() * 1000))
+        now_date_ts = int(time.time() * 1000)
         data = self._combine_history(
             pair=pair,
             interval=interval,

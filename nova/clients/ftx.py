@@ -2,6 +2,8 @@ from requests import Request, Session
 import time
 import hmac
 from nova.clients.helpers import interval_to_milliseconds
+from nova.utils.constant import DATA_FORMATING, STD_CANDLE_FORMAT
+import pandas as pd
 import re
 from datetime import datetime
 import calendar
@@ -65,106 +67,162 @@ class FTX:
                 list_pairs.append(x['name'])
         return list_pairs
 
-    def get_candle(self, pair: str, interval: str, start_time: int, end_time: int, limit: int = None):
-
-        _interval = interval_to_milliseconds(interval)
-        _endpoint = f"/markets/{pair}/candles?resolution={_interval}&start_time={start_time}&end_time={end_time}"
-
-        return self._send_request(
-            end_point=f"/fapi/v1/klines",
-            request_type="GET",
-            params=_params
+    def get_candles(self, pair: str, interval: str, start_time: int, end_time: int):
+        """
+        Args:
+            pair: pair to get information from
+            interval: granularity of the candle ['1m', '1h', ... '1d']
+            start_time: timestamp in milliseconds of the starting date
+            end_time: timestamp in milliseconds of the end date
+        Returns:
+            the none formatted candle information requested
+        """
+        _start_time = int(start_time/1000)
+        _end_time = int(end_time/1000)
+        _interval = int(interval_to_milliseconds(interval) / 1000)
+        _endpoint = f"/markets/{pair}/candles?resolution={_interval}&start_time={_start_time}&end_time={_end_time}"
+        data = self._send_request(
+            end_point=_endpoint,
+            request_type="GET"
         )
-    #
-    # def _get_earliest_valid_timestamp(self, pair: str):
-    #     """
-    #     Get the earliest valid open timestamp from Binance
-    #     Args:
-    #         symbol: Name of symbol pair -- BNBBTC
-    #
-    #     :return: first valid timestamp
-    #     """
-    #
-    #     request_name = f"/markets/{pair}/candles?resolution=172800&start_time={0}&end_time={int(time.time())}"
-    #
-    #     _request, _prepared = self._create_request(
-    #         end_point=f"{request_name}",
-    #         request_type="GET"
-    #     )
-    #
-    #     response = self._session.send(_prepared)
-    #     data = response.json()
-    #     return int(data['result'][0]['time'] / 1000)
-    #
+        return data['result']
 
-    #
-    # @staticmethod
-    # def _get_timestamp_time(str_time: str):
-    #     date = datetime.strptime(str_time, "%d %b, %Y")
-    #
-    #     trans = date.timetuple()
-    #     return int(calendar.timegm(trans))
-    #
-    # def get_historical(self, pair: str, interval: str, start_time: str, end_time: str):
-    #     """
-    #
-    #     Args:
-    #         pair:
-    #         interval:
-    #         start_time:
-    #         end_time:
-    #
-    #     Returns:
-    #
-    #     """
-    #     output_data = []
-    #
-    #     interval_time = self._get_interval_time(interval=interval)
-    #     start = self._get_timestamp_time(str_time=start_time)
-    #     end = self._get_timestamp_time(str_time=end_time)
-    #
-    #     first_valid_ts = self._get_earliest_valid_timestamp(
-    #         pair=pair
-    #     )
-    #
-    #     start_ts = max(start, first_valid_ts)
-    #
-    #     idx = 0
-    #
-    #     while True:
-    #
-    #         end_ts = start_ts + interval_time * self.historical_limit
-    #         end_t = min(end_ts, end)
-    #
-    #         request_name = f"/markets/{pair}/candles?resolution={interval_time}&start_time={start_ts}&end_time={end_t}"
-    #
-    #         _request, _prepared = self._create_request(
-    #             end_point=f"{request_name}",
-    #             request_type="GET"
-    #         )
-    #
-    #         response = self._session.send(_prepared)
-    #
-    #         data = response.json()
-    #
-    #         # append this loops data to our output data
-    #         if data['result']:
-    #             output_data += data['result']
-    #
-    #         # increment next call by our timeframe
-    #         start_ts = int(data['result'][-1]['time']/1000) + interval_time
-    #
-    #         # exit loop if we reached end_ts before reaching <limit> klines
-    #         if end_ts and start_ts >= end:
-    #             break
-    #
-    #         # sleep after every 3rd call to be kind to the API
-    #         idx += 1
-    #         if idx % 3 == 0:
-    #             time.sleep(1)
-    #
-    #     return output_data
-    #
+    def _get_earliest_valid_timestamp(self, pair: str):
+        """
+        Args:
+            pair: Name of symbol pair
+        return:
+            the earliest valid open timestamp in milliseconds
+        """
+        kline = self.get_candles(
+            pair=pair,
+            interval='2d',
+            start_time=0,
+            end_time=int(time.time()*1000)
+        )
+        return int(kline[0]['time'])
+
+    def _combine_history(self, pair: str, interval: str, start_time: int, end_time: int):
+        """
+        Args:
+            pair: pair to get information from
+            interval: granularity of the candle ['1m', '1h', ... '1d']
+            start_time: timestamp in milliseconds of the starting date
+            end_time: timestamp in milliseconds of the end date
+        Returns:
+            the complete raw data history desired -> multiple requested could be executed
+        """
+
+        # init our list
+        output_data = []
+
+        # convert interval to useful value in seconds
+        timeframe = interval_to_milliseconds(interval)
+
+        first_valid_ts = self._get_earliest_valid_timestamp(
+            pair=pair,
+        )
+        start_ts = max(start_time, first_valid_ts)
+
+        idx = 0
+        while True:
+
+            end_t = start_ts + timeframe * self.historical_limit
+            end_ts = min(end_t, end_time)
+
+            # fetch the klines from start_ts up to max 500 entries or the end_ts if set
+            temp_data = self.get_candles(
+                pair=pair,
+                interval=interval,
+                start_time=start_ts,
+                end_time=end_ts
+            )
+
+            # append this loops data to our output data
+            if temp_data:
+                output_data += temp_data
+
+            # handle the case where exactly the limit amount of data was returned last loop
+            # check if we received less than the required limit and exit the loop
+            if not len(temp_data) or len(temp_data) < self.historical_limit:
+                # exit the while loop
+                break
+
+            # increment next call by our timeframe
+            start_ts = temp_data[-1]['time'] + timeframe
+
+            # exit loop if we reached end_ts before reaching <limit> klines
+            if end_ts and start_ts >= end_time:
+                break
+
+            # sleep after every 3rd call to be kind to the API
+            idx += 1
+            if idx % 3 == 0:
+                time.sleep(1)
+
+        return output_data
+
+    def _format_data(self, all_data: list) -> pd.DataFrame:
+        """
+        Args:
+            all_data: output from _combine_history
+        Returns:
+            standardized pandas dataframe
+        """
+        # Remove the last row if it's not finished yet
+        if self.get_server_time() < all_data[-1]['time']:
+            del all_data[-1]
+        df = pd.DataFrame(all_data)
+        df.drop('startTime', axis=1, inplace=True)
+        df.columns = ['open_time', 'open', 'high', 'low', 'close', 'volume']
+        df['close_time'] = df['open_time'].shift(-1) - 1
+        df['next_open'] = df['open'].shift(-1)
+        return df[STD_CANDLE_FORMAT].dropna()
+
+    def get_historical(self, pair: str, interval: str, start_time: int, end_time: int) -> pd.DataFrame:
+        """
+        Args:
+            pair: pair to get information from
+            interval: granularity of the candle ['1m', '1h', ... '1d']
+            start_time: timestamp in milliseconds of the starting date
+            end_time: timestamp in milliseconds of the end date
+        Returns:
+            historical data requested in a standardized pandas dataframe
+        """
+
+        data = self._combine_history(
+            pair=pair,
+            interval=interval,
+            start_time=start_time,
+            end_time=end_time
+        )
+
+        return self._format_data(all_data=data)
+
+    def update_historical(self, pair: str, interval: str, current_df: pd.DataFrame) -> pd.DataFrame:
+        """
+        Note:
+            It will automatically download the latest data  points (excluding the candle not yet finished)
+        Args:
+            pair: pair to get information from
+            interval: granularity of the candle ['1m', '1h', ... '1d']
+            current_df: pandas dataframe of the current data
+        Returns:
+            a concatenated dataframe of the current data and the new data
+        """
+
+        end_date_data_ts = current_df['open_time'].max()
+        now_date_ts = int(time.time() * 1000)
+        data = self._combine_history(
+            pair=pair,
+            interval=interval,
+            start_time=end_date_data_ts,
+            end_time=now_date_ts
+        )
+        format_df = self._format_data(all_data=data)
+        return pd.concat([current_df, format_df], ignore_index=True).drop_duplicates()
+
+
     # def get_sub_accounts(self):
     #     _request, _prepared = self._create_request(end_point="/subaccounts", request_type="GET")
     #     response = self._session.send(_prepared)

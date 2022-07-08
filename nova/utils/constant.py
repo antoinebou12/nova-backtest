@@ -40,6 +40,11 @@ DATA_FORMATING = {
         "date_var": [
             "open_time", "close_time"
         ]
+    },
+    "ftx": {
+        "columns": [
+            'startTime', 'time', 'open', 'high', 'low', 'close', 'volume'
+        ],
     }
 
 }

@@ -117,24 +117,6 @@ class BackTest:
         elif 'd' in self.candle:
             return timedelta(days=multi)
 
-    def _data_fomating(self, kline: list) -> pd.DataFrame:
-        """
-        Args:
-            kline: is the list returned by get_historical_klines method from binance
-
-        Returns: dataframe with usable format.
-        """
-
-        if self.exchange == "ftx":
-            df = pd.DataFrame(kline)
-            df.drop('startTime', axis=1, inplace=True)
-            df.columns = ['open_time', 'open', 'high', 'low', 'close', 'volume']
-            df['close_time'] = df['open_time'].shift(-1) - 1
-
-            df['next_open'] = df['open'].shift(-1)
-
-            return df
-
     def get_list_pair(self) -> list:
         """
         Returns:
