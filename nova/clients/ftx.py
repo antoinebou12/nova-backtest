@@ -4,9 +4,6 @@ import hmac
 from nova.clients.helpers import interval_to_milliseconds
 from nova.utils.constant import DATA_FORMATING, STD_CANDLE_FORMAT
 import pandas as pd
-import re
-from datetime import datetime
-import calendar
 
 
 class FTX:
@@ -67,7 +64,7 @@ class FTX:
                 list_pairs.append(x['name'])
         return list_pairs
 
-    def get_candles(self, pair: str, interval: str, start_time: int, end_time: int):
+    def _get_candles(self, pair: str, interval: str, start_time: int, end_time: int):
         """
         Args:
             pair: pair to get information from
@@ -94,7 +91,7 @@ class FTX:
         return:
             the earliest valid open timestamp in milliseconds
         """
-        kline = self.get_candles(
+        kline = self._get_candles(
             pair=pair,
             interval='2d',
             start_time=0,
@@ -131,7 +128,7 @@ class FTX:
             end_ts = min(end_t, end_time)
 
             # fetch the klines from start_ts up to max 500 entries or the end_ts if set
-            temp_data = self.get_candles(
+            temp_data = self._get_candles(
                 pair=pair,
                 interval=interval,
                 start_time=start_ts,
@@ -162,7 +159,7 @@ class FTX:
 
         return output_data
 
-    def _format_data(self, all_data: list) -> pd.DataFrame:
+    def _format_data(self, all_data: list, interval: str) -> pd.DataFrame:
         """
         Args:
             all_data: output from _combine_history
@@ -175,7 +172,13 @@ class FTX:
         df = pd.DataFrame(all_data)
         df.drop('startTime', axis=1, inplace=True)
         df.columns = ['open_time', 'open', 'high', 'low', 'close', 'volume']
-        df['close_time'] = df['open_time'].shift(-1) - 1
+
+        timeframe = interval_to_milliseconds(interval)
+
+        for var in DATA_FORMATING['ftx']['num_var']:
+            df[var] = pd.to_numeric(df[var], downcast="float")
+
+        df['close_time'] = df['open_time'] + timeframe - 1
         df['next_open'] = df['open'].shift(-1)
         return df[STD_CANDLE_FORMAT].dropna()
 
@@ -189,7 +192,6 @@ class FTX:
         Returns:
             historical data requested in a standardized pandas dataframe
         """
-
         data = self._combine_history(
             pair=pair,
             interval=interval,
@@ -221,151 +223,6 @@ class FTX:
         )
         format_df = self._format_data(all_data=data)
         return pd.concat([current_df, format_df], ignore_index=True).drop_duplicates()
-
-
-    # def get_sub_accounts(self):
-    #     _request, _prepared = self._create_request(end_point="/subaccounts", request_type="GET")
-    #     response = self._session.send(_prepared)
-    #     return response.json()
-    #
-    # def get_sub_accounts_balance(self, sub_account_name: str):
-    #     _request, _prepared = self._create_request(
-    #         end_point=f"/subaccounts/{sub_account_name}/balances",
-    #         request_type="GET"
-    #     )
-    #     response = self._session.send(_prepared)
-    #     return response.json()
-    #
-    # def get_account(self):
-    #     _request, _prepared = self._create_request(
-    #         end_point=f"/account",
-    #         request_type="GET"
-    #     )
-    #     response = self._session.send(_prepared)
-    #     return response.json()
-    #
-    # def get_positions(self):
-    #     _request, _prepared = self._create_request(
-    #         end_point=f"/positions",
-    #         request_type="GET"
-    #     )
-    #     response = self._session.send(_prepared)
-    #     return response.json()
-    #
-    # def change_leverage(self, leverage: int):
-    #
-    #     _request, _prepared = self._create_request(
-    #         end_point=f"/account/leverage",
-    #         request_type="POST",
-    #         json={"leverage": leverage}
-    #     )
-    #
-    #     print(_prepared.body)
-    #
-    #     response = self._session.send(_prepared)
-    #     return response.json()
-    #
-    # def get_opened_orders_pair(self, pair: str):
-    #
-    #     _request, _prepared = self._create_request(
-    #         end_point=f"/orders?market={pair}",
-    #         request_type="GET",
-    #     )
-    #
-    #     response = self._session.send(_prepared)
-    #     return response.json()
-    #
-    # def open_order(self, pair: str, side: str, side_type: str, quantity: float, price: float):
-    #
-    #     _params = {
-    #         "market": pair,
-    #         "side": side,
-    #         "price": price,
-    #         "type": side_type,
-    #         "size": quantity,
-    #         "reduceOnly": False,
-    #         "ioc": False,
-    #         "postOnly": False,
-    #         "clientId": None
-    #     }
-    #
-    #     _request, _prepared = self._create_request(
-    #         end_point=f"/orders",
-    #         request_type="POST",
-    #         json=_params
-    #     )
-    #
-    #     response = self._session.send(_prepared)
-    #
-    #     return response.json()
-    #
-    # def take_profit_order(self, pair: str, side: str, quantity: float, price: float):
-    #
-    #     _params = {
-    #         "market": pair,
-    #         "side": side,
-    #         "triggerPrice": price,
-    #         "size": quantity,
-    #         "type": "takeProfit",
-    #         "reduceOnly": False,
-    #     }
-    #     _request, _prepared = self._create_request(
-    #         end_point=f"/conditional_orders",
-    #         request_type="POST",
-    #         json=_params
-    #     )
-    #
-    #     response = self._session.send(_prepared)
-    #
-    #     return response.json()
-    #
-    # def stop_loss_order(self, pair: str, side: str, quantity: float, price: float):
-    #
-    #     _params = {
-    #         "market": pair,
-    #         "side": side,
-    #         "triggerPrice": price,
-    #         "size": quantity,
-    #         "type": "stop",
-    #         "reduceOnly": False,
-    #     }
-    #     _request, _prepared = self._create_request(
-    #         end_point=f"/orders",
-    #         request_type="POST",
-    #         json=_params
-    #     )
-    #
-    #     response = self._session.send(_prepared)
-    #
-    #     return response.json()
-    #
-    # def close_position_order(self):
-    #     pass
-    #
-    # def cancel_order(self, order_id: str):
-    #
-    #     _request, _prepared = self._create_request(
-    #         end_point=f"/orders/{order_id}",
-    #         request_type="DELETE",
-    #     )
-    #
-    #     response = self._session.send(_prepared)
-    #
-    #     return response.json
-    #
-    # def cancel_all_orders(self, pair: str):
-    #     _request, _prepared = self._create_request(
-    #         end_point=f"/orders",
-    #         request_type="DELETE",
-    #         json={"market": pair}
-    #     )
-    #
-    #     response = self._session.send(_prepared)
-    #
-    #     return response.json
-    #     pass
-    #
-    #
 
 
 

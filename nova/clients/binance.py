@@ -78,7 +78,7 @@ class Binance:
                 list_pairs.append(pair['symbol'])
         return list_pairs
 
-    def get_candles(self, pair: str, interval: str, start_time: int, end_time: int, limit: int = None):
+    def _get_candles(self, pair: str, interval: str, start_time: int, end_time: int, limit: int = None):
         """
         Args:
             pair: pair to get information from
@@ -113,7 +113,7 @@ class Binance:
         return:
             the earliest valid open timestamp
         """
-        kline = self.get_candles(
+        kline = self._get_candles(
             pair=pair,
             interval=interval,
             start_time=0,
@@ -158,7 +158,7 @@ class Binance:
         idx = 0
         while True:
             # fetch the klines from start_ts up to max 500 entries or the end_ts if set
-            temp_data = self.get_candles(
+            temp_data = self._get_candles(
                 pair=pair,
                 interval=interval,
                 limit=self.historical_limit,
@@ -207,7 +207,7 @@ class Binance:
             df[var] = pd.to_numeric(df[var], downcast="float")
         df['next_open'] = df['open'].shift(-1)
 
-        return df[STD_CANDLE_FORMAT]
+        return df[STD_CANDLE_FORMAT].dropna()
 
     def get_historical(self, pair: str, interval: str, start_time: int, end_time: int) -> pd.DataFrame:
         """

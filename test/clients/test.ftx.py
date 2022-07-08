@@ -23,7 +23,7 @@ end_ts = convert_ts_str(end_timing)
 #     pair="BTC-PERP",
 # )
 
-data = client._combine_history(
+data = client.get_historical(
     pair="BTC-PERP",
     interval="15m",
     start_time=start_ts,

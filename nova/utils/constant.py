@@ -45,6 +45,9 @@ DATA_FORMATING = {
         "columns": [
             'startTime', 'time', 'open', 'high', 'low', 'close', 'volume'
         ],
+        "num_var": [
+            'open_time', 'open', 'high', 'low', 'close', 'volume'
+        ]
     }
 
 }
