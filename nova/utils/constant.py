@@ -5,7 +5,7 @@ EXCEPTION_LIST_BINANCE = [
 ]
 
 STD_CANDLE_FORMAT = [
-    'open_time', 'open', 'high', 'low', 'close', 'volume', 'close_time', 'next_open'
+    'open_time', 'open', 'high', 'low', 'close', 'volume', 'close_time'
 ]
 
 VAR_NEEDED_FOR_POSITION = [
@@ -46,7 +46,7 @@ DATA_FORMATING = {
             'startTime', 'time', 'open', 'high', 'low', 'close', 'volume'
         ],
         "num_var": [
-            'open_time', 'open', 'high', 'low', 'close', 'volume'
+            'open', 'high', 'low', 'close', 'volume'
         ]
     }
 

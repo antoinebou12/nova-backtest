@@ -1,11 +1,11 @@
-from nova.clients.helpers import interval_to_milliseconds, convert_ts_str
-import pandas as pd
-import time
-from requests import Request, Session
-import hmac
-from urllib.parse import urlencode
-import hashlib
+from nova.utils.helpers import interval_to_milliseconds, convert_ts_str, limit_to_start_date
 from nova.utils.constant import DATA_FORMATING, STD_CANDLE_FORMAT
+from requests import Request, Session
+from urllib.parse import urlencode
+import pandas as pd
+import hashlib
+import time
+import hmac
 
 
 class Binance:
@@ -190,7 +190,7 @@ class Binance:
 
         return output_data
 
-    def _format_data(self, all_data: list) -> pd.DataFrame:
+    def _format_data(self, all_data: list, historical: bool = True) -> pd.DataFrame:
         """
         Args:
             all_data: output from _combine_history
@@ -199,15 +199,23 @@ class Binance:
             standardized pandas dataframe
         """
         # Remove the last row if it's not finished yet
-        if self.get_server_time() < all_data[-1][6]:
-            del all_data[-1]
+        if historical:
+            if self.get_server_time() < all_data[-1][6]:
+                del all_data[-1]
 
         df = pd.DataFrame(all_data, columns=DATA_FORMATING['binance']['columns'])
+
         for var in DATA_FORMATING['binance']['num_var']:
             df[var] = pd.to_numeric(df[var], downcast="float")
-        df['next_open'] = df['open'].shift(-1)
 
-        return df[STD_CANDLE_FORMAT].dropna()
+        if historical:
+            df[STD_CANDLE_FORMAT].dropna()
+            df['next_open'] = df['open'].shift(-1)
+            return df
+        else:
+            df = df[STD_CANDLE_FORMAT].dropna()
+            df['open_time_datetime'] = pd.to_datetime(df['open_time'], unit='ms')
+            return df
 
     def get_historical(self, pair: str, interval: str, start_time: int, end_time: int) -> pd.DataFrame:
         """
@@ -321,7 +329,33 @@ class Binance:
             signed=True
         )
 
+    def get_tickers_price(self, pair: str):
+        return self._send_request(
+            end_point=f"/fapi/v1/ticker/price",
+            request_type="GET",
+            params={"symbol": pair}
+        )
+
+    def get_balance(self) -> dict:
+        return self._send_request(
+            end_point=f"/fapi/v2/balance",
+            request_type="GET",
+            signed=True
+        )
+
+    # STANDARDIZED BOT
     def setup_account(self, base_asset: str, leverage: int, bankroll: float):
+        """
+        Note: We execute verification of the account (balance, leverage, etc.)
+
+        Args:
+            base_asset:
+            leverage:
+            bankroll:
+
+        Returns:
+            None
+        """
         accounts = self.get_account_info()
         positions_info = self.get_position_info()
         position_mode = self.get_position_mode()
@@ -358,19 +392,97 @@ class Binance:
             if x['asset'] == "BNB" and float(x["availableBalance"]) == 0:
                 print(f"You can save Tx Fees if you transfer BNB in your Future Account")
 
-    def get_tickers_price(self, pair: str):
+    def get_prod_candles(
+            self,
+            pair: str,
+            interval: str,
+            nb_candles: int,
+    ) -> (pd.DataFrame, int):
+        """
+        Note : Data Formatting is done before
+        Args:
+            pair:
+            interval:
+            nb_candles:
+        Returns:
+        """
+
+        start_time = limit_to_start_date(interval=interval, nb_candles=nb_candles)
+
+        # Compute the server time
+        s_time = self.get_server_time()
+        _params = dict(symbol=pair, interval=interval, startTime=start_time, endTime=s_time)
+
+        data = self._send_request(
+            end_point=f"/fapi/v1/klines",
+            request_type="GET",
+            params=_params
+        )
+
+        df = self._format_data(all_data=data, historical=False)
+        return df[df['close_time'] < int(s_time)], s_time
+
+    def get_last_price(self, pair: str) -> dict:
+        """
+        Args:
+            pair: pair desired
+        Returns:
+            a dictionary containing the pair_id, latest_price, latest_date in timestamp
+        """
         return self._send_request(
             end_point=f"/fapi/v1/ticker/price",
             request_type="GET",
             params={"symbol": pair}
         )
 
-    def get_balance(self) -> dict:
-        return self._send_request(
-            end_point=f"/fapi/v2/balance",
-            request_type="GET",
-            signed=True
-        )
+    def get_actual_position(self, list_pair: list):
+        """
+        Args:
+            list_pair: list of pair that we want to run analysis on
+        Returns:
+            a dictionary containing all the current positions on binance
+        """
+        all_pos = self.get_position_info()
+        position = {}
+        for pos in all_pos:
+            if pos['symbol'] in list_pair:
+                position[pos['symbol']] = pos
+        return position
+
+    def get_position_size(
+            self,
+            based_asset: str,
+            leverage: int,
+            position_size: float,
+            bankroll: float,
+            current_pnl: float,
+            geometric_size: bool
+    ):
+        """
+
+        Args:
+            based_asset:
+            leverage:
+            position_size:
+            bankroll:
+            current_pnl:
+            geometric_size:
+
+        Returns:
+
+        """
+        if not geometric_size:
+            pos_size = position_size * bankroll
+        else:
+            pos_size = position_size * (bankroll + current_pnl)
+        balances = self.get_balance()
+        available = 0
+        for balance in balances:
+            if balance['asset'] == based_asset:
+                available = float(balance['withdrawAvailable'])
+        if available < pos_size / leverage:
+            return 0
+        return pos_size
 
     def open_close_order(self, pair: str, side: str, quantity: float):
         _params = {

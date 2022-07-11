@@ -1,7 +1,7 @@
 from requests import Request, Session
 import time
 import hmac
-from nova.clients.helpers import interval_to_milliseconds
+from nova.utils.helpers import interval_to_milliseconds
 from nova.utils.constant import DATA_FORMATING, STD_CANDLE_FORMAT
 import pandas as pd
 
@@ -199,7 +199,7 @@ class FTX:
             end_time=end_time
         )
 
-        return self._format_data(all_data=data)
+        return self._format_data(all_data=data, interval=interval)
 
     def update_historical(self, pair: str, interval: str, current_df: pd.DataFrame) -> pd.DataFrame:
         """
@@ -214,14 +214,13 @@ class FTX:
         """
 
         end_date_data_ts = current_df['open_time'].max()
-        now_date_ts = int(time.time() * 1000)
         data = self._combine_history(
             pair=pair,
             interval=interval,
             start_time=end_date_data_ts,
-            end_time=now_date_ts
+            end_time=int(time.time() * 1000)
         )
-        format_df = self._format_data(all_data=data)
+        format_df = self._format_data(all_data=data, interval=interval)
         return pd.concat([current_df, format_df], ignore_index=True).drop_duplicates()
 
 

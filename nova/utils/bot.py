@@ -1,32 +1,28 @@
-import socket
-import socketio
-
-from decouple import config
+from nova.utils.helpers import get_timedelta_unit, is_opening_candle
+from nova.utils.constant import POSITION_PROD_COLUMNS
 from nova.utils.telegram import TelegramBOT
-import pandas as pd
-from datetime import datetime, timedelta
-import random
-import re
 from nova.api.nova_client import NovaClient
-from nova.clients.binance import Binance
-from nova.clients.ftx import FTX
-import time
-from nova.utils.constant import POSITION_PROD_COLUMNS, BINANCE_KLINES_COLUMNS, FTX_PAIRS, BINANCE_PAIRS
+from nova.clients.clients import clients
 
-
-import aiohttp
-import asyncio
-
-import logging
+from datetime import datetime
+from decouple import config
 import logging.handlers
+import pandas as pd
+import socketio
+import logging
+import socket
+import random
+import time
 
 
 class Bot(TelegramBOT):
 
     def __init__(self,
                  exchange: str,
+
                  key: str,
                  secret: str,
+
                  bot_id: str,
                  is_logging: bool,
 
@@ -43,29 +39,8 @@ class Bot(TelegramBOT):
 
                  telegram_notification: bool,
                  bot_token: str = '',
-                 bot_chatID: str = ''
+                 bot_chat_id: str = ''
                  ):
-
-        '''
-
-        Args:
-            bot_id: Id given by TUXN (ex: 6258499d619bc5f0c10e69d0)
-
-            is_logging: if True will log to TUXN
-
-            candle: candle size on which the bot will run (ex: 15m)
-
-            bankroll: the starting amount of USDT (or BUSD) the bot will trade with (ex: 1000$)
-
-            position_size: the percentage of bankroll each position will size (ex: 1/10 => 100$/position)
-
-            max_pos: number maximal of positions the bot is allow to be in at the same time (ex: 30).
-
-            historical_window: minimal number of candles to fetch to compute entry points (ex: 101)
-
-            max_down: maximum percentage loss of the bankroll that'd stop the bot
-
-        '''
 
         self.candle = candle
         self.position_size = position_size
@@ -74,16 +49,12 @@ class Bot(TelegramBOT):
         self.max_pos = max_pos
         self.position_opened = pd.DataFrame(columns=POSITION_PROD_COLUMNS)
         self.prod_data = {}
+
         self.nova = NovaClient(config('NovaAPISecret'))
 
         self.exchange = exchange
-        self.client = self.get_client(key=key, secret=secret)
+        self.client = clients(exchange=exchange, key=key, secret=secret)
 
-        # Get bot name
-        # self.bot_name = self.nova.read_bot(bot_id)
-        # bot_name = data['bot']['name']
-
-        # Get the list of pairs on which we perform the back test
         self.list_pair = list_pair
         if type(self.list_pair).__name__ == 'str':
             raw_list_pair = self.get_list_pair()
@@ -101,7 +72,7 @@ class Bot(TelegramBOT):
         if self.telegram_notification:
             TelegramBOT.__init__(self,
                                  bot_token=bot_token,
-                                 bot_chatID=bot_chatID)
+                                 bot_chatID=bot_chat_id)
 
         'Leverage is automatically set at the maximum we can setup in function of the max_pos and the position size'
         self.leverage = int(self.max_pos * self.position_size)
@@ -124,96 +95,16 @@ class Bot(TelegramBOT):
             self.logger_client = socketio.Client()
             self.logger_client.connect('http://167.114.3.100:5000', wait_timeout=10)
 
-        self.time_step = self.get_timedelta_unit()
-
-    def get_client(self, key: str, secret: str):
-        if self.exchange == "binance":
-            return Binance(key=key, secret=secret)
-        elif self.exchange == "ftx":
-            return FTX(key=key, secret=secret)
-
-    def setup_binance(self):
-
-        # ISOLATE MARGIN TYPE -> ISOLATED
-
-        positions_info = self.client.get_positions()
-
-        for info in positions_info:
-            if info['marginType'] != 'isolated':
-                self.client.change_margin_type(
-                    symbol=info['symbol'],
-                    marginType='ISOLATED'
-                )
-
-            if int(info['leverage']) != self.leverage:
-                self.client.change_leverage(
-                    pair=info['symbol'],
-                    leverage=self.leverage
-                )
+        self.time_step = get_timedelta_unit(self.candle)
 
     def get_list_pair(self):
         """
         Returns:
             all the futures pairs we can to trade.
         """
-        all_pair = self.client.get_all_pairs()
+        return self.client.get_all_pairs()
 
-        if self.exchange == 'ftx':
-            return FTX_PAIRS
-        elif self.exchange == 'binance':
-            return BINANCE_PAIRS
-
-    def get_timedelta_unit(self) -> timedelta:
-        """
-        Returns: a tuple that contains the unit and the multiplier needed to extract the data
-        """
-        multi = int(float(re.findall(r'\d+', self.candle)[0]))
-
-        if 'm' in self.candle:
-            return timedelta(minutes=multi)
-        elif 'h' in self.candle:
-            return timedelta(hours=multi)
-        elif 'd' in self.candle:
-            return timedelta(days=multi)
-
-    def _data_fomating(self, kline: list) -> pd.DataFrame:
-        """
-        Args:
-            kline: is the list returned by get_historical_klines method from binance
-
-        Returns: dataframe with usable format.
-        """
-        df = pd.DataFrame(kline, columns=BINANCE_KLINES_COLUMNS)
-
-        for var in ["open", "high", "low", "close", "volume"]:
-            df[var] = pd.to_numeric(df[var], downcast="float")
-
-        df['open_time_datetime'] = pd.to_datetime(df['open_time'], unit='ms')
-
-        return df
-
-    async def get_klines_and_prod_data(self, session, pair, limit):
-
-        url = "https://fapi.binance.com/fapi/v1/klines"
-        params = dict(symbol=pair, interval=self.candle, limit=limit)
-
-        # Compute the server time
-        s_time = self.client.get_server_time()
-
-        async with session.get(url=url, params=params) as response:
-            klines = await response.json()
-
-            df = self._data_fomating(klines)
-
-            df = df[df['close_time'] < s_time['serverTime']]
-
-            self.prod_data[pair] = {}
-            self.prod_data[pair]['latest_update'] = s_time['serverTime']
-            self.prod_data[pair]['data'] = df
-
-        return klines
-
-    async def get_prod_data(self, list_pair: list):
+    def get_prod_data(self, list_pair: list):
         """
         Note: This function is called once when the bot is instantiated.
         This function execute n API calls with n representing the number of pair in the list
@@ -221,106 +112,42 @@ class Bot(TelegramBOT):
             list_pair: list of all the pairs you want to run the bot on.
         Returns: None, but it fills the dictionary self.prod_data that will contain all the data
         needed for the analysis.
-        !! Command to run async function: asyncio.run(self.get_prod_data(list_pair=list_pair)) !!
         """
 
-        async with aiohttp.ClientSession(connector=aiohttp.TCPConnector(ssl=False)) as session:
-            tasks = []
+        for pair in list_pair:
 
-            for pair in list_pair:
-                task = asyncio.ensure_future(
-                    self.get_klines_and_prod_data(session, pair, limit=self.historical_window + 1))
-                tasks.append(task)
+            data, latest_timestamp = self.client.get_prod_candles(
+                pair=pair,
+                interval=self.candle,
+                nb_candles=self.historical_window,
+            )
 
-            await asyncio.gather(*tasks)
+            self.prod_data[pair] = {}
+            self.prod_data[pair]['latest_update'] = latest_timestamp
+            self.prod_data[pair]['data'] = data
 
-    async def get_klines_and_update_data(self, session, pair):
-
-        url = "https://fapi.binance.com/fapi/v1/klines"
-
-        params = dict(symbol=pair, interval=self.candle, limit=3)
-
-        # Compute the server time
-        s_time = self.client.get_server_time()
-
-        async with session.get(url=url, params=params) as response:
-            klines = await response.json()
-
-            df = self._data_fomating(klines)
-
-            df = df[df['close_time'] < int(s_time['serverTime'])]
-
-            df_new = pd.concat([self.prod_data[pair]['data'], df])
-            df_new = df_new.drop_duplicates(subset=['open_time_datetime']).sort_values(by=['open_time_datetime'],
-                                                                                       ascending=True)
-            self.prod_data[pair]['latest_update'] = s_time['serverTime']
-            self.prod_data[pair]['data'] = df_new.tail(self.historical_window)
-
-        return klines
-
-    async def update_prod_data(self, list_pair: list):
+    def update_prod_data(self, list_pair: list):
         """
         Notes: This function execute 1 API call
         Args:
             list_pair:  pairs you want to run the bot on ex: 'BTCUSDT', 'ETHUSDT'
         Returns: None, but it updates the dictionary self.prod_data that will contain all the data
         needed for the analysis.
-        !! Command to run async function: asyncio.run(self.update_prod_data(list_pair=list_pair)) !!
         """
 
-        async with aiohttp.ClientSession(connector=aiohttp.TCPConnector(ssl=False)) as session:
-            tasks = []
+        for pair in list_pair:
 
-            for pair in list_pair:
-                task = asyncio.ensure_future(self.get_klines_and_update_data(session, pair))
-                tasks.append(task)
+            data, latest_timestamp = self.client.get_prod_candles(
+                pair=pair,
+                interval=self.candle,
+                nb_candles=3,
+            )
 
-            await asyncio.gather(*tasks)
-
-    def get_last_price(self, pair: str) -> float:
-        """
-        Args:
-            pair: string variable that represent the pair ex: 'BTCUSDT'
-        Returns:
-            Float of the latest price for the pair.
-        """
-        prc = self.client.get_recent_trades(symbol=pair)[-1]["price"]
-        return float(prc)
-
-    def get_position_size(self) -> float:
-        """
-        Returns:
-            Float that represents the final position size taken by the bot
-        """
-        if not self.geometric_size:
-            pos_size = self.position_size * self.bankroll
-        else:
-            pos_size = self.position_size * (self.bankroll + self.currentPNL)
-
-        futures_balances = self.client.futures_account_balance()
-        available = 0
-        for balance in futures_balances:
-            if balance['asset'] == 'USDT':
-                available = float(balance['withdrawAvailable'])
-
-        if available < pos_size / self.leverage:
-            return 0
-
-        return pos_size
-
-    def get_actual_position(self) -> dict:
-        """
-        Args:
-            list_pair: list of pair that we want to run analysis on
-        Returns:
-            a dictionary containing all the current positions on binance
-        """
-        all_pos = self.client.futures_position_information()
-        position = {}
-        for pos in all_pos:
-            if pos['symbol'] in self.list_pair:
-                position[pos['symbol']] = pos
-        return position
+            df_new = pd.concat([self.prod_data[pair]['data'], data])
+            df_new = df_new.drop_duplicates(subset=['open_time_datetime']).sort_values(by=['open_time_datetime'],
+                                                                                       ascending=True)
+            self.prod_data[pair]['latest_update'] = latest_timestamp
+            self.prod_data[pair]['data'] = df_new.tail(self.historical_window)
 
     def enter_position(self,
                        action: int,
@@ -338,8 +165,8 @@ class Bot(TelegramBOT):
         """
 
         # 1 - get price on exchange, size of position and precision required by exchange
-        prc = self.get_price_binance(pair)
-        size = self.get_position_size()
+        prc = self.client.get_last_price(pair)
+        size = self.client.get_position_size()
 
         if size == 0:
             self.print_log_send_msg(f'Balance too low')
@@ -609,7 +436,7 @@ class Bot(TelegramBOT):
         type_pos = ''
         pair = entry_tx[0]['symbol']
 
-        prc_bnb = self.get_price_binance('BNBUSDT')
+        prc_bnb = self.client.get_last_price('BNBUSDT')
 
         # go through all the tx needed to get in and out of the position
         for tx_one in entry_tx:
@@ -856,23 +683,6 @@ class Bot(TelegramBOT):
         if error:
             self.log.error(msg, exc_info=True)
 
-    def is_opening_candle(self):
-        multi = int(float(re.findall(r'\d+', self.candle)[0]))
-        unit = self.candle[-1]
-
-        if multi == 1:
-            if unit == 'm':
-                return datetime.utcnow().second == 0
-            elif unit == 'h':
-                return datetime.utcnow().minute == 0
-            elif unit == 'd':
-                return datetime.utcnow().hour == 0
-        else:
-            if unit == 'm':
-                return datetime.utcnow().minute % multi == 0
-            elif unit == 'h':
-                return datetime.utcnow().hour % multi == 0
-
     def security_check_max_down(self):
         """
         Returns:
@@ -894,7 +704,7 @@ class Bot(TelegramBOT):
 
         # 2 - Download the production data
         self.print_log_send_msg(f'Fetching historical data')
-        asyncio.run(self.get_prod_data(self.list_pair))
+        self.get_prod_data(self.list_pair)
 
         # 3 - Begin the infinite loop
         while True:
@@ -902,7 +712,7 @@ class Bot(TelegramBOT):
             try:
 
                 # Start the logic at each candle opening
-                if self.is_opening_candle():
+                if is_opening_candle(interval=self.candle):
 
                     print('---------------')
 
@@ -910,12 +720,12 @@ class Bot(TelegramBOT):
                     print(datetime.utcnow())
                     self.print_log_send_msg('Updating Data')
                     t0 = time.time()
-                    asyncio.run(self.update_prod_data(list_pair=self.list_pair))
+                    self.update_prod_data(list_pair=self.list_pair)
                     t1 = time.time()
                     self.print_log_send_msg(f"Updated data in {round(t1 - t0, 3)} s")
 
                     # 5 - Get current positions and update if tp or sl has been filled
-                    current_position = self.get_actual_position()
+                    current_position = self.client.get_actual_position()
                     self.verify_positions(current_position)
 
                     # 6 - Check if we have to exit positions and if so execute the orders

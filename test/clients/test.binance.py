@@ -1,7 +1,7 @@
 from nova.clients.binance import Binance
 from decouple import config
 from datetime import datetime
-from nova.clients.helpers import convert_ts_str
+from nova.utils.helpers import convert_ts_str
 
 
 client = Binance(key=config("binanceAPIKey"), secret=config("binanceAPISecret"))
@@ -38,10 +38,10 @@ data_b = client.get_historical(
 )
 
 
-data_updated = client.update_historical(
+data_updated_b = client.update_historical(
     pair="BTCUSDT",
     interval="15m",
-    current_df=data
+    current_df=data_b
 )
 
 

@@ -8,8 +8,8 @@ import random
 import math
 import json
 import joblib
-from nova.utils.constant import VAR_NEEDED_FOR_POSITION, DATA_FORMATING
 
+from nova.utils.constant import VAR_NEEDED_FOR_POSITION
 from nova.clients.clients import clients
 
 from warnings import simplefilter
@@ -29,6 +29,8 @@ class BackTest:
                  fees: float,
                  max_pos: int,
                  max_holding: int,
+                 geometric_sizes: bool = False,
+                 positions_size: float = 1 / 20,
                  save_all_pairs_charts: bool = False,
                  start_bk: float = 10000,
                  slippage: bool = True,
@@ -36,6 +38,9 @@ class BackTest:
                  pass_phrase: str = ""):
 
         self.exchange = exchange
+
+        self.positions_size = positions_size
+        self.geometric_sizes = geometric_sizes
 
         self.slippage = slippage
         if self.slippage:
@@ -377,9 +382,7 @@ class BackTest:
                 end_time=self.end.strftime('%d %b, %Y')
             )
 
-            df_1m = self._data_fomating(klines)
-
-            df_1m = df_1m.dropna()
+            df_1m = klines.dropna()
 
             df_1m.to_csv(f'database/futures/hist_{pair}_1m.csv', index=False)
 
@@ -952,62 +955,62 @@ class BackTest:
 
         return all_statistics
 
-    def save_trades_charts(self,
-                           data: pd.DataFrame,
-                           perf: pd.DataFrame,
-                           timedelta_before_entry: timedelta,
-                           max_nb_chart: int,
-                           pair: str):
-        """
-        This method will create the candle charts of all trades in perf. It will display the entry point and the exit
-        price.
-
-        Args:
-            data: dataframe that contains all the candles OHLC
-            perf: dataframe with all the positions
-            timedelta_before_entry: the amount of time we want to look back before the entry signal
-            max_nb_chart: maximum number of charts that we create
-            pair: bah la pair hoa
-        """
-
-        position_type = {1: {'color': 'g', 'marker': '^', 'y': 'low'},
-                         -1: {'color': 'r', 'marker': 'v', 'y': 'high'}}
-
-        chart_id = 0
-
-        for index, row in perf.iterrows():
-            try:
-                entry_date = row['entry_time']
-                exit_price = row['exit_price']
-                type = row['entry_point']
-
-                trade_data = data[data.index >= (entry_date - timedelta_before_entry)].copy(deep=True)
-                trade_data = trade_data[trade_data.index <= (entry_date + timedelta(hours=self.max_holding))]
-
-                trade_data['all_entry_point'] = np.where(trade_data.index == entry_date, 1, np.nan)
-
-                entry_signal = trade_data['all_entry_point'].abs() * trade_data[position_type[type]['y']]
-
-                ap0 = [mpf.make_addplot(trade_data['ichimoku_a'], color='g'),
-                       mpf.make_addplot(trade_data['ichimoku_b'], color='r'),
-                       mpf.make_addplot(entry_signal, type='scatter', markersize=100,
-                                        color=position_type[type]['color'],
-                                        marker=position_type[type]['marker'])]
-
-                name = pair + '_' + str(entry_date)
-
-                mpf.plot(trade_data, type='candle', figratio=(7, 5), addplot=ap0,
-                         hlines=dict(hlines=[exit_price], colors=[position_type[(-1) * type]['color']], linewidths=1,
-                                     alpha=0.4),
-                         savefig=f'./strategies/ichimoku/trade_charts/{name}.png', volume=False)
-
-                chart_id += 1
-                if chart_id > max_nb_chart:
-                    return 0
-
-            except Exception as e:
-                print(e)
-                continue
+    # def save_trades_charts(self,
+    #                        data: pd.DataFrame,
+    #                        perf: pd.DataFrame,
+    #                        timedelta_before_entry: timedelta,
+    #                        max_nb_chart: int,
+    #                        pair: str):
+    #     """
+    #     This method will create the candle charts of all trades in perf. It will display the entry point and the exit
+    #     price.
+    #
+    #     Args:
+    #         data: dataframe that contains all the candles OHLC
+    #         perf: dataframe with all the positions
+    #         timedelta_before_entry: the amount of time we want to look back before the entry signal
+    #         max_nb_chart: maximum number of charts that we create
+    #         pair: bah la pair hoa
+    #     """
+    #
+    #     position_type = {1: {'color': 'g', 'marker': '^', 'y': 'low'},
+    #                      -1: {'color': 'r', 'marker': 'v', 'y': 'high'}}
+    #
+    #     chart_id = 0
+    #
+    #     for index, row in perf.iterrows():
+    #         try:
+    #             entry_date = row['entry_time']
+    #             exit_price = row['exit_price']
+    #             type = row['entry_point']
+    #
+    #             trade_data = data[data.index >= (entry_date - timedelta_before_entry)].copy(deep=True)
+    #             trade_data = trade_data[trade_data.index <= (entry_date + timedelta(hours=self.max_holding))]
+    #
+    #             trade_data['all_entry_point'] = np.where(trade_data.index == entry_date, 1, np.nan)
+    #
+    #             entry_signal = trade_data['all_entry_point'].abs() * trade_data[position_type[type]['y']]
+    #
+    #             ap0 = [mpf.make_addplot(trade_data['ichimoku_a'], color='g'),
+    #                    mpf.make_addplot(trade_data['ichimoku_b'], color='r'),
+    #                    mpf.make_addplot(entry_signal, type='scatter', markersize=100,
+    #                                     color=position_type[type]['color'],
+    #                                     marker=position_type[type]['marker'])]
+    #
+    #             name = pair + '_' + str(entry_date)
+    #
+    #             mpf.plot(trade_data, type='candle', figratio=(7, 5), addplot=ap0,
+    #                      hlines=dict(hlines=[exit_price], colors=[position_type[(-1) * type]['color']], linewidths=1,
+    #                                  alpha=0.4),
+    #                      savefig=f'./strategies/ichimoku/trade_charts/{name}.png', volume=False)
+    #
+    #             chart_id += 1
+    #             if chart_id > max_nb_chart:
+    #                 return 0
+    #
+    #         except Exception as e:
+    #             print(e)
+    #             continue
 
     def run_backtest(self, save: bool = True):
 
@@ -1015,7 +1018,6 @@ class BackTest:
 
         Args:
             save: bool
-            save_chart: bool
 
         RUN BACK TEST !
         """
