@@ -23,6 +23,8 @@ class Bot(TelegramBOT):
                  key: str,
                  secret: str,
 
+                 bot_name: str,
+
                  bot_id: str,
                  is_logging: bool,
 
@@ -36,6 +38,7 @@ class Bot(TelegramBOT):
                  max_pos: int,
 
                  max_down: float,
+                 max_hold: int,
 
                  telegram_notification: bool,
                  bot_token: str = '',
@@ -43,6 +46,8 @@ class Bot(TelegramBOT):
                  ):
 
         self.candle = candle
+        self.max_holding = max_hold
+        self.bot_name = bot_name
         self.position_size = position_size
         self.geometric_size = geometric_size
         self.historical_window = historical_window
@@ -642,15 +647,11 @@ class Bot(TelegramBOT):
         self.position_opened[pair]['tp_stopPrice'] = sl_open['stopPrice']
 
     def security_close_all(self, exit_type: str):
-
         self.print_log_send_msg(msg='SECURITY CLOSE ALL')
-
         for index, row in self.position_opened.iterrows():
-
             exit_side = 'SELL'
             if row.side == 'SELL':
                 exit_side = 'BUY'
-
             self.exit_position(
                 pair=row.pair,
                 side=exit_side,
@@ -679,7 +680,6 @@ class Bot(TelegramBOT):
                 'message': msg,
                 'botId': self.bot_id
             }})
-
         if error:
             self.log.error(msg, exc_info=True)
 

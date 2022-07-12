@@ -1,75 +1,81 @@
-from nova.clients.binance import Binance
-from nova.clients.ftx import FTX
-from decouple import config
+import pandas as pd
+from nova.clients.clients import clients
+from nova.utils.helpers import date_to_milliseconds
+from nova.utils.constant import DATA_FORMATING, STD_CANDLE_FORMAT
 
+from decouple import config
 from binance.client import Client
 from datetime import datetime
-from nova.utils.constant import DATA_FORMATING
 
 
-def test_get_historical(exchange: str, pair: str, interval: str, start_time: str, end_time: str):
-    if exchange == "binance":
-        client = Binance(key=config("BinanceAPIKey"), secret=config("BinanceAPISecret"))
-    elif exchange == 'ftx':
-        client = FTX(key=config("ftxAPIkey"), secret=config("ftxAPIsecret"))
-
-    python_binance = Client(config("BinanceAPIKey"), config("BinanceAPISecret"))
-
+def get_reference_data(interval, _start_time, _end_time, historical: bool):
+    python_binance = Client(config("binanceAPIKey"), config("binanceAPISecret"))
     reference_data = python_binance.futures_historical_klines(
         "BTCUSDT",
         interval,
-        start_time,
-        end_time
+        _start_time,
+        _end_time
     )
 
-    data = client.get_historical(
+    df = pd.DataFrame(reference_data, columns=DATA_FORMATING['binance']['columns'])
+
+    for var in DATA_FORMATING['binance']['num_var']:
+        df[var] = pd.to_numeric(df[var], downcast="float")
+
+    if historical:
+        df = df[STD_CANDLE_FORMAT]
+        df['next_open'] = df['open'].shift(-1)
+        return df.dropna()
+    else:
+        df = df[STD_CANDLE_FORMAT]
+        df['open_time_datetime'] = pd.to_datetime(df['open_time'], unit='ms')
+        return df.dropna()
+
+
+def test_get_historical(exchange: str, pair: str, interval: str, start_time: int, end_time: int):
+
+    client = clients(
+        exchange=exchange,
+        key=config(f"{exchange}APIKey"),
+        secret=config(f"{exchange}APISecret"),
+    )
+
+    rf_df = get_reference_data(interval, start_time, end_time, historical=True)
+
+    df = client.get_historical(
         pair=pair,
         interval=interval,
         start_time=start_time,
         end_time=end_time
     )
 
-    assert len(reference_data) == len(data)
-    assert type(data) == list
+    assert df.shape == rf_df.shape
 
-    ref_timestamp = []
-
-    for candle in reference_data:
-        ref_timestamp.append(int(candle[0]))
-
-    data_timestamp = []
-
-    for candle in data:
-        if exchange == 'binance':
-            data_timestamp.append(int(candle[0]))
-        elif exchange == 'ftx':
-            data_timestamp.append(int(candle['time']))
-
-    assert ref_timestamp == data_timestamp
-
-    return data
+    assert df.iloc[-1, 0] == rf_df.iloc[-1, 0]
+    assert df.iloc[-1, -1] == rf_df.iloc[-1, -1]
 
 
 _pair = "BTCUSDT"
 _interval = "1h"
-start_timing = datetime(2022, 1, 1).strftime('%d %b, %Y')
-end_timing = datetime(2022, 4, 1).strftime('%d %b, %Y')
+_start_time = date_to_milliseconds(datetime(2022, 1, 1).strftime('%d %b, %Y'))
+_end_time = date_to_milliseconds(datetime(2022, 4, 1).strftime('%d %b, %Y'))
 
-binance_data = test_get_historical(
+
+test_get_historical(
     exchange="binance",
     pair=_pair,
     interval=_interval,
-    start_time=start_timing,
-    end_time=end_timing
+    start_time=_start_time,
+    end_time=_end_time
 )
 
-_pair = "BTC-PERP"
-
-ftx_data = test_get_historical(
-    exchange="ftx",
-    pair=_pair,
-    interval=_interval,
-    start_time=start_timing,
-    end_time=end_timing
-)
+#
+# _pair = "BTC-PERP"
+# ftx_data = test_get_historical(
+#     exchange="ftx",
+#     pair=_pair,
+#     interval=_interval,
+#     start_time=start_timing,
+#     end_time=end_timing
+# )
 

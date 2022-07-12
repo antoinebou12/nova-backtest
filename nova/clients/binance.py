@@ -208,14 +208,13 @@ class Binance:
         for var in DATA_FORMATING['binance']['num_var']:
             df[var] = pd.to_numeric(df[var], downcast="float")
 
+        df = df[STD_CANDLE_FORMAT]
         if historical:
-            df[STD_CANDLE_FORMAT].dropna()
             df['next_open'] = df['open'].shift(-1)
-            return df
+            return df.dropna()
         else:
-            df = df[STD_CANDLE_FORMAT].dropna()
             df['open_time_datetime'] = pd.to_datetime(df['open_time'], unit='ms')
-            return df
+            return df.dropna()
 
     def get_historical(self, pair: str, interval: str, start_time: int, end_time: int) -> pd.DataFrame:
         """
@@ -427,26 +426,39 @@ class Binance:
         Args:
             pair: pair desired
         Returns:
-            a dictionary containing the pair_id, latest_price, latest_date in timestamp
+            a dictionary containing the pair_id, latest_price, price_timestamp in timestamp
         """
-        return self._send_request(
+        data = self._send_request(
             end_point=f"/fapi/v1/ticker/price",
             request_type="GET",
             params={"symbol": pair}
         )
 
-    def get_actual_position(self, list_pair: list):
+        last_info = {
+            'pair_id': data['symbol'],
+            'price_timestamp': data['time'],
+            'latest_price': data['price']
+        }
+
+        return last_info
+
+    def get_actual_positions(self, list_pair: list):
         """
         Args:
             list_pair: list of pair that we want to run analysis on
         Returns:
-            a dictionary containing all the current positions on binance
+            a dictionary containing all the current OPEN positions
         """
         all_pos = self.get_position_info()
         position = {}
+
         for pos in all_pos:
-            if pos['symbol'] in list_pair:
-                position[pos['symbol']] = pos
+            if (pos['symbol'] in list_pair) and (float(pos['positionAmt']) != 0):
+                position[pos['symbol']] = {}
+                position[pos['symbol']]['position_amount'] = pos['positionAmt']
+                position[pos['symbol']]['entry_price'] = pos['entryPrice']
+                position[pos['symbol']]['unrealized_pnl'] = pos['unRealizedProfit']
+
         return position
 
     def get_position_size(
@@ -456,35 +468,49 @@ class Binance:
             position_size: float,
             bankroll: float,
             current_pnl: float,
+            current_positions_amt: float,
             geometric_size: bool
     ):
         """
-
+        Note: it returns 0 if all the amount has been used
         Args:
-            based_asset:
-            leverage:
-            position_size:
-            bankroll:
-            current_pnl:
-            geometric_size:
-
+            based_asset: asset used as based investment
+            leverage: leverage used by the algorithmic trader
+            position_size: proportion of the bankroll invested
+            bankroll: original bankroll managed by the bot
+            current_pnl: it's the current REALIZED pnl
+            current_positions_amt: amount currently managed by the bot
+            geometric_size: boolean indicating True if we are doing geometric position sizing (dynamic position)
         Returns:
-
+             the position amount from the balance that will be used for the transaction
         """
-        if not geometric_size:
-            pos_size = position_size * bankroll
-        else:
+        max_in_pos = bankroll
+        if geometric_size:
             pos_size = position_size * (bankroll + current_pnl)
+            max_in_pos += current_pnl
+        else:
+            pos_size = position_size * bankroll
         balances = self.get_balance()
         available = 0
         for balance in balances:
             if balance['asset'] == based_asset:
-                available = float(balance['withdrawAvailable'])
-        if available < pos_size / leverage:
+                available = float(balance['availableBalance'])
+        if (available < pos_size / leverage) or (max_in_pos - current_positions_amt - pos_size < 0):
             return 0
-        return pos_size
+        else:
+            return pos_size
 
     def open_close_order(self, pair: str, side: str, quantity: float):
+        """
+
+        Args:
+            pair:
+            side:
+            quantity:
+
+        Returns:
+
+        """
         _params = {
             "symbol": pair,
             "side": side,
@@ -500,6 +526,17 @@ class Binance:
         )
 
     def take_profit_order(self, pair: str, side: str, quantity: float, tp_price: float):
+        """
+
+        Args:
+            pair:
+            side:
+            quantity:
+            tp_price:
+
+        Returns:
+
+        """
 
         _quantity = float(round(quantity, self.pair_info[pair]['quantityPrecision']))
         _params = {
@@ -518,6 +555,17 @@ class Binance:
         )
 
     def stop_loss_order(self,  pair: str, side: str, quantity: float, sl_price: float):
+        """
+
+        Args:
+            pair:
+            side:
+            quantity:
+            sl_price:
+
+        Returns:
+
+        """
 
         _quantity = float(round(quantity, self.pair_info[pair]['quantityPrecision']))
         _params = {
