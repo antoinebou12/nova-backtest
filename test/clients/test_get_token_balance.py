@@ -2,7 +2,7 @@ from nova.clients.clients import clients
 from decouple import config
 
 
-def test_get_position_size(
+def test_get_token_balance(
         exchange: str,
         based_asset: str
 ):
@@ -13,21 +13,13 @@ def test_get_position_size(
         secret=config(f"{exchange}APISecret"),
     )
 
-    balances = client.get_balance()
-    base_balance_info = None
-    for balance in balances:
-        if balance['asset'] == based_asset:
-            base_balance_info = balance
+    balances = client.get_token_balance(based_asset=based_asset)
 
-    print(base_balance_info)
-
-    size_amount_1 = client.get_position_size()
-
-    assert size_amount_1 == 50
+    assert balances > 0
 
 
 _based_asset = 'USDT'
-test_get_position_size(
+test_get_token_balance(
     exchange='binance',
     based_asset=_based_asset,
 )

@@ -24,6 +24,7 @@ class Bot(TelegramBOT):
                  secret: str,
 
                  bot_name: str,
+                 based_asset: str,
 
                  bot_id: str,
                  is_logging: bool,
@@ -45,6 +46,7 @@ class Bot(TelegramBOT):
                  bot_chat_id: str = ''
                  ):
 
+        self.based_asset = based_asset
         self.candle = candle
         self.max_holding = max_hold
         self.bot_name = bot_name
@@ -84,6 +86,7 @@ class Bot(TelegramBOT):
         self.max_sl_percentage = 1 / self.leverage - 0.02
 
         self.currentPNL = 0
+        self.current_positions_amt = 0
         self.bot_id = bot_id
 
         # Logging  and
@@ -153,6 +156,26 @@ class Bot(TelegramBOT):
                                                                                        ascending=True)
             self.prod_data[pair]['latest_update'] = latest_timestamp
             self.prod_data[pair]['data'] = df_new.tail(self.historical_window)
+
+    def get_position_size(self):
+        """
+        Note: it returns 0 if all the amount has been used
+        Returns:
+             the position amount from the balance that will be used for the transaction
+        """
+        max_in_pos = self.bankroll
+        if self.geometric_size:
+            pos_size = self.position_size * (self.bankroll + self.currentPNL)
+            max_in_pos += self.currentPNL
+        else:
+            pos_size = self.position_size * self.bankroll
+
+        available = self.client.get_token_balance(based_asset=self.based_asset)
+
+        if (available < pos_size / self.leverage) or (max_in_pos - self.current_positions_amt - pos_size < 0):
+            return 0
+        else:
+            return pos_size
 
     def enter_position(self,
                        action: int,

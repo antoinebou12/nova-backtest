@@ -314,10 +314,14 @@ class Binance:
         )
         print(f"{pair} leverage is now set to : x{data['leverage']} with max notional to {data['maxNotionalValue']}")
 
-    def get_position_info(self):
+    def get_position_info(self, pair: str = None):
+        _params = {}
+        if pair:
+            _params['symbol'] = pair
         return self._send_request(
             end_point=f"/fapi/v2/positionRisk",
             request_type="GET",
+            params=_params,
             signed=True
         )
 
@@ -328,7 +332,7 @@ class Binance:
             signed=True
         )
 
-    def get_tickers_price(self, pair: str):
+    def get_pair_price(self, pair: str):
         return self._send_request(
             end_point=f"/fapi/v1/ticker/price",
             request_type="GET",
@@ -461,55 +465,98 @@ class Binance:
 
         return position
 
-    def get_position_size(
-            self,
-            based_asset: str,
-            leverage: int,
-            position_size: float,
-            bankroll: float,
-            current_pnl: float,
-            current_positions_amt: float,
-            geometric_size: bool
-    ):
+    def get_token_balance(self, based_asset: str):
         """
-        Note: it returns 0 if all the amount has been used
         Args:
-            based_asset: asset used as based investment
-            leverage: leverage used by the algorithmic trader
-            position_size: proportion of the bankroll invested
-            bankroll: original bankroll managed by the bot
-            current_pnl: it's the current REALIZED pnl
-            current_positions_amt: amount currently managed by the bot
-            geometric_size: boolean indicating True if we are doing geometric position sizing (dynamic position)
+            based_asset: asset used for the trades (USD, USDT, BUSD, ...)
+
         Returns:
-             the position amount from the balance that will be used for the transaction
+            Available based_asset amount.
         """
-        max_in_pos = bankroll
-        if geometric_size:
-            pos_size = position_size * (bankroll + current_pnl)
-            max_in_pos += current_pnl
-        else:
-            pos_size = position_size * bankroll
         balances = self.get_balance()
-        available = 0
         for balance in balances:
             if balance['asset'] == based_asset:
-                available = float(balance['availableBalance'])
-        if (available < pos_size / leverage) or (max_in_pos - current_positions_amt - pos_size < 0):
-            return 0
-        else:
-            return pos_size
+                return float(balance['availableBalance'])
 
-    def open_close_order(self, pair: str, side: str, quantity: float):
+    def get_order(self, pair: str, order_id: str):
         """
-
         Args:
-            pair:
-            side:
-            quantity:
+            pair: pair traded in the order
+            order_id: order id
 
         Returns:
+            order information from binance
+        """
+        return self._send_request(
+            end_point=f"/fapi/v1/order",
+            request_type="GET",
+            params={"symbol": pair, "orderId": order_id},
+            signed=True
+        )
 
+    def get_order_trades(self, pair: str, order_id: str):
+        """
+        Args:
+            pair: pair that is currently analysed
+            order_id: order_id number
+
+        Returns:
+            standardize output of the trades needed to complete an order
+        """
+
+        order_data = self.get_order(
+            pair=pair,
+            order_id=order_id
+        )
+        trades = self._send_request(
+            end_point=f"/fapi/v1/userTrades",
+            request_type="GET",
+            params={"symbol": pair, "startTime": order_data['time']},
+            signed=True
+        )
+
+        results = {
+            'time': order_data['time'],
+            'pair': order_data['symbol'],
+            'based_asset': None,
+            'order_id': order_id,
+            'tx_fee_in_based_asset': 0,
+            'tx_fee_in_other_asset': {},
+            'price': float(order_data['avgPrice']),
+            'quantity': float(order_data['executedQty']),
+            'nb_of_trades': 0,
+            'is_buyer': None,
+        }
+
+        for trade in trades:
+            if trade['orderId'] == order_id:
+                if results['based_asset'] is None:
+                    results['based_asset'] = trade['marginAsset']
+                if results['is_buyer'] is None:
+                    results['is_buyer'] = trade['buyer']
+                if trade['commissionAsset'] != trade['marginAsset']:
+                    if trade['commissionAsset'] not in results['tx_fee_in_other_asset'].keys():
+                        results['tx_fee_in_other_asset'][trade['commissionAsset']] = float(trade['commission'])
+                    else:
+                        results['tx_fee_in_other_asset'][trade['commissionAsset']] += float(trade['commission'])
+                else:
+                    results['tx_fee_in_based_asset'] += float(trade['commission'])
+                results['nb_of_trades'] += 1
+
+        for key, value in results['tx_fee_in_other_asset'].items():
+            price_info = self.get_pair_price(f'{key}{results["based_asset"]}')
+            results['tx_fee_in_based_asset'] += float(price_info['price']) * value
+
+        return results
+
+    def open_close_market_order(self, pair: str, side: str, quantity: float):
+        """
+        Args:
+            pair: pair id that we want to create the order for
+            side: could be 'BUY' or 'SELL'
+            quantity: quantity should respect the minimum precision
+        Returns:
+            standardized output containing time, pair, order_id, quantity, price, side, is_position_closing
         """
         _params = {
             "symbol": pair,
@@ -518,34 +565,37 @@ class Binance:
             "type": "MARKET"
         }
 
-        return self._send_request(
+        response = self._send_request(
             end_point=f"/fapi/v1/order",
             request_type="POST",
             params=_params,
             signed=True
         )
 
+        return self.get_order_trades(
+            pair=pair,
+            order_id=response['orderId']
+        )
+
     def take_profit_order(self, pair: str, side: str, quantity: float, tp_price: float):
         """
-
         Args:
-            pair:
-            side:
-            quantity:
-            tp_price:
-
+            pair: pair id that we want to create the order for
+            side: could be 'BUY' or 'SELL'
+            quantity: for binance  quantity is not needed since the tp order "closes" the "opened" position
+            tp_price: price of the take profit
         Returns:
-
+            Standardized ouput
         """
-
         _quantity = float(round(quantity, self.pair_info[pair]['quantityPrecision']))
         _params = {
             "symbol": pair,
             "side": side,
             "type": "TAKE_PROFIT",
             "stopPrice": float(round(tp_price,  self.pair_info[pair]['pricePrecision'])),
-            "quantity ": True
         }
+
+        print(_params)
 
         return self._send_request(
             end_point=f"/fapi/v1/order",
@@ -556,17 +606,13 @@ class Binance:
 
     def stop_loss_order(self,  pair: str, side: str, quantity: float, sl_price: float):
         """
-
         Args:
             pair:
             side:
             quantity:
             sl_price:
-
         Returns:
-
         """
-
         _quantity = float(round(quantity, self.pair_info[pair]['quantityPrecision']))
         _params = {
             "symbol": pair,
@@ -584,7 +630,6 @@ class Binance:
         )
 
     def cancel_order(self, pair: str, order_id: str):
-
         return self._send_request(
             end_point=f"/fapi/v1/order",
             request_type="DELETE",
@@ -593,7 +638,6 @@ class Binance:
         )
 
     def cancel_pair_orders(self, pair: str):
-
         return self._send_request(
             end_point=f"/fapi/v1/order",
             request_type="DELETE",
