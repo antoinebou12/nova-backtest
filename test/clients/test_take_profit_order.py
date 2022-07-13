@@ -2,7 +2,7 @@ from nova.clients.clients import clients
 from decouple import config
 
 
-def test_take_profit_order(exchange: str, pair: str, side: str, quantity: float):
+def test_tp_sl_order(exchange: str, pair: str, side: str, quantity: float):
 
     client = clients(
         exchange=exchange,
@@ -16,22 +16,29 @@ def test_take_profit_order(exchange: str, pair: str, side: str, quantity: float)
         quantity=quantity
     )
 
-    tp_data = client.take_profit_order(
+    tp_data = client.tp_sl_order(
         pair=pair,
         side='SELL',
         quantity=open_data['quantity'],
-        tp_price=open_data['price'] * 1.01
+        price=open_data['price'] * 1.015,
+        tp_sl='tp'
     )
 
-    return open_data, tp_data, client.get_exchange_info()
+    sl_data = client.tp_sl_order(
+        pair=pair,
+        side='SELL',
+        quantity=open_data['quantity'],
+        price=open_data['price'] * 0.985,
+        tp_sl='sl'
+    )
+
+    return open_data, tp_data, sl_data
 
 
 _pair = "BTCUSDT"
 _side = "BUY"
 _quantity = 0.001
 
-_open, _tp, exchange_info = test_take_profit_order('binance', _pair, _side, _quantity)
+_open, _tp, _sl = test_tp_sl_order('binance', _pair, _side, _quantity)
 
-for x in exchange_info['symbols']:
-    if x['symbol'] == 'BTCUSDT':
-        print(x)
+

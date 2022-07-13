@@ -15,6 +15,9 @@ import random
 import time
 
 
+# todo: Telegram Bot Implementation
+# todo: Bot Streaming in Rust
+
 class Bot(TelegramBOT):
 
     def __init__(self,

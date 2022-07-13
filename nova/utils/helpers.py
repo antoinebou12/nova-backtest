@@ -53,11 +53,9 @@ def interval_to_milliseconds(interval: str) -> Optional[int]:
 def limit_to_start_date(interval: str, nb_candles: int):
     """
     Note: the number of candle is determine with the "now" timestamp
-
     Args:
         interval: interval string, e.g.: 1m, 3m, 5m, 15m, 30m, 1h, 2h, 4h, 6h, 8h, 12h, 1d, 3d, 1w
         nb_candles: number of candles needed.
-
     Returns:
         the start_time timestamp in milliseconds for production data
     """

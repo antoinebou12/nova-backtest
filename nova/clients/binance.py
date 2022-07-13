@@ -297,11 +297,18 @@ class Binance:
 
         output = {}
 
-        for x in info['symbols']:
-            output[x['symbol']] = {}
-            output[x['symbol']]['quantityPrecision'] = x['quantityPrecision']
-            output[x['symbol']]['pricePrecision'] = x['pricePrecision']
+        for symbol in info['symbols']:
+            output[symbol['symbol']] = {}
 
+            for fil in symbol['filters']:
+                if fil['filterType'] == 'PRICE_FILTER':
+                    tick_size = str(float(fil['tickSize']))
+                    output[symbol['symbol']]['pricePrecision'] = min(tick_size[::-1].find('.'),
+                                                                     symbol['pricePrecision'])
+                if fil['filterType'] == 'LOT_SIZE':
+                    step_size = str(float(fil['stepSize']))
+                    output[symbol['symbol']]['quantityPrecision'] = min(step_size[::-1].find('.'),
+                                                                        symbol['quantityPrecision'])
         return output
 
     # STANDARDIZED FUNCTIONS
@@ -577,57 +584,42 @@ class Binance:
             order_id=response['orderId']
         )
 
-    def take_profit_order(self, pair: str, side: str, quantity: float, tp_price: float):
+    def tp_sl_order(self, pair: str, side: str, quantity: float, price: float, tp_sl: str):
         """
         Args:
             pair: pair id that we want to create the order for
             side: could be 'BUY' or 'SELL'
             quantity: for binance  quantity is not needed since the tp order "closes" the "opened" position
-            tp_price: price of the take profit
+            price: price of the tp or sl
+            tp_sl: 'tp' if it's take profit, 'sl' if it's stop loss
         Returns:
-            Standardized ouput
+            Standardized output
         """
-        _quantity = float(round(quantity, self.pair_info[pair]['quantityPrecision']))
         _params = {
             "symbol": pair,
             "side": side,
-            "type": "TAKE_PROFIT",
-            "stopPrice": float(round(tp_price,  self.pair_info[pair]['pricePrecision'])),
+            "type": 'TAKE_PROFIT' if tp_sl == 'tp' else 'STOP',
+            "timeInForce": 'GTC',
+            "price": float(round(price,  self.pair_info[pair]['pricePrecision'])),
+            "stopPrice": float(round(price,  self.pair_info[pair]['pricePrecision'])),
+            "quantity": float(round(quantity, self.pair_info[pair]['quantityPrecision']))
         }
 
-        print(_params)
-
-        return self._send_request(
+        data = self._send_request(
             end_point=f"/fapi/v1/order",
             request_type="POST",
             params=_params,
             signed=True
         )
 
-    def stop_loss_order(self,  pair: str, side: str, quantity: float, sl_price: float):
-        """
-        Args:
-            pair:
-            side:
-            quantity:
-            sl_price:
-        Returns:
-        """
-        _quantity = float(round(quantity, self.pair_info[pair]['quantityPrecision']))
-        _params = {
-            "symbol": pair,
-            "side": side,
-            "type": "STOP_MARKET",
-            "stopPrice": float(round(sl_price,  self.pair_info[pair]['pricePrecision'])),
-            "closePosition": True
+        return {
+            'time': data['updateTime'],
+            'pair': data['symbol'],
+            'order_id': data['orderId'],
+            'type': data['type'],
+            'sl_price': data['price'],
+            'executedQty': data['executedQty']
         }
-
-        return self._send_request(
-            end_point=f"/fapi/v1/order",
-            request_type="POST",
-            params=_params,
-            signed=True
-        )
 
     def cancel_order(self, pair: str, order_id: str):
         return self._send_request(
