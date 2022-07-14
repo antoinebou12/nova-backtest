@@ -1,9 +1,9 @@
+from datetime import datetime, timedelta
 from typing import Optional, Dict
-import time
 import dateparser
+import time
 import pytz
 import re
-from datetime import datetime, timedelta
 
 
 def date_to_milliseconds(date_str: str) -> int:

@@ -1,19 +1,19 @@
-from gql import Client
+from nova.api.mutation import Mutation
+from nova.api.query import Query
+
 from gql.transport.aiohttp import AIOHTTPTransport
-
-from nova.api.mutation import GraphMutation as Mutation
-from nova.api.query import GraphQuery as Query
+from gql import Client
 
 
-class NovaClient:
+class NovaAPI:
 
-    def __init__(self, api_secret=None) -> None:
-        self._api_secret = api_secret
-        self._headers = {"Authorization": f"Bearer {api_secret}"}
+    def __init__(self, api_secret: str):
+
         self._transport = AIOHTTPTransport(
             url='https://api.novalabs.ai/graphql',
-            headers=self._headers
+            headers={"Authorization": f"Bearer {api_secret}"}
         )
+
         self._client = Client(
             transport=self._transport,
             fetch_schema_from_transport=True

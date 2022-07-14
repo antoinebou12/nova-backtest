@@ -1,36 +1,29 @@
-from nova.utils.helpers import get_timedelta_unit, is_opening_candle
 from nova.utils.constant import POSITION_PROD_COLUMNS
 from nova.utils.telegram import TelegramBOT
-from nova.api.nova_client import NovaClient
+from nova.api.client import NovaAPI
+
+from nova.utils.helpers import get_timedelta_unit, is_opening_candle
 from nova.clients.clients import clients
 
 from datetime import datetime
-from decouple import config
-import logging.handlers
 import pandas as pd
-import socketio
-import logging
-import socket
 import random
 import time
 
-
 # todo: Telegram Bot Implementation
 # todo: Bot Streaming in Rust
+
 
 class Bot(TelegramBOT):
 
     def __init__(self,
                  exchange: str,
-
                  key: str,
                  secret: str,
-
+                 nova_api_key: str,
                  bot_name: str,
                  based_asset: str,
-
                  bot_id: str,
-                 is_logging: bool,
 
                  candle: str,
                  historical_window: int,
@@ -49,64 +42,53 @@ class Bot(TelegramBOT):
                  bot_chat_id: str = ''
                  ):
 
+        # BOT INFORMATION
+        self.bot_id = bot_id
+        self.bot_name = bot_name
+
+        # STRATEGY INFORMATION
         self.based_asset = based_asset
         self.candle = candle
+        self.time_step = get_timedelta_unit(self.candle)
         self.max_holding = max_hold
-        self.bot_name = bot_name
         self.position_size = position_size
         self.geometric_size = geometric_size
         self.historical_window = historical_window
         self.max_pos = max_pos
-        self.position_opened = pd.DataFrame(columns=POSITION_PROD_COLUMNS)
-        self.prod_data = {}
-
-        self.nova = NovaClient(config('NovaAPISecret'))
-
-        self.exchange = exchange
-        self.client = clients(exchange=exchange, key=key, secret=secret)
-
+        # Leverage is automatically set to max
+        self.leverage = int(self.max_pos * self.position_size)
+        self.max_sl_percentage = 1 / self.leverage - 0.02
+        self.bankroll = bankroll
+        self.max_down = max_down
         self.list_pair = list_pair
+
         if type(self.list_pair).__name__ == 'str':
             raw_list_pair = self.get_list_pair()
 
             if self.list_pair != 'All pairs':
                 raise Exception("Please enter valid list_pair")
-
             else:
                 self.list_pair = raw_list_pair
 
-        self.bankroll = bankroll
-        self.max_down = max_down
-        self.telegram_notification = telegram_notification
+        # EXCHANGE CLIENT
+        self.exchange = exchange
+        self.client = clients(exchange=exchange, key=key, secret=secret)
 
+        # NOVA API
+        self.nova = NovaAPI(api_secret=nova_api_key)
+
+        # TELEGRAM NOTIFICATION
+        self.telegram_notification = telegram_notification
         if self.telegram_notification:
             TelegramBOT.__init__(self,
                                  bot_token=bot_token,
                                  bot_chatID=bot_chat_id)
 
-        'Leverage is automatically set at the maximum we can setup in function of the max_pos and the position size'
-        self.leverage = int(self.max_pos * self.position_size)
-        self.max_sl_percentage = 1 / self.leverage - 0.02
-
+        # BOT STATE
         self.currentPNL = 0
         self.current_positions_amt = 0
-        self.bot_id = bot_id
-
-        # Logging  and
-        logging.getLogger().setLevel(logging.NOTSET)
-
-        # ToDo : add creation date
-        logging.basicConfig(filename=f'{self.bot_id}.log', filemode='w')
-        self.log = logging.getLogger(socket.gethostname())
-
-        self.logger = is_logging
-
-        # Socket log stream
-        if self.logger:
-            self.logger_client = socketio.Client()
-            self.logger_client.connect('http://167.114.3.100:5000', wait_timeout=10)
-
-        self.time_step = get_timedelta_unit(self.candle)
+        self.position_opened = pd.DataFrame(columns=POSITION_PROD_COLUMNS)
+        self.prod_data = {}
 
     def get_list_pair(self):
         """
@@ -188,7 +170,7 @@ class Bot(TelegramBOT):
         """
         Args:
             action: this is an integer that can get the value 1 (for long) or -1 (for short)
-            pair: is a string the represent the pair we are entering in position.
+            pair: is a string that represent the pair we are entering in position.
             tp: take profit price
             sl: stop loss price
         Returns:
@@ -200,7 +182,7 @@ class Bot(TelegramBOT):
         size = self.client.get_position_size()
 
         if size == 0:
-            self.print_log_send_msg(f'Balance too low')
+            print(f'Balance too low')
             self.telegram_bot_sendtext(f'Tried to enter in position for {pair} but balance is too low')
             return 0
 
@@ -348,7 +330,7 @@ class Bot(TelegramBOT):
             # 2 - verify if the tp and sl order have been deleted
             if float(position_info['positionAmt']) == qty:
 
-                self.print_log_send_msg(f'No change in Qty {row.pair}')
+                print(f'No change in Qty {row.pair}')
 
                 # 2.1 - check if tp or sl order has been canceled
                 list_changes = []
@@ -359,7 +341,7 @@ class Bot(TelegramBOT):
 
                 # 2.2 - if it has been touched - cancel bot position
                 if len(list_changes) > 0:
-                    self.print_log_send_msg(f'Cancel Trade Cause an Order has been removed {row.pair}')
+                    print(f'Cancel Trade Cause an Order has been removed {row.pair}')
 
                     self._update_user_touched(
                         row_pos=row,
@@ -373,12 +355,12 @@ class Bot(TelegramBOT):
             # 3 - if there is a difference between class and real position
             if float(position_info['positionAmt']) != qty:
 
-                self.print_log_send_msg(f'Change in Qty {row.pair}')
+                print(f'Change in Qty {row.pair}')
 
                 # 3.1 - check if tp has been executed
                 if row.tp_id in list(df_tx.orderId):
 
-                    self.print_log_send_msg(f'TP {row.pair}')
+                    print(f'TP {row.pair}')
 
                     # 3.1.1 if the sl order still exit -> close it
                     if row.sl_id in list(df_orders.orderId):
@@ -405,7 +387,7 @@ class Bot(TelegramBOT):
                 # 3.2 - check if sl has been executed
                 elif row.sl_id in list(df_tx.orderId):
 
-                    self.print_log_send_msg(f'SL {row.pair}')
+                    print(f'SL {row.pair}')
 
                     if row.tp_id in list(df_orders.orderId):
                         self.client.cancel_order(
@@ -431,7 +413,7 @@ class Bot(TelegramBOT):
                 # 3.3 - update positions
                 else:
 
-                    self.print_log_send_msg(f'Tx has been done {row.pair}')
+                    print(f'Tx has been done {row.pair}')
 
                     self._update_user_touched(
                         row_pos=row,
@@ -562,7 +544,7 @@ class Bot(TelegramBOT):
             This method is used to check if the maximum holding time is reached for each open positions.
         """
 
-        # self.print_log_send_msg(f'Checking Max Holding')
+        # print(f'Checking Max Holding')
 
         # Compute the server time
         s_time = self.client.get_server_time()
@@ -585,7 +567,7 @@ class Bot(TelegramBOT):
 
                 exit_type = 'MAX_HOLDING' if max_holding_condition else 'EXIT_SIGNAL'
 
-                self.print_log_send_msg(msg=f'Exit {row.pair} with exit type: {exit_type}')
+                print(f'Exit {row.pair} with exit type: {exit_type}')
 
                 # determine the exit side
                 exit_side = 'BUY'
@@ -673,7 +655,7 @@ class Bot(TelegramBOT):
         self.position_opened[pair]['tp_stopPrice'] = sl_open['stopPrice']
 
     def security_close_all(self, exit_type: str):
-        self.print_log_send_msg(msg='SECURITY CLOSE ALL')
+        print('SECURITY CLOSE ALL')
         for index, row in self.position_opened.iterrows():
             exit_side = 'SELL'
             if row.side == 'SELL':
@@ -687,28 +669,6 @@ class Bot(TelegramBOT):
                 exit_type=exit_type
             )
 
-    def print_log_send_msg(self, msg: str, error: bool = False):
-        """
-        Args:
-            msg: string message that wants to be sent
-            error: boolean that determines if you want to log an error
-        Returns:
-            This function:
-                - print the messages
-                - log the messages into a log file for debugging
-                - send the message to a server
-        """
-        print(msg)
-        self.log.info(msg)
-
-        if self.logger:
-            self.logger_client.emit('MessageStream', {'data': {
-                'message': msg,
-                'botId': self.bot_id
-            }})
-        if error:
-            self.log.error(msg, exc_info=True)
-
     def security_check_max_down(self):
         """
         Returns:
@@ -717,7 +677,7 @@ class Bot(TelegramBOT):
         """
         max_down_amount = -1 * self.max_down * self.bankroll
         if self.currentPNL <= max_down_amount:
-            self.print_log_send_msg('Max Down Reached -> Closing all positions')
+            print('Max Down Reached -> Closing all positions')
             self.security_close_all(exit_type="MAX_LOSS")
 
     def production_run(self):
@@ -725,11 +685,11 @@ class Bot(TelegramBOT):
         last_crashed_time = datetime.utcnow()
 
         # 1 - Print and send telegram message
-        self.print_log_send_msg(f'Nova L@bs {self.bot_name} starting')
+        print(f'Nova L@bs {self.bot_name} starting')
         self.telegram_bot_sendtext(bot_message=f'Nova L@bs {self.bot_name} starting')
 
         # 2 - Download the production data
-        self.print_log_send_msg(f'Fetching historical data')
+        print(f'Fetching historical data')
         self.get_prod_data(self.list_pair)
 
         # 3 - Begin the infinite loop
@@ -744,11 +704,11 @@ class Bot(TelegramBOT):
 
                     # 4 - Update dataframes
                     print(datetime.utcnow())
-                    self.print_log_send_msg('Updating Data')
+                    print('Updating Data')
                     t0 = time.time()
                     self.update_prod_data(list_pair=self.list_pair)
                     t1 = time.time()
-                    self.print_log_send_msg(f"Updated data in {round(t1 - t0, 3)} s")
+                    print(f"Updated data in {round(t1 - t0, 3)} s")
 
                     # 5 - Get current positions and update if tp or sl has been filled
                     current_position = self.client.get_actual_position()
@@ -782,7 +742,7 @@ class Bot(TelegramBOT):
                             if action != 0:
 
                                 # 15 - send entering position
-                                self.print_log_send_msg(f'{pair} action is {action}')
+                                print(f'{pair} action is {action}')
 
                                 self.enter_position(action=action,
                                                     pair=pair,
@@ -791,7 +751,7 @@ class Bot(TelegramBOT):
                                                     )
 
                     # 16 - print current PNL
-                    self.print_log_send_msg(f'Current bot PNL is {self.currentPNL}')
+                    print(f'Current bot PNL is {self.currentPNL}')
 
                     print("Waiting for next candle to close")
 
@@ -799,7 +759,7 @@ class Bot(TelegramBOT):
 
             except Exception as e:
 
-                self.print_log_send_msg(f'{self.bot_name} crashed with the error:\n{str(e)[:100]}')
+                print(f'{self.bot_name} crashed with the error:\n{str(e)[:100]}')
 
                 since_last_crash = datetime.utcnow() - last_crashed_time
 

@@ -1,9 +1,3 @@
-EXCEPTION_LIST_BINANCE = [
-    'BTCSTUSDT', 'BTCDOMUSDT', '1000XECUSDT', 'ETHUSDT_220325',
-    '1000BTTCUSDT', '1000SHIBUSDT', 'DEFIUSDT', 'BTCUSDT_220325',
-    'API3USDT', 'ANCUSDT', 'IMXUSDT', 'FLOWUSDT', 'TLMUSDT', 'ICPUSDT', 'DODOUSDT', 'AKROUSDT'
-]
-
 STD_CANDLE_FORMAT = [
     'open_time', 'open', 'high', 'low', 'close', 'volume', 'close_time'
 ]
@@ -17,13 +11,6 @@ POSITION_PROD_COLUMNS = [
     'id', 'pair', 'status', 'quantity', 'type', 'side', 'tp_id', 'tp_side',
     'tp_type', 'tp_stopPrice', 'sl_id', 'sl_side', 'sl_type', 'sl_stopPrice',
     'nova_id', 'time_entry'
-]
-
-
-BINANCE_KLINES_COLUMNS = [
-    'open_time', 'open', 'high', 'low', 'close', 'volume', 'close_time',
-    'quote_asset_volume', 'nb_of_trades', 'taker_base_volume',
-    'taker_quote_volume', 'ignore'
 ]
 
 DATA_FORMATING = {

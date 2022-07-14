@@ -1,7 +1,7 @@
 from gql import gql
 
 
-class GraphMutation:
+class Mutation:
 
     @staticmethod
     def create_pair():

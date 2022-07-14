@@ -1,7 +1,7 @@
 from gql import gql
 
 
-class GraphQuery:
+class Query:
 
     @staticmethod
     def read_strategy(_name: str):

@@ -1,4 +1,4 @@
-from nova.api.nova_client import NovaClient
+from nova.api.client import NovaClient
 from decouple import config
 
 
