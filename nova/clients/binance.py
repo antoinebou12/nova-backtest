@@ -3,6 +3,8 @@ from nova.utils.constant import DATA_FORMATING, STD_CANDLE_FORMAT
 from requests import Request, Session
 from urllib.parse import urlencode
 import pandas as pd
+import aiohttp
+import asyncio
 import hashlib
 import time
 import hmac
@@ -402,35 +404,73 @@ class Binance:
             if x['asset'] == "BNB" and float(x["availableBalance"]) == 0:
                 print(f"You can save Tx Fees if you transfer BNB in your Future Account")
 
-    def get_prod_candles(
-            self,
-            pair: str,
-            interval: str,
-            nb_candles: int,
-    ) -> (pd.DataFrame, int):
-        """
-        Note : Data Formatting is done before
-        Args:
-            pair:
-            interval:
-            nb_candles:
-        Returns:
-        """
+    async def get_prod_candles(self, session, pair, interval, window, current_pair_state: dict = None):
 
-        start_time = limit_to_start_date(interval=interval, nb_candles=nb_candles)
+        url = "https://fapi.binance.com/fapi/v1/klines"
+
+        final_dict = {}
+        final_dict[pair] = {}
+
+        if current_pair_state is not None:
+            limit = 3
+        else:
+            limit = window
+
+        params = dict(symbol=pair, interval=interval, limit=limit)
 
         # Compute the server time
         s_time = self.get_server_time()
-        _params = dict(symbol=pair, interval=interval, startTime=start_time, endTime=s_time)
 
-        data = self._send_request(
-            end_point=f"/fapi/v1/klines",
-            request_type="GET",
-            params=_params
-        )
+        async with session.get(url=url, params=params) as response:
+            data = await response.json()
+            df = self._format_data(data, historical=False)
+            df = df[df['close_time'] < s_time]
 
-        df = self._format_data(all_data=data, historical=False)
-        return df[df['close_time'] < int(s_time)], s_time
+            if current_pair_state is None:
+                final_dict[pair]['latest_update'] = s_time
+                final_dict[pair]['data'] = df
+
+            else:
+                df_new = pd.concat([current_pair_state['data'], df])
+                df_new = df_new.drop_duplicates(subset=['open_time_datetime']).sort_values(by=['open_time_datetime'],
+                                                                                           ascending=True)
+                final_dict[pair]['latest_update'] = s_time
+                final_dict[pair]['data'] = df_new.tail(window)
+
+            return final_dict
+
+    async def get_prod_data(self, list_pair: list, interval: str, nb_candles: int, current_state: dict):
+        """
+        Note: This function is called once when the bot is instantiated.
+        This function execute n API calls with n representing the number of pair in the list
+        Args:
+            list_pair: list of all the pairs you want to run the bot on.
+            interval: time interval
+            nb_candles: number of candles needed
+            current_state: boolean indicate if this is an update
+        Returns: None, but it fills the dictionary self.prod_data that will contain all the data
+        needed for the analysis.
+        !! Command to run async function: asyncio.run(self.get_prod_data(list_pair=list_pair)) !!
+        """
+
+        async with aiohttp.ClientSession(connector=aiohttp.TCPConnector(ssl=False)) as session:
+            tasks = []
+            for pair in list_pair:
+                task = asyncio.ensure_future(
+                    self.get_prod_candles(
+                        session=session,
+                        pair=pair,
+                        interval=interval,
+                        window=nb_candles,
+                        current_pair_state=current_state)
+                )
+                tasks.append(task)
+            all_info = await asyncio.gather(*tasks)
+
+            all_data = {}
+            for info in all_info:
+                all_data.update(info)
+            return all_data
 
     def get_last_price(self, pair: str) -> dict:
         """
@@ -584,7 +624,7 @@ class Binance:
             order_id=response['orderId']
         )
 
-    def tp_sl_order(self, pair: str, side: str, quantity: float, price: float, tp_sl: str):
+    def tp_sl_limit_order(self, pair: str, side: str, quantity: float, price: float, tp_sl: str):
         """
         Args:
             pair: pair id that we want to create the order for
@@ -631,7 +671,7 @@ class Binance:
 
     def cancel_pair_orders(self, pair: str):
         return self._send_request(
-            end_point=f"/fapi/v1/order",
+            end_point=f"/fapi/v1/allOpenOrders",
             request_type="DELETE",
             params={"symbol": pair},
             signed=True
