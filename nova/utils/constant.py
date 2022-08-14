@@ -7,11 +7,6 @@ VAR_NEEDED_FOR_POSITION = [
     'all_exit_time', 'all_exit_point', 'all_tp', 'all_sl'
 ]
 
-POSITION_PROD_COLUMNS = [
-    'id', 'pair', 'status', 'quantity', 'type', 'side', 'tp_id', 'tp_side',
-    'tp_type', 'tp_stopPrice', 'sl_id', 'sl_side', 'sl_type', 'sl_stopPrice',
-    'nova_id', 'time_entry'
-]
 
 DATA_FORMATING = {
     "binance": {

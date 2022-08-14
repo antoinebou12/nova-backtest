@@ -267,3 +267,6 @@ class NovaAPI:
         return self._client.execute(
             document=Query.read_positions()
         )
+
+    def trading_pairs(self):
+        pass
