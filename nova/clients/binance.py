@@ -1,4 +1,4 @@
-from nova.utils.helpers import interval_to_milliseconds, convert_ts_str, limit_to_start_date
+from nova.utils.helpers import interval_to_milliseconds
 from nova.utils.constant import DATA_FORMATING, STD_CANDLE_FORMAT
 from requests import Request, Session
 from urllib.parse import urlencode
@@ -142,7 +142,7 @@ class Binance:
         timeframe = interval_to_milliseconds(interval)
 
         # if a start time was passed convert it
-        start_ts = convert_ts_str(start_time)
+        start_ts = start_time
 
         # establish first available start timestamp
         if start_ts is not None:
@@ -153,7 +153,7 @@ class Binance:
             start_ts = max(start_ts, first_valid_ts)
 
         # if an end time was passed convert it
-        end_ts = convert_ts_str(end_time)
+        end_ts = end_time
         if end_ts and start_ts and end_ts <= start_ts:
             return output_data
 

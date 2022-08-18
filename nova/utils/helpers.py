@@ -2,31 +2,10 @@ from datetime import datetime, timedelta
 from typing import Optional, Dict
 import dateparser
 import time
+
+import numpy as np
 import pytz
 import re
-
-
-def date_to_milliseconds(date_str: str) -> int:
-    """
-    Note: Convert UTC date to milliseconds
-    Args:
-        date_str: date in readable format, i.e. "January 01, 2018", "11 hours ago UTC", "now UTC"
-    Returns:
-        timestamp in milliseconds
-    """
-    # get epoch value in UTC
-    epoch: datetime = datetime.utcfromtimestamp(0).replace(tzinfo=pytz.utc)
-    # parse our date string
-    d: Optional[datetime] = dateparser.parse(date_str, settings={'TIMEZONE': "UTC"})
-    if not d:
-        raise "Error - date_to_milliseconds"
-
-    # if the date is not timezone aware apply UTC timezone
-    if d.tzinfo is None or d.tzinfo.utcoffset(d) is None:
-        d = d.replace(tzinfo=pytz.utc)
-
-    # return the difference in time
-    return int((d - epoch).total_seconds() * 1000.0)
 
 
 def interval_to_milliseconds(interval: str) -> Optional[int]:
@@ -96,15 +75,32 @@ def is_opening_candle(interval: str):
             return datetime.utcnow().hour % multi == 0
 
 
-def convert_ts_str(ts_str):
+def compute_time_difference(
+        start_time: Optional[int],
+        end_time: Optional[int],
+        unit: str
+) -> Optional[float]:
     """
+
     Args:
-        ts_str:
+        start_time: start time in timestamp millisecond
+        end_time: start time in timestamp millisecond
+        unit: can be 'second', 'minute', 'hour', 'day'
 
     Returns:
+
     """
-    if ts_str is None:
-        return ts_str
-    if type(ts_str) == int:
-        return ts_str
-    return date_to_milliseconds(ts_str)
+
+    start_time_s = int(start_time / 1000)
+    end_time_s = int(end_time / 1000)
+
+    if unit == 'second':
+        return end_time_s - start_time_s
+    elif unit == 'minute':
+        return (end_time_s - start_time_s) / 60
+    elif unit == 'hour':
+        return (end_time_s - start_time_s) / 3600
+    elif unit == 'day':
+        return (end_time_s - start_time_s) / (3600 * 24)
+
+
