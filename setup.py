@@ -7,7 +7,7 @@ _version_re = re.compile(r'__version__\s+=\s+(.*)')
 
 with open('nova/__init__.py', 'rb') as f:
     version = str(ast.literal_eval(_version_re.search(
-        f.read().decode('utf-8')).group(1)))
+        f.read().decode('utf-8')).group(1))) + 1
 
 with open("README.md", "r") as fh:
     long_description = fh.read()
