@@ -6,15 +6,17 @@ from setuptools import setup, find_packages
 _version_re = re.compile(r'__version__\s+=\s+(.*)')
 
 with open('nova/__init__.py', 'rb') as f:
-    version = str(ast.literal_eval(_version_re.search(
-        f.read().decode('utf-8')).group(1))) + str(1)
+    _parsed = str(ast.literal_eval(_version_re.search(
+        f.read().decode('utf-8')).group(1)))
+    
+VERSION=_parsed[:-1] + str(int(_parsed[-1])+1)
 
 with open("README.md", "r") as fh:
     long_description = fh.read()
 
 setup(
     name="novalabs",
-    version=version,
+    version=VERSION,
     author="Nova Labs",
     author_email="devteam@novalabs.ai",
     description="Wrappers around Nova Labs utilities focused on safety and testability",
