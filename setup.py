@@ -1,9 +1,9 @@
-import setuptools
+from setuptools import setup
 
 with open("README.md", "r") as fh:
     long_description = fh.read()
 
-setuptools.setup(
+setup(
     name="novalabs",
     version="0.5.89",
     author="Nova Labs",
