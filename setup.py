@@ -1,11 +1,20 @@
+import re
+import ast
 from setuptools import setup
+
+
+_version_re = re.compile(r'__version__\s+=\s+(.*)')
+
+with open('nova/__init__.py', 'rb') as f:
+    version = str(ast.literal_eval(_version_re.search(
+        f.read().decode('utf-8')).group(1)))
 
 with open("README.md", "r") as fh:
     long_description = fh.read()
 
 setup(
     name="novalabs",
-    version="0.5.89",
+    version=version,
     author="Nova Labs",
     author_email="devteam@novalabs.ai",
     description="Wrappers around Nova Labs utilities focused on safety and testability",
