@@ -14,16 +14,18 @@ class Binance:
 
     def __init__(self,
                  key: str,
-                 secret: str):
+                 secret: str,
+                 ):
 
         self.api_key = key
         self.api_secret = secret
-
+        
         self.based_endpoint = "https://fapi.binance.com"
         self._session = Session()
 
         self.historical_limit = 1000
         self.pair_info = self._get_pair_info()
+
 
     # API REQUEST FORMAT
     def _send_request(self, end_point: str, request_type: str, params: dict = None, signed: bool = False):
@@ -76,7 +78,8 @@ class Binance:
         info = self.get_exchange_info()
         list_pairs = []
         for pair in info['symbols']:
-            if 'BUSD' or 'USDT' in pair['symbol']:
+            tradable = pair['status'] == 'TRADING'
+            if (self.quote_asset in pair['symbol']) and tradable:
                 list_pairs.append(pair['symbol'])
         return list_pairs
 

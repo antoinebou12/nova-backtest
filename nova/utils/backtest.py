@@ -30,6 +30,7 @@ class BackTest:
                  fees: float,
                  max_pos: int,
                  max_holding: int,
+                 quote_asset: str = 'USDT',
                  geometric_sizes: bool = False,
                  positions_size: float = 1 / 20,
                  save_all_pairs_charts: bool = False,
@@ -39,7 +40,8 @@ class BackTest:
                  pass_phrase: str = ""):
 
         self.exchange = exchange
-        self.strategy_name=strategy_name
+        self.quote_asset = quote_asset
+        self.strategy_name = strategy_name
         self.positions_size = positions_size
         self.geometric_sizes = geometric_sizes
 
