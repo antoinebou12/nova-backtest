@@ -19,13 +19,12 @@ class Binance:
 
         self.api_key = key
         self.api_secret = secret
-        
+
         self.based_endpoint = "https://fapi.binance.com"
         self._session = Session()
 
         self.historical_limit = 1000
         self.pair_info = self._get_pair_info()
-
 
     # API REQUEST FORMAT
     def _send_request(self, end_point: str, request_type: str, params: dict = None, signed: bool = False):
@@ -33,7 +32,6 @@ class Binance:
         if params is None:
             params = {}
         if signed:
-
             params['timestamp'] = int(time.time() * 1000)
             query_string = urlencode(params, True).replace("%40", "@")
             m = hmac.new(self.api_secret.encode("utf-8"), query_string.encode("utf-8"), hashlib.sha256)
@@ -67,21 +65,6 @@ class Binance:
             request_type="GET"
         )
         return int(data['serverTime'])
-
-    def get_all_pairs(self) -> list:
-        """
-        Note:
-            Only stable coins pairs will be filtered [BUSD / USDT]
-        Returns:
-             list of all the pairs that we can trade on.
-        """
-        info = self.get_exchange_info()
-        list_pairs = []
-        for pair in info['symbols']:
-            tradable = pair['status'] == 'TRADING'
-            if (self.quote_asset in pair['symbol']) and tradable:
-                list_pairs.append(pair['symbol'])
-        return list_pairs
 
     def _get_candles(self, pair: str, interval: str, start_time: int, end_time: int, limit: int = None):
         """
@@ -575,7 +558,7 @@ class Binance:
             'tx_fee_in_based_asset': 0,
             'tx_fee_in_other_asset': {},
             'price': float(order_data['avgPrice']),
-            'originalQuantity':  float(order_data['origQty']),
+            'originalQuantity': float(order_data['origQty']),
             'executedQuantity': float(order_data['executedQty']),
             'nb_of_trades': 0,
             'is_buyer': None,
@@ -644,7 +627,7 @@ class Binance:
             "side": side,
             "type": 'STOP_MARKET',
             "timeInForce": 'GTC',
-            "stopPrice": float(round(stop_price,  self.pair_info[pair]['pricePrecision'])),
+            "stopPrice": float(round(stop_price, self.pair_info[pair]['pricePrecision'])),
         }
 
         data = self._send_request(
@@ -679,8 +662,8 @@ class Binance:
             "side": side,
             "type": 'TAKE_PROFIT' if tp_type == 'limit' else 'TAKE_PROFIT_MARKET',
             "timeInForce": 'GTC',
-            "price": float(round(price,  self.pair_info[pair]['pricePrecision'])),
-            "stopPrice": float(round(price,  self.pair_info[pair]['pricePrecision'])),
+            "price": float(round(price, self.pair_info[pair]['pricePrecision'])),
+            "stopPrice": float(round(price, self.pair_info[pair]['pricePrecision'])),
             "quantity": float(round(quantity, self.pair_info[pair]['quantityPrecision']))
         }
 
