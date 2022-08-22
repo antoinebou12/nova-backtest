@@ -1,68 +1,25 @@
-from nova.utils.backtest import BackTest
 from datetime import datetime
-from binance.client import Client
+from strategy_test import Test
 from decouple import config
-import pandas as pd
-import numpy as np
 import os
+import pandas as pd
 
 
-def test_create_entry_price_times() -> None:
+def test_create_entry_prices_times() -> None:
 
-    start_date = datetime(2022, 1, 1)
-    end_date = datetime(2022, 4, 10)
+    all_tests = [
+        {'exchange': 'binance', 'pair': 'BTCUSDT', 'update': False},
+        {'exchange': 'binance', 'pair': 'BTCUSDT', 'update': True},
+    ]
 
-    class Test(BackTest):
+    for _test in all_tests:
 
-        def __init__(self, candle_str: str):
-            self.client = Client(
-                config("BinanceAPIKey"),
-                config("BinanceAPISecret"),
-                testnet=False
-            )
+        strategy = Test(
+            exchange=_test['exchange'],
+            key=config(f'{_test["exchange"]}APIKey'),
+            secret=config(f'{_test["exchange"]}APISecret'),
+            start=datetime(2022, 1, 1),
+            end=datetime(2022, 4, 10),
+            candle='4h'
+        )
 
-            BackTest.__init__(
-                self,
-                candle=candle_str,
-                list_pair="All pairs",
-                start=start_date,
-                end=end_date,
-                fees=0.0004,
-                max_pos=10,
-                max_holding=15,
-                save_all_pairs_charts=False,
-                start_bk=10000,
-                slippage=False
-            )
-
-    test_class = Test(
-        candle_str='1d',
-    )
-
-    data = test_class.get_all_historical_data(pair='BTCUSDT')
-
-    entry_long_prob = 0.1
-    entry_short_prob = 0.1
-
-    nb_obs = data.shape[0]
-    data['entry_long'] = np.random.random(nb_obs)
-    data['entry_short'] = np.random.random(nb_obs)
-    data['exit_point'] = np.random.random(nb_obs)
-    data['index_num'] = np.arange(len(data))
-
-    # Create this variables
-    data['all_entry_point'] = np.where(data['entry_long'] < entry_long_prob, 1,
-                                       np.where(data['entry_short'] < entry_short_prob, -1, np.nan))
-
-    new_data = test_class.create_entry_prices_times(df=data)
-
-    print(new_data.all_entry_price.dtypes)
-    assert 'all_entry_price' in new_data.columns
-    assert 'all_entry_time' in new_data.columns
-
-    assert new_data.all_entry_time.dtypes == 'datetime64[ns]'
-    assert new_data.all_entry_price.dtypes == 'float64'
-
-
-
-test_create_entry_price_times()
