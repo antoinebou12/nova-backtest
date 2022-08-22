@@ -257,34 +257,6 @@ for pair in to_backtest:
 
     vmc.create_position_df(data, pair)
 
-for pair in vmc.df_all_positions.keys():
-    df_concat = vmc.df_all_positions[pair]
-    df_concat['pair'] = pair
-    vmc.df_all_pairs_positions = pd.concat([vmc.df_all_pairs_positions, vmc.df_all_positions[pair]])
-
-vmc.df_all_pairs_positions = vmc.df_all_pairs_positions[vmc.df_all_pairs_positions['entry_time'] > vmc.start]
-
-vmc.df_all_pairs_positions = vmc.df_all_pairs_positions.sort_values(by=['exit_time'])
-
-vmc.df_all_pairs_positions['position_size'] = vmc.positions_size * vmc.start_bk
-
-vmc.df_all_pairs_positions = vmc.df_all_pairs_positions.dropna(subset=['exit_price', 'PL_amt_realized'])
-
-
-
-
-
-vmc_all_pair_pos = vmc.df_all_pairs_positions
-
-
-
-#
-# from nova.utils.constant import VAR_NEEDED_FOR_POSITION
-#
-# final_df = data[VAR_NEEDED_FOR_POSITION]
-# final_df = final_df.dropna()
-
-
-
-
-
+vmc.all_pairs_real_positions()
+vmc.get_performance_graph('all_pairs')
+all_statistics = vmc.create_full_statistics()

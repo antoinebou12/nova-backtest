@@ -109,7 +109,7 @@ class Binance:
     def _get_earliest_valid_timestamp(self, pair: str, interval: str):
         """
         Args:
-            pair: Name of symbol pair -- BNBBTC
+            pair: Name of symbol pair
             interval: Binance Kline interval
 
         return:
@@ -145,15 +145,15 @@ class Binance:
         start_ts = start_time
 
         # establish first available start timestamp
-        if start_ts is not None:
-            first_valid_ts = self._get_earliest_valid_timestamp(
-                pair=pair,
-                interval=interval
-            )
-            start_ts = max(start_ts, first_valid_ts)
+        first_valid_ts = self._get_earliest_valid_timestamp(
+            pair=pair,
+            interval=interval
+        )
+        start_ts = max(start_ts, first_valid_ts)
 
         # if an end time was passed convert it
         end_ts = end_time
+
         if end_ts and start_ts and end_ts <= start_ts:
             return output_data
 
@@ -250,7 +250,7 @@ class Binance:
             a concatenated dataframe of the current data and the new data
         """
 
-        end_date_data_ts = current_df['open_time'].max()
+        end_date_data_ts = int(current_df['open_time'].max())
         now_date_ts = int(time.time() * 1000)
         data = self._combine_history(
             pair=pair,
