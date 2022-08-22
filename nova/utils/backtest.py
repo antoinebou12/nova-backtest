@@ -34,7 +34,7 @@ class BackTest:
                  positions_size: float = 1 / 20,
                  save_all_pairs_charts: bool = False,
                  start_bk: float = 10000,
-                 slippage: bool = True,
+                 slippage: bool = False,
                  update_data: bool = False,
                  pass_phrase: str = ""):
 
@@ -770,7 +770,7 @@ class BackTest:
 
         temp = temp[temp['date'] >= temp['bankroll'].idxmax()]
 
-        row['drawdown'] = (temp['bankroll'].max() - row.bankroll) / temp['bankroll'].max()
+        row['drawdown'] = temp['bankroll'].max() - row.bankroll
 
         row['last_date_max'] = temp['bankroll'].idxmax()
 
@@ -919,7 +919,7 @@ class BackTest:
         sortino_ratio = geometric_return / downside_volatility
         statistics['Sortino Ratio'] = round(sortino_ratio, 2)
 
-        statistics['Max DrawDown'] = f"{round(100 * df_daily['drawdown'].max(), 2)} %"
+        statistics['Max DrawDown'] = f"{round(df_daily['drawdown'].max(), 2)} $"
         start_max_DD = df_daily[df_daily['date'] == df_daily['drawdown'].idxmax()]['last_date_max']
         end_max_DD = df_daily[df_daily['date'] == df_daily['drawdown'].idxmax()]['date']
 
