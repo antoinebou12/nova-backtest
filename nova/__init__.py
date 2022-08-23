@@ -1,3 +1,3 @@
 import importlib
 
-__version__ = importlib.metadata("novalabs").version
+__version__ = 2.0.0
