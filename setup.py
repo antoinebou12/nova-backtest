@@ -2,7 +2,6 @@ import re
 import ast
 from setuptools import setup, find_packages
 
-
 _version_re = re.compile(r'__version__\s+=\s+(.*)')
 
 with open('nova/__init__.py', 'rb') as f:
