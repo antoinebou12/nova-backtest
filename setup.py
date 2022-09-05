@@ -1,18 +1,19 @@
-import re
-import ast
 import json
-import urllib2
+import urllib3
+from distutils.version import StrictVersion
 from setuptools import setup, find_packages
+
 
 def versions(package_name):
     url = "https://pypi.org/pypi/%s/json" % (package_name,)
-    data = json.load(urllib2.urlopen(urllib2.Request(url)))
-    versions = data["releases"].keys()
-    versions.sort(key=StrictVersion)
-    return versions
+    data = json.load(urllib3.urlopen(urllib3.Request(url)))
+    _versions = data["releases"].keys()
+    _versions.sort(key=StrictVersion)
+    return _versions
+
 
 package_version = versions('novalabs')
-VERSION=package_version[:-1] + str(int(package_version[-1])+1)
+VERSION = package_version[:-1] + str(int(package_version[-1])+1)
 
 with open("README.md", "r") as fh:
     long_description = fh.read()
