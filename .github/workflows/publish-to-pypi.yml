@@ -18,6 +18,7 @@ jobs:
           pip install
           setuptools
           wheel
+          requests
           --user
       - name: Build a binary wheel and a source tarball
         run: >-
