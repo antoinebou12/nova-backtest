@@ -8,12 +8,13 @@ from nova.clients.huobi import Huobi
 from nova.clients.gemini import Gemini
 from nova.clients.gate import Gate
 from nova.clients.cryptocom import Cryptocom
+from nova.clients.bybit import Bybit
 
 
 def clients(
         exchange: str,
-        key: str,
-        secret: str,
+        key: str = "",
+        secret: str = "",
         passphrase: str = ""):
 
     if exchange == 'binance':
@@ -36,4 +37,7 @@ def clients(
         return Gate(key=key, secret=secret)
     elif exchange == 'gate':
         return Cryptocom(key=key, secret=secret)
+    elif exchange == 'bybit':
+        return Bybit(key=key, secret=secret)
+
 
