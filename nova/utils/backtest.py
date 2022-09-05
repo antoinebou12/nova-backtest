@@ -8,11 +8,13 @@ import random
 import math
 import json
 import joblib
+import time
 
 from nova.utils.constant import VAR_NEEDED_FOR_POSITION
 from nova.clients.clients import clients
 
 from warnings import simplefilter
+
 simplefilter(action="ignore", category=pd.errors.PerformanceWarning)
 
 
@@ -32,7 +34,7 @@ class BackTest:
                  max_holding: int,
                  quote_asset: str = 'USDT',
                  geometric_sizes: bool = False,
-                 positions_size: float = 1 / 20,
+                 lever: int = 2,
                  save_all_pairs_charts: bool = False,
                  start_bk: float = 10000,
                  slippage: bool = False,
@@ -42,7 +44,7 @@ class BackTest:
         self.exchange = exchange
         self.quote_asset = quote_asset
         self.strategy_name = strategy_name
-        self.positions_size = positions_size
+        self.positions_size = lever / max_pos
         self.geometric_sizes = geometric_sizes
 
         self.slippage = slippage
@@ -55,7 +57,7 @@ class BackTest:
             self.scaler_y = joblib.load(f'{directory_fin}/slippage/scaler_y.gz')
             self.model = models.load_model(f'{directory_fin}/slippage/model_slippage_3.h5')
 
-        self.client = clients(exchange=exchange, key=key, secret=secret, passphrase=pass_phrase)
+        self.client = clients(exchange=exchange)
 
         self.start_bk = start_bk
         self.actual_bk = self.start_bk
@@ -123,15 +125,9 @@ class BackTest:
         Returns:
              list of all the pairs that we can trade on.
         """
-        info = self.client.get_exchange_info()
-        list_pairs = []
-        for pair in info['symbols']:
-            tradable = pair['status'] == 'TRADING'
-            perp = pair['contractType'] == 'PERPETUAL'
+        info = self.client.get_pairs_info(quote_asset=self.quote_asset)
 
-            if (self.quote_asset in pair['symbol'][-len(self.quote_asset):]) and tradable and perp:
-                list_pairs.append(pair['symbol'])
-        return list_pairs
+        return list(info.keys())
 
     def get_all_historical_data(self,
                                 pair: str,
@@ -152,23 +148,24 @@ class BackTest:
 
             df = pd.read_csv(f'database/{self.exchange}/hist_{pair}_{self.candle}.csv')
 
-            if self.update_data:
+            if self.update_data and (df['open_time'].max() < 1000 * (int(time.time()) - self.time_step.seconds)):
                 print("Update data: ", pair)
                 df = self.client.update_historical(
                     pair=pair,
                     interval=self.candle,
                     current_df=df
                 )
+
                 df.to_csv(f'database/{self.exchange}/hist_{pair}_{self.candle}.csv', index=False)
 
         else:
             std_start = datetime(2019, 1, 1)
 
-            df = self.client.get_historical(
+            df = self.client.get_historical_data(
                 pair=pair,
                 interval=self.candle,
-                start_time=int(datetime.timestamp(std_start) * 1000),
-                end_time=self.end
+                start_ts=int(datetime.timestamp(std_start) * 1000),
+                end_ts=int(datetime.timestamp(self.end) * 1000)
             )
 
             df.to_csv(f'database/{self.exchange}/hist_{pair}_{self.candle}.csv', index=False)
@@ -177,7 +174,7 @@ class BackTest:
             df[var] = pd.to_datetime(df[var], unit='ms')
 
         assert not (False in (df['open_time'] == df['open_time'].shift(1) + self.time_step).values[1:]), \
-            'Missing a row in historical DataFrame'
+            'Missing or duplicated row in historical DataFrame'
 
         df = df.set_index('open_time', drop=False)
 
@@ -209,7 +206,7 @@ class BackTest:
             The function created 2 variables: all_entry_price, all_entry_time
         """
         df['all_entry_price'] = np.where(df.all_entry_point.notnull(), df.next_open, np.nan)
-        df['all_entry_time'] = np.where(df.all_entry_point.notnull(), df.open_time,  np.nan)
+        df['all_entry_time'] = np.where(df.all_entry_point.notnull(), df.open_time, np.datetime64('NaT'))
         return df
 
     @staticmethod
@@ -243,7 +240,7 @@ class BackTest:
 
         return df
 
-    def create_closest_tp_sl(self, df: pd.DataFrame) -> pd.DataFrame:
+    def create_closest_exit(self, df: pd.DataFrame) -> pd.DataFrame:
         """
         Args:
             df: dataframe that contains the variables all_entry_point, all_sl and all_tp
@@ -273,8 +270,9 @@ class BackTest:
             df[f'tp_lead_{i}'] = np.where(condition_tp_short | condition_tp_long, df.open_time.shift(-i),
                                           np.datetime64('NaT'))
 
-            if 'exit_situation' in df.columns:
-                df[f'es_lead_{i}'] = np.where(df['exit_situation'].shift(-i).notnull(), df.open_time.shift(-i),
+            if 'exit_signal' in df.columns:
+                df[f'es_lead_{i}'] = np.where((df['exit_signal'].shift(-i) * df['all_entry_point']) == -1,
+                                              df.open_time.shift(-i),
                                               np.datetime64('NaT'))
                 lead_es.append(f'es_lead_{i}')
 
@@ -285,7 +283,7 @@ class BackTest:
         df['closest_sl'] = df[lead_sl].min(axis=1)
         df['closest_tp'] = df[lead_tp].min(axis=1)
 
-        if 'exit_situation' in df.columns:
+        if 'exit_signal' in df.columns:
             df['exit_signal_date'] = df[lead_es].min(axis=1)
 
         # get the max holding date
@@ -314,7 +312,6 @@ class BackTest:
         final_df.reset_index(drop=True, inplace=True)
 
         if len(final_df) == 0:
-            print(f'{pair} does not have any positions')
             return None
 
         # create the variable that indicates if a transaction is good or not
@@ -349,13 +346,15 @@ class BackTest:
                                                    final_df['next_open']))
 
         # removing non important variables and renaming columns
-        final_df = final_df.drop(['all_sl', 'all_tp', 'next_open'], axis=1)
+        final_df = final_df.drop(['next_open'], axis=1)
         final_df = final_df.rename(columns={
             'all_entry_time': 'entry_time',
             'all_entry_point': 'entry_point',
             'all_entry_price': 'entry_price',
             'all_exit_time': 'exit_time',
-            'all_exit_point': 'exit_point'
+            'all_exit_point': 'exit_point',
+            'all_tp': 'tp',
+            'all_sl': 'sl'
         })
 
         final_df = self.compute_profit(final_df)
@@ -391,7 +390,6 @@ class BackTest:
 
         return df
 
-
     def compute_slippage(self, pair: str):
         """
 
@@ -404,9 +402,9 @@ class BackTest:
 
         # todo: compute slippage
 
-        try:
-            df_1m = pd.read_csv(f'database/futures/hist_{pair}_1m.csv')
-        except:
+        if f'hist_{pair}_1m.csv' in os.listdir(f'{os.getcwd()}/database/{self.exchange}'):
+            df_1m = pd.read_csv(f'database/{self.exchange}/hist_{pair}_1m.csv')
+        else:
             print(f'DOWNLOAD {pair} 1m')
             klines = self.client.get_historical(
                 pair=pair,
@@ -417,13 +415,12 @@ class BackTest:
 
             df_1m = klines.dropna()
 
-            df_1m.to_csv(f'database/futures/hist_{pair}_1m.csv', index=False)
+            df_1m.to_csv(f'database/{self.exchange}/hist_{pair}_1m.csv', index=False)
 
             df_1m = df_1m.set_index('timestamp')
-            df_1m['next_open'] = df_1m['open'].shift(-1)
 
         df_1m['open_time'] = pd.to_datetime(df_1m.open_time)
-        df_1m['last_24h_volume'] = df_1m['quote_asset_volume'].rolling(min_periods=1, window=60*24).sum()
+        df_1m['last_24h_volume'] = df_1m['quote_asset_volume'].rolling(min_periods=1, window=60 * 24).sum()
 
         all_pos_pair = self.df_all_positions[pair]
         all_pos_pair['entry_time_1m'] = all_pos_pair['entry_time'] - timedelta(minutes=1)
@@ -437,9 +434,11 @@ class BackTest:
 
         all_pos_pair = all_pos_pair.dropna(subset=['volume'])
 
-        features_data = all_pos_pair[['entry_point', 'quote_asset_volume', 'taker_quote_volume', 'nb_of_trades', 'last_24h_volume']]
+        features_data = all_pos_pair[
+            ['entry_point', 'quote_asset_volume', 'taker_quote_volume', 'nb_of_trades', 'last_24h_volume']]
         features_data['side'] = np.where(features_data['entry_point'] == -1, 0, 1)
-        features_data = features_data[['side', 'quote_asset_volume', 'taker_quote_volume', 'nb_of_trades', 'last_24h_volume']]
+        features_data = features_data[
+            ['side', 'quote_asset_volume', 'taker_quote_volume', 'nb_of_trades', 'last_24h_volume']]
 
         xs = self.scaler_x.transform(features_data)
 
@@ -513,9 +512,11 @@ class BackTest:
         self.df_pos.drop(to_drop, axis=1, inplace=True)
 
         # update the bot total profit or all token
-        self.df_pos['total_profit_all_pairs'] = self.df_pos['total_profit_all_pairs'] + self.df_pos[f'total_profit_{pair}']
+        self.df_pos['total_profit_all_pairs'] = self.df_pos['total_profit_all_pairs'] + self.df_pos[
+            f'total_profit_{pair}']
         self.df_pos['long_profit_all_pairs'] = self.df_pos['long_profit_all_pairs'] + self.df_pos[f'long_profit_{pair}']
-        self.df_pos['short_profit_all_pairs'] = self.df_pos['short_profit_all_pairs'] + self.df_pos[f'short_profit_{pair}']
+        self.df_pos['short_profit_all_pairs'] = self.df_pos['short_profit_all_pairs'] + self.df_pos[
+            f'short_profit_{pair}']
 
         if not self.save_all_pairs_charts:
             self.df_pos = self.df_pos.drop([f'total_profit_{pair}', f'long_profit_{pair}', f'short_profit_{pair}'],
@@ -539,7 +540,7 @@ class BackTest:
                  self.df_pos[f'short_profit_{pair}'][self.df_pos.index > begin], label='Short Profit')
 
         plt.legend()
-        plt.title(f"Backtest {self.strategy_name} bot for {pair}")
+        plt.title(f"Backtest {self.strategy_name} strategy for {pair}")
         plt.show()
 
     def get_pair_stats(self, df: pd.DataFrame, pair: str):
@@ -634,7 +635,7 @@ class BackTest:
             else:
                 slipp = row['slip_5k'] + ((row['slipp_10k'] - row['slip_5k']) / 5000) * (row['position_size'] - 5000)
 
-            row['PL_prc_realized'] = row['PL_prc_realized'] - abs(2*slipp) / 100
+            row['PL_prc_realized'] = row['PL_prc_realized'] - abs(2 * slipp) / 100
 
         row['PL_amt_realized'] = row['PL_prc_realized'] * row['position_size']
 
@@ -658,7 +659,8 @@ class BackTest:
             df_concat['pair'] = pair
             self.df_all_pairs_positions = pd.concat([self.df_all_pairs_positions, self.df_all_positions[pair]])
 
-        self.df_all_pairs_positions = self.df_all_pairs_positions[self.df_all_pairs_positions['entry_time'] > self.start]
+        self.df_all_pairs_positions = self.df_all_pairs_positions[
+            self.df_all_pairs_positions['entry_time'] > self.start]
 
         self.df_all_pairs_positions = self.df_all_pairs_positions.sort_values(by=['exit_time'])
 
@@ -670,10 +672,11 @@ class BackTest:
         hours_step = self.max_holding / self.convert_max_holding_to_candle_nb()
 
         #
-        self.df_all_pairs_positions['exit_time'] = np.where(self.df_all_pairs_positions['exit_point'] in ['TP', 'SL'],
-                                                            self.df_all_pairs_positions['exit_time'] + timedelta(
-                                                                hours=hours_step),
-                                                            self.df_all_pairs_positions['exit_time'])
+        self.df_all_pairs_positions['exit_time'] = np.where(
+            self.df_all_pairs_positions['exit_point'].isin(['TP', 'SL']),
+            self.df_all_pairs_positions['exit_time'] + timedelta(
+                hours=hours_step),
+            self.df_all_pairs_positions['exit_time'])
 
         # Delete impossible trades
         t = self.start
@@ -759,13 +762,14 @@ class BackTest:
         Need to compute daily returns to compute statistics (Sharpe ratio, Sortino ratio, volatility...)
         """
 
-        all_exit_of_the_day = df_all_pairs_positions[df_all_pairs_positions['exit_time'] <= row.date + timedelta(days=1)]
+        all_exit_of_the_day = df_all_pairs_positions[
+            df_all_pairs_positions['exit_time'] <= row.date + timedelta(days=1)]
         all_exit_of_the_day = all_exit_of_the_day[all_exit_of_the_day['exit_time'] > row.date]
 
         if all_exit_of_the_day['bankroll_size'].values.shape[0] > 0:
             day_profit = 100 * (
-                        all_exit_of_the_day['bankroll_size'].values[-1] - all_exit_of_the_day['bankroll_size'].values[
-                    0]) / \
+                    all_exit_of_the_day['bankroll_size'].values[-1] - all_exit_of_the_day['bankroll_size'].values[
+                0]) / \
                          all_exit_of_the_day['bankroll_size'].values[0]
         else:
             day_profit = 0
@@ -779,8 +783,8 @@ class BackTest:
 
     @staticmethod
     def compute_drawdown(
-                        row,
-                        df_daily):
+            row,
+            df_daily):
 
         temp = df_daily[df_daily['date'] <= row.date]
 
@@ -838,17 +842,21 @@ class BackTest:
         avg_position_size = round(df_all_pairs_positions['position_size'].mean(), 2)
         overview['Average position size'] = f"{avg_position_size} $"
 
-        avg_profit_winning_trade = df_all_pairs_positions[df_all_pairs_positions['PL_amt_realized'] > 0]['PL_amt_realized'].sum() / \
+        avg_profit_winning_trade = df_all_pairs_positions[df_all_pairs_positions['PL_amt_realized'] > 0][
+                                       'PL_amt_realized'].sum() / \
                                    df_all_pairs_positions[df_all_pairs_positions['PL_amt_realized'] > 0].shape[0]
 
-        avg_profit_perc_winning_trade = df_all_pairs_positions[df_all_pairs_positions['PL_prc_realized'] > 0]['PL_prc_realized'].sum() / \
+        avg_profit_perc_winning_trade = df_all_pairs_positions[df_all_pairs_positions['PL_prc_realized'] > 0][
+                                            'PL_prc_realized'].sum() / \
                                         df_all_pairs_positions[df_all_pairs_positions['PL_prc_realized'] > 0].shape[0]
 
-        avg_loss_losing_trade = df_all_pairs_positions[df_all_pairs_positions['PL_amt_realized'] < 0]['PL_amt_realized'].sum() / \
+        avg_loss_losing_trade = df_all_pairs_positions[df_all_pairs_positions['PL_amt_realized'] < 0][
+                                    'PL_amt_realized'].sum() / \
                                 df_all_pairs_positions[df_all_pairs_positions['PL_amt_realized'] < 0].shape[0]
 
-        avg_profit_perc_losing_trade = df_all_pairs_positions[df_all_pairs_positions['PL_prc_realized'] < 0]['PL_prc_realized'].sum() / \
-                                        df_all_pairs_positions[df_all_pairs_positions['PL_prc_realized'] < 0].shape[0]
+        avg_profit_perc_losing_trade = df_all_pairs_positions[df_all_pairs_positions['PL_prc_realized'] < 0][
+                                           'PL_prc_realized'].sum() / \
+                                       df_all_pairs_positions[df_all_pairs_positions['PL_prc_realized'] < 0].shape[0]
 
         overview['Average profit / winning trade'] = f"{round(avg_profit_winning_trade, 2)} $"
         overview['Average profit / winning trade (%)'] = f"{round(100 * avg_profit_perc_winning_trade, 2)} %"
@@ -861,7 +869,7 @@ class BackTest:
         overview['Average Long Profit (%)'] = f"{round(100 * avg_long, 2)} %"
 
         avg_short = df_all_pairs_positions[df_all_pairs_positions['entry_point'] == -1]['PL_prc_realized'].sum() / \
-                   df_all_pairs_positions[df_all_pairs_positions['entry_point'] == -1].shape[0]
+                    df_all_pairs_positions[df_all_pairs_positions['entry_point'] == -1].shape[0]
         overview['Average Short Profit (%)'] = f"{round(100 * avg_short, 2)} %"
 
         hold = df_all_pairs_positions['nb_minutes_in_position'].mean() / 60
@@ -876,10 +884,21 @@ class BackTest:
 
         overview['Nb winning trade'] = df_all_pairs_positions[df_all_pairs_positions['PL_amt_realized'] > 0].shape[0]
         overview['Nb losing trade'] = df_all_pairs_positions[df_all_pairs_positions['PL_amt_realized'] < 0].shape[0]
-
         overview['Total nb trade'] = overview['Nb losing trade'] + overview['Nb winning trade']
-
         overview['% winning trade'] = f"{round(100 * overview['Nb winning trade'] / overview['Total nb trade'], 1)} %"
+
+        overview['Nb long positions'] = df_all_pairs_positions[df_all_pairs_positions['entry_point'] == 1].shape[0]
+        overview['Nb short positions'] = df_all_pairs_positions[df_all_pairs_positions['entry_point'] == -1].shape[0]
+
+        overview[
+            '% Exit signal'] = f"{round(100 * df_all_pairs_positions[df_all_pairs_positions['exit_point'] == 'ExitSignal'].shape[0] / overview['Total nb trade'], 1)} %"
+        overview[
+            '% Max Holding'] = f"{round(100 * df_all_pairs_positions[df_all_pairs_positions['exit_point'] == 'MaxHolding'].shape[0] / overview['Total nb trade'], 1)} %"
+
+        overview[
+            '% TP'] = f"{round(100 * df_all_pairs_positions[df_all_pairs_positions['exit_point'] == 'TP'].shape[0] / overview['Total nb trade'], 1)} %"
+        overview[
+            '% SL'] = f"{round(100 * df_all_pairs_positions[df_all_pairs_positions['exit_point'] == 'SL'].shape[0] / overview['Total nb trade'], 1)} %"
 
         overview['Best day profit'] = f"{round(df_daily['daily_percentage_profit'].max(), 1)} %"
 
@@ -942,8 +961,10 @@ class BackTest:
         pairs_stats['Worst return pair'] = self.df_pairs_stat['total_profit_amt'].idxmin()
         pairs_stats['Worst return value'] = f"{round(self.df_pairs_stat['total_profit_amt'].min(), 2)} $"
 
-        pairs_stats['Pair with most positions'] = f"{self.df_pairs_stat['total_position'].idxmax()} ({self.df_pairs_stat['total_position'].max()})"
-        pairs_stats['Pair with less positions'] = f"{self.df_pairs_stat['total_position'].idxmin()} ({self.df_pairs_stat['total_position'].min()})"
+        pairs_stats[
+            'Pair with most positions'] = f"{self.df_pairs_stat['total_position'].idxmax()} ({self.df_pairs_stat['total_position'].max()})"
+        pairs_stats[
+            'Pair with less positions'] = f"{self.df_pairs_stat['total_position'].idxmin()} ({self.df_pairs_stat['total_position'].min()})"
 
         ################################  Print statistics  #############################
 
@@ -982,6 +1003,77 @@ class BackTest:
 
         return all_statistics
 
+    def not_any_future_info(self):
+        """
+        This function is here to make sure that self.entry_strategy() and self.exit_strategy()
+        don't have access to futures information (for a given row/date) when computing entry and exit signals.
+        It takes random pairs and re-compute the signals with truncated historical DataFrames.
+
+        !!! HAS TO BE CALLED AFTER RUNNING BACK TEST !!
+
+        Returns:
+            None
+
+        Crashes if one of the assertion is not respected.
+
+        """
+        # Verify entry_point, tp and sl
+        nb_total_pos = len(self.df_all_pairs_positions)
+
+        assert nb_total_pos > 0, 'There is no position taken by the strategy during this back tested time period'
+
+        random_entry = self.df_all_pairs_positions.sample(n=min(nb_total_pos, 5))
+
+        for i, row in random_entry.iterrows():
+            # Get historical DataFrame
+            df = self.get_all_historical_data(pair=row['pair'])
+
+            # truncate df
+            df = df[df['open_time'] <= row['entry_time']]
+
+            # re-compute indicators, entry signals, tp and sl
+            df = self.build_indicators(df)
+
+            df = self.entry_strategy(df)
+
+            last_row = df[df['open_time'] == row['entry_time']].iloc[0]
+
+            assert row['entry_point'] == last_row[
+                'all_entry_point'], "Entry point is not the same, make sure you don't have access to futures " \
+                                    "information when computing entry point"
+            assert row['tp'] == last_row['all_tp'], "TP is not the same, make sure you don't have access to futures " \
+                                                    "information when computing take profit price"
+            assert row['sl'] == last_row['all_sl'], "SL is not the same, make sure you don't have access to futures " \
+                                                    "information when computing stop loss price"
+
+        # Verify exit signals
+        nb_total_es = len(self.df_all_pairs_positions[self.df_all_pairs_positions['exit_point'] == 'ExitSignal'])
+        if nb_total_es > 0:
+            random_exit = self.df_all_pairs_positions[
+                self.df_all_pairs_positions['exit_point'] == 'ExitSignal'].sample(n=min(nb_total_es, 5))
+
+            for i, row in random_exit.iterrows():
+                # Get historical DataFrame
+                df = self.get_all_historical_data(pair=row['pair'])
+
+                # truncate df
+                df = df[df['open_time'] <= row['exit_time']]
+
+                # re-compute indicators, entry signals, tp and sl
+                df = self.build_indicators(df)
+
+                df = self.entry_strategy(df)
+
+                df = self.create_entry_prices_times(df)
+
+                df = self.exit_strategy(df)
+
+                last_row = df.iloc[-1]
+
+                assert -row['entry_point'] == last_row[
+                    'exit_signal'], "Exit signal is not the same, make sure you don't have access to futures " \
+                                    "information when computing exit signals"
+
     def run_backtest(self, save: bool = True):
 
         """
@@ -999,8 +1091,16 @@ class BackTest:
             df = self.get_all_historical_data(pair)
 
             df = self.build_indicators(df)
+
             df = self.entry_strategy(df)
+
+            df = self.create_entry_prices_times(df)
+
             df = self.exit_strategy(df)
+
+            df = self.create_closest_exit(df)
+
+            df = self.create_all_exit_point(df)
 
             self.create_position_df(df, pair)
 

@@ -135,7 +135,7 @@ class Bot(TelegramBOT):
 
                 limit_executions[_info['pair']] = {}
 
-                size = self.client.get_position_size()
+                size = self.get_position_size()
 
                 if size == 0:
                     print(f'Balance too low')

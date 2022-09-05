@@ -30,6 +30,14 @@ DATA_FORMATING = {
         "num_var": [
             'open', 'high', 'low', 'close', 'volume'
         ]
-    }
+    },
+    "bybit": {
+            "columns": [
+                'open_time', 'open', 'high', 'low', 'close', 'volume', 'turnover'
+            ],
+            "num_var": [
+                'open', 'high', 'low', 'close', 'volume', 'turnover'
+            ]
+        }
 
 }

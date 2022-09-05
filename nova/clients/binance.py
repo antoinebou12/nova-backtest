@@ -19,12 +19,11 @@ class Binance:
 
         self.api_key = key
         self.api_secret = secret
-
+        
         self.based_endpoint = "https://fapi.binance.com"
         self._session = Session()
 
         self.historical_limit = 1000
-        self.pair_info = self._get_pair_info()
 
     # API REQUEST FORMAT
     def _send_request(self, end_point: str, request_type: str, params: dict = None, signed: bool = False):
@@ -32,6 +31,7 @@ class Binance:
         if params is None:
             params = {}
         if signed:
+
             params['timestamp'] = int(time.time() * 1000)
             query_string = urlencode(params, True).replace("%40", "@")
             m = hmac.new(self.api_secret.encode("utf-8"), query_string.encode("utf-8"), hashlib.sha256)
@@ -110,7 +110,7 @@ class Binance:
         )
         return kline[0][0]
 
-    def _combine_history(self, pair: str, interval: str, start_time: int, end_time: int):
+    def _full_history(self, pair: str, interval: str, start_time: int, end_time: int):
         """
         Args:
             pair: pair to get information from
@@ -181,7 +181,7 @@ class Binance:
     def _format_data(self, all_data: list, historical: bool = True) -> pd.DataFrame:
         """
         Args:
-            all_data: output from _combine_history
+            all_data: output from _full_history
 
         Returns:
             standardized pandas dataframe
@@ -196,7 +196,6 @@ class Binance:
         for var in DATA_FORMATING['binance']['num_var']:
             df[var] = pd.to_numeric(df[var], downcast="float")
 
-        df = df[STD_CANDLE_FORMAT]
         if historical:
             df['next_open'] = df['open'].shift(-1)
             return df.dropna()
@@ -204,7 +203,7 @@ class Binance:
             df['open_time_datetime'] = pd.to_datetime(df['open_time'], unit='ms')
             return df.dropna()
 
-    def get_historical(self, pair: str, interval: str, start_time: int, end_time: int) -> pd.DataFrame:
+    def get_historical_data(self, pair: str, interval: str, start_ts: int, end_ts: int) -> pd.DataFrame:
         """
         Args:
             pair: pair to get information from
@@ -215,11 +214,11 @@ class Binance:
             historical data requested in a standardized pandas dataframe
         """
 
-        data = self._combine_history(
+        data = self._full_history(
             pair=pair,
             interval=interval,
-            start_time=start_time,
-            end_time=end_time
+            start_time=start_ts,
+            end_time=end_ts
         )
 
         return self._format_data(all_data=data)
@@ -238,14 +237,14 @@ class Binance:
 
         end_date_data_ts = int(current_df['open_time'].max())
         now_date_ts = int(time.time() * 1000)
-        data = self._combine_history(
+        data = self._full_history(
             pair=pair,
             interval=interval,
             start_time=end_date_data_ts,
             end_time=now_date_ts
         )
         format_df = self._format_data(all_data=data)
-        return pd.concat([current_df, format_df], ignore_index=True).drop_duplicates()
+        return pd.concat([current_df, format_df], ignore_index=True).drop_duplicates(subset=['open_time'])
 
     # BINANCE SPECIFIC FUNCTION
     def change_position_mode(self, dual_position: str):
@@ -273,7 +272,8 @@ class Binance:
         )
         print(f"{response['msg']}")
 
-    def _get_pair_info(self) -> dict:
+    def get_pairs_info(self,
+                       quote_asset) -> dict:
         """
         Note: This output is used for standardization purpose because binance order api has
         decimal restriction per pair.
@@ -286,17 +286,20 @@ class Binance:
         output = {}
 
         for symbol in info['symbols']:
-            output[symbol['symbol']] = {}
+            if symbol['quoteAsset'] == quote_asset and symbol['contractType'] == 'PERPETUAL':
+                output[symbol['symbol']] = {}
 
-            for fil in symbol['filters']:
-                if fil['filterType'] == 'PRICE_FILTER':
-                    tick_size = str(float(fil['tickSize']))
-                    output[symbol['symbol']]['pricePrecision'] = min(tick_size[::-1].find('.'),
-                                                                     symbol['pricePrecision'])
-                if fil['filterType'] == 'LOT_SIZE':
-                    step_size = str(float(fil['stepSize']))
-                    output[symbol['symbol']]['quantityPrecision'] = min(step_size[::-1].find('.'),
-                                                                        symbol['quantityPrecision'])
+                for fil in symbol['filters']:
+                    if fil['filterType'] == 'PRICE_FILTER':
+                        tick_size = str(float(fil['tickSize']))
+                        output[symbol['symbol']]['pricePrecision'] = min(tick_size[::-1].find('.'),
+                                                                         symbol['pricePrecision'])
+                    if fil['filterType'] == 'LOT_SIZE':
+                        step_size = str(float(fil['stepSize']))
+                        output[symbol['symbol']]['quantityPrecision'] = min(step_size[::-1].find('.'),
+                                                                            symbol['quantityPrecision'])
+                    if fil['filterType'] == 'MARKET_LOT_SIZE':
+                        output[symbol['symbol']]['max_market_trading_qty'] = fil['maxQty']
         return output
 
     # STANDARDIZED FUNCTIONS
@@ -558,7 +561,7 @@ class Binance:
             'tx_fee_in_based_asset': 0,
             'tx_fee_in_other_asset': {},
             'price': float(order_data['avgPrice']),
-            'originalQuantity': float(order_data['origQty']),
+            'originalQuantity':  float(order_data['origQty']),
             'executedQuantity': float(order_data['executedQty']),
             'nb_of_trades': 0,
             'is_buyer': None,
@@ -627,7 +630,7 @@ class Binance:
             "side": side,
             "type": 'STOP_MARKET',
             "timeInForce": 'GTC',
-            "stopPrice": float(round(stop_price, self.pair_info[pair]['pricePrecision'])),
+            "stopPrice": float(round(stop_price,  self.pair_info[pair]['pricePrecision'])),
         }
 
         data = self._send_request(
@@ -662,8 +665,8 @@ class Binance:
             "side": side,
             "type": 'TAKE_PROFIT' if tp_type == 'limit' else 'TAKE_PROFIT_MARKET',
             "timeInForce": 'GTC',
-            "price": float(round(price, self.pair_info[pair]['pricePrecision'])),
-            "stopPrice": float(round(price, self.pair_info[pair]['pricePrecision'])),
+            "price": float(round(price,  self.pair_info[pair]['pricePrecision'])),
+            "stopPrice": float(round(price,  self.pair_info[pair]['pricePrecision'])),
             "quantity": float(round(quantity, self.pair_info[pair]['quantityPrecision']))
         }
 
