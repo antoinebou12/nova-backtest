@@ -1,14 +1,18 @@
 import re
 import ast
+import json
+import urllib2
 from setuptools import setup, find_packages
 
-_version_re = re.compile(r'__version__\s+=\s+(.*)')
+def versions(package_name):
+    url = "https://pypi.org/pypi/%s/json" % (package_name,)
+    data = json.load(urllib2.urlopen(urllib2.Request(url)))
+    versions = data["releases"].keys()
+    versions.sort(key=StrictVersion)
+    return versions
 
-with open('nova/__init__.py', 'rb') as f:
-    _parsed = str(ast.literal_eval(_version_re.search(
-        f.read().decode('utf-8')).group(1)))
-    
-VERSION=_parsed[:-1] + str(int(_parsed[-1])+1)
+package_version = versions('novalabs')
+VERSION=package_version[:-1] + str(int(package_version[-1])+1)
 
 with open("README.md", "r") as fh:
     long_description = fh.read()
