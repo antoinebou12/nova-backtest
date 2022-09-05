@@ -1,15 +1,11 @@
-import json
-import urllib3
+import requests
 from distutils.version import StrictVersion
 from setuptools import setup, find_packages
 
-lib3 = urllib3.PoolManager()
-
 
 def versions(package_name):
-    url = "https://pypi.org/pypi/%s/json" % (package_name,)
-    data = json.load(lib3.urlopen('GET', lib3.request('GET', url)))
-    _versions = data["releases"].keys()
+    data = requests.get(f'https://pypi.python.org/pypi/{package_name}/json')
+    _versions = data.json()['releases'].keys()
     _versions.sort(key=StrictVersion)
     return _versions
 
