@@ -1,13 +1,11 @@
 import requests
-from distutils.version import StrictVersion
 from setuptools import setup, find_packages
 
 
 def versions(package_name):
     data = requests.get(f'https://pypi.python.org/pypi/{package_name}/json')
     _versions = data.json()['releases'].keys()
-    _versions.sort(key=StrictVersion)
-    return _versions
+    return list(_versions)[-1]
 
 
 package_version = versions('novalabs')
