@@ -27,6 +27,8 @@ class Bybit:
 
         self.historical_limit = 200
 
+        self.pairs_info = self.get_pairs_info()
+
     # API REQUEST FORMAT
     def _send_request(self, end_point: str, request_type: str, params: dict = None, signed: bool = False):
 
@@ -73,16 +75,19 @@ class Bybit:
 
         return int(ts * 1000)
 
-    def _get_kline(self,
-                   pair: str, interval: str, start_time: int,
-                   limit: int = 200) -> list:
+    def _get_candles(self,
+                     pair: str,
+                     interval: str,
+                     start_time: int,
+                     limit: int = 200,
+                     end_time: int = None) -> list:
 
         """
 
         Args:
             pair: pair to get the candles
             interval: Data refresh interval. Enum : 1 3 5 15 30 60 120 240 360 720 "D" "M" "W"
-            start_time: From timestamp in seconds
+            start_time: From timestamp in milliseconds
             limit: Limit for data size per page, max size is 200. Default as showing 200 pieces of data per page
 
         Returns:
@@ -102,8 +107,7 @@ class Bybit:
         )
         return data.json()['result']
 
-    def get_pairs_info(self,
-                       quote_asset) -> dict:
+    def get_pairs_info(self) -> dict:
         """
         Returns:
             All pairs available and tradable on the exchange.
@@ -117,18 +121,19 @@ class Bybit:
 
         for pair in data:
             tradable = pair['status'] == 'Trading'
-            quote_currency = pair['quote_currency'] == quote_asset
 
-            if tradable and quote_currency:
+            if tradable:
                 pairs_info[pair['name']] = {}
                 pairs_info[pair['name']]['pair'] = pair['name']
+                pairs_info[pair['name']]['quote_asset'] = pair['quote_currency']
                 pairs_info[pair['name']]['pricePrecision'] = pair['price_scale']
                 pairs_info[pair['name']]['max_market_trading_qty'] = pair['lot_size_filter']['max_trading_qty']
-                ## qty precision ??
 
         return pairs_info
 
-    def _get_earliest_valid_timestamp(self, pair: str, interval: str) -> int:
+    def _get_earliest_valid_timestamp(self,
+                                      pair: str,
+                                      interval: str) -> int:
         """
         Args:
             pair: Name of symbol pair -- BNBBTC
@@ -139,7 +144,7 @@ class Bybit:
         """
         # 946684800000 == Jan 1st 2020
 
-        kline = self._get_kline(
+        kline = self._get_candles(
             pair=pair,
             interval=interval,
             start_time=946684800000,
@@ -180,7 +185,9 @@ class Bybit:
         """
         # Remove the last row bc it's not finished yet
         if historical:
-            del klines[-1]
+            interval_seconds = klines[1]['start_at'] - klines[0]['start_at']
+            if self.get_server_time() < 1000 * (klines[-1]['start_at'] + interval_seconds):
+                del klines[-1]
 
         df = pd.DataFrame(klines)[DATA_FORMATING['bybit']['columns']]
 
@@ -194,7 +201,11 @@ class Bybit:
 
         return df.dropna()
 
-    def get_historical_data(self, pair: str, interval: str, start_ts: int, end_ts: int) -> pd.DataFrame:
+    def get_historical_data(self,
+                            pair: str,
+                            interval: str,
+                            start_ts: int,
+                            end_ts: int) -> pd.DataFrame:
         """
         Args:
             pair: pair to get data from
@@ -227,7 +238,7 @@ class Bybit:
 
         while True:
             # fetch the klines from start_ts up to max 500 entries or the end_ts if set
-            temp_data = self._get_kline(
+            temp_data = self._get_candles(
                 pair=pair,
                 interval=interval,
                 limit=self.historical_limit,
@@ -356,6 +367,8 @@ class Bybit:
             signed=True
         )
 
+        print(response.json())
+
         return response.json()['result']
 
     def enter_market(self,
@@ -386,9 +399,9 @@ class Bybit:
 
         return response
 
-    def _get_active_order(self,
-                          pair,
-                          order_id):
+    def get_order(self,
+                  pair,
+                  order_id):
 
         response = self._send_request(
             end_point=f"/private/linear/order/list",
@@ -398,7 +411,12 @@ class Bybit:
             signed=True
         )
 
-        return response.json()['result']['data']
+        print(response.json())
+
+        if response.json()['result']:
+            return response.json()['result']['data']
+        else:
+            return None
 
     def _cancel_order(self,
                       pair: str,
@@ -439,10 +457,10 @@ class Bybit:
         # Keep trying to get order status during 30s
         while time.time() - t_start < 30:
 
-            time.sleep(3)
+            time.sleep(5)
 
-            last_active_order = self._get_active_order(pair=pair,
-                                                       order_id=order_id)
+            last_active_order = self.get_order(pair=pair,
+                                               order_id=order_id)
             if last_active_order:
                 break
 
@@ -490,15 +508,18 @@ class Bybit:
                                     reduce_only=reduce_only,
                                     time_in_force='PostOnly')
 
+        if not response:
+            return False, ''
+
         limit_order_posted = self._verify_limit_order_posted(order_id=response['order_id'],
                                                              pair=pair)
 
-        return limit_order_posted, response['order_id']
+        return limit_order_posted, response
 
     def place_limit_tp(self,
                        pair: str,
                        side: str,
-                       qty: float,
+                       position_size: float,
                        tp_prc: float):
         """
         Place a limit order as Take Profit.
@@ -516,7 +537,7 @@ class Bybit:
 
         response = self._send_order(pair=pair,
                                     side=side,
-                                    qty=qty,
+                                    qty=position_size,
                                     price=tp_prc,
                                     reduce_only=True,
                                     order_type='Limit',
@@ -607,6 +628,8 @@ class Bybit:
                 current_margin_type = 'ISOLATED' if info['data']['is_isolated'] else 'CROSS'
                 current_position_mode = info['data']['mode']
 
+                assert info['data']['size'] == 0, f'Please exit your position on {pair} before starting the bot'
+
                 if current_position_mode != 'MergedSingle':
                     # Set position mode
                     self._set_position_mode(
@@ -651,110 +674,122 @@ class Bybit:
 
         return response.json()['result']
 
-    def enter_limit_then_market(self,
-                                pair,
-                                side,
-                                sl_price,
-                                price_precision,
-                                qty):
+    def _looping_limit_orders(self,
+                              pair: str,
+                              side: str,
+                              position_size: float,
+                              duration: int,
+                              reduce_only: bool):
+        """
+        This function will try to enter in position by sending only limit orders to be sure to pay limit orders fees.
 
-        residual_size = qty
+        Args:
+            pair:
+            side:
+            position_size:
+            duration: number of seconds we keep trying to enter in position with limit orders
+            reduce_only: True if we are exiting a position
+
+        Returns:
+            Residual size to fill the based qty
+        """
+
+        residual_size = position_size
 
         t_start = time.time()
 
-        while (residual_size != 0) and (time.time() - t_start < 120):
+        # Try to enter with limit order during 2 min
+        while (residual_size != 0) and (time.time() - t_start < duration):
 
-            posted, order_id = self._send_limit_order_at_best_price(pair=pair,
-                                                                    side=side,
-                                                                    qty=residual_size,
-                                                                    sl_price=sl_price,
-                                                                    reduce_only=False)
+            posted, order = self._send_limit_order_at_best_price(pair=pair,
+                                                                 side=side,
+                                                                 qty=residual_size,
+                                                                 reduce_only=reduce_only)
 
             if posted:
-                time.sleep(10)
+
+                new_price = order['price']
+                order_status = order['order_status']
+
+                # If the best order book price stays the same, do not cancel current order
+                while (new_price == order['price']) and (time.time() - t_start < 120) and (order_status != 'Filled'):
+                    time.sleep(10)
+
+                    orderBook = self.get_order_book(pair=pair)
+                    new_price = float(orderBook[side.lower()][0]['price'])
+
+                    order_status = self.get_order(pair=pair, order_id=order['order_id'])
 
                 # Cancel order
                 self._cancel_order(pair=pair,
-                                   order_id=order_id)
+                                   order_id=order['order_id'])
 
                 # Get current position size
                 pos_info = self._get_position_info(pair=pair)
 
-                residual_size = round(qty - pos_info[0]['size'], price_precision)
+                if reduce_only:
+                    residual_size = pos_info[0]['size']
+                else:
+                    residual_size = position_size - pos_info[0]['size']
 
+        return residual_size
+
+    def enter_limit_then_market(self,
+                                pair,
+                                side,
+                                sl_price,
+                                qty):
+        """
+        Optimized way to enter in position. The method tries to enter with limit orders during 2 minutes.
+        If after 2min we still did not entered with the desired amount, a market order is sent.
+
+        Args:
+            pair:
+            side:
+            sl_price:
+            qty:
+
+        Returns:
+            Size of the current position
+        """
+
+        residual_size = self._looping_limit_orders(pair=pair, side=side, position_size=qty,
+                                                   duration=120, reduce_only=False)
+
+        # If there is residual, enter with market order
         if residual_size != 0:
             self.enter_market(pair=pair,
                               side=side,
                               qty=residual_size,
                               sl_price=sl_price)
 
+        pos_info = self._get_position_info(pair=pair)
+
+        return pos_info[0]['size']
+
     def exit_limit_then_market(self,
                                pair,
-                               side,
-                               qty):
+                               position_size,
+                               side):
+        """
+        Optimized way to exit position. The method tries to exit with limit orders during 2 minutes.
+        If after 2min we still did not exit totally, a market order is sent.
 
-        residual_size = qty
+        Args:
+            pair:
+            side:
+        """
 
-        t_start = time.time()
+        residual_size = self._looping_limit_orders(pair=pair, side=side, position_size=position_size,
+                                                   duration=120, reduce_only=True)
 
-        while (residual_size != 0) and (time.time() - t_start < 120):
-
-            posted, order_id = self._send_limit_order_at_best_price(pair=pair,
-                                                                    side=side,
-                                                                    qty=residual_size,
-                                                                    reduce_only=True)
-
-            if posted:
-                # Cancel order
-                self._cancel_order(pair=pair,
-                                   order_id=order_id)
-
-                # Get current position size
-                pos_info = self._get_position_info(pair=pair)
-
-                residual_size = pos_info[0]['size']
-
+        # If there is residual, exit with market order
         if residual_size != 0:
             self.exit_market(pair=pair,
                              side=side,
                              qty=residual_size)
 
+        pos_info = self._get_position_info(pair=pair)
 
-self = Bybit(key=config('BYBIT_KEY_TEST'),
-             secret=config('BYBIT_SECRET_TEST'),
-             _testnet=True)
+        return pos_info[0]['size']
 
-pair = 'BTCUSDT'
-qty = 0.1
-sl_price = 19000
-price_precision = 3
-side = 'Buy'
-
-while True:
-    self.enter_limit_then_market(pair=pair,
-                                 side='Buy',
-                                 qty=qty,
-                                 price_precision=price_precision,
-                                 sl_price=sl_price)
-
-    time.sleep(20)
-
-    pos_info = self._get_position_info(pair=pair)
-
-    pos_size = pos_info[0]['size']
-
-    assert pos_size == qty, "wrong qty !"
-
-    self.exit_limit_then_market(pair=pair,
-                                side='Sell',
-                                qty=qty)
-
-    time.sleep(10)
-
-    pos_info = self._get_position_info(pair=pair)
-
-    pos_size = pos_info[0]['size']
-
-    assert pos_size == 0, "did not exit all pos"
-
-    time.sleep(10)
