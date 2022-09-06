@@ -115,130 +115,6 @@ class Bot(TelegramBOT):
         else:
             return pos_size
 
-    def ltm_order_execution(self, actions: list, execution_type: str):
-        """
-        Note: ltm stands for limit than market order
-        Args:
-            actions:
-            execution_type:
-        Returns:
-        """
-
-        limit_executions = {}
-        final_executions = {}
-
-        for _info in actions:
-
-            prc = self.client.get_order_book_prices(pair=_info['pair'])
-
-            if execution_type == 'entry':
-
-                limit_executions[_info['pair']] = {}
-
-                size = self.get_position_size()
-
-                if size == 0:
-                    print(f'Balance too low')
-                    self.telegram_bot_sendtext(f'Tried to enter in position for {_info["pair"]} but balance is too low')
-                    return None
-
-                # 2 - derive the quantity from the previous variables
-                quantity = (size / prc)
-
-                limit_executions[_info['pair']]['quantity'] = quantity
-
-                # 3 - send the order to the exchange
-                limit_order = self.client.open_close_order(
-                    pair=_info['pair'],
-                    side=_info['side'],
-                    quantity=quantity,
-                    price=prc,
-                    order_type='limit'
-                )
-
-                limit_executions[_info['pair']]['action_inf'] = _info
-                limit_executions[_info['pair']]['limit_order'] = limit_order
-
-            elif execution_type == 'exit':
-
-                print(f'Exiting {_info["pair"]}')
-
-                # Close tp and sl orders
-                self.client.cancel_order(
-                    pair=_info["pair"],
-                    order_id=self.position_opened[_info["pair"]]['tp_id']
-                )
-
-                self.client.cancel_order(
-                    pair=_info["pair"],
-                    order_id=self.position_opened[_info["pair"]]['sl_id']
-                )
-
-                # close limit order
-                limit_order = self.client.open_close_order(
-                    pair=_info['pair'],
-                    side=self.position_opened[_info["pair"]]['exit_side'],
-                    quantity=self.position_opened[_info["pair"]]['quantity'],
-                    price=prc,
-                    order_type='limit'
-                )
-                
-                limit_executions[_info['pair']]['limit_order'] = limit_order
-                limit_executions[_info['pair']]['action_inf'] = {}
-                limit_executions[_info['pair']]['action_inf']['side'] = self.position_opened[_info["pair"]]['exit_side']
-
-        # Waiting for limit execution
-        time.sleep(self.limit_time_execution)
-
-        for key, value in limit_executions.items():
-            
-            final_executions[key] = {}
-    
-            # 1 - get the order state
-            order_state = self.client.get_order_trades(
-                pair=key,
-                order=value['limit_order']['order_id']
-            )
-    
-            remaining_quantity = order_state['originalQuantity'] - order_state['executedQuantity']
-    
-            if remaining_quantity > 0:
-
-                # cancel order
-                self.client.cancel_order(pair=key, order_id=value['limit_order']['order_id'])
-
-                # send market order
-                market_order = self.client.open_close_order(
-                    pair=key,
-                    side=value['action_inf']['side'],
-                    quantity=remaining_quantity,
-                    order_type='market'
-                )
-    
-                # todo: rebuild the average entry point
-                final_executions[key]['market_order'] = market_order
-
-            if execution_type == 'entry':
-                # send tp and sl
-                tp_info = self.client.tp_order(
-                    pair=key,
-                    side=value['action_inf']['closing_side'],
-                    quantity=value['quantity'],
-                    price=value['action_inf']['tp'],
-                    tp_type='limit'
-                )
-                final_executions[key]['tp_info'] = tp_info
-
-                sl_info = self.client.sl_market_order(
-                    pair=key,
-                    side=value['action_inf']['closing_side'],
-                    quantity=value['quantity'],
-                    stop_price=value['action_inf']['sl'],
-                )
-                final_executions[key]['sl_info'] = sl_info
-
-        return final_executions
-
     def entering_positions(self):
         """
         Args:
@@ -267,10 +143,7 @@ class Bot(TelegramBOT):
                 all_entries.append(_action)
                 remaining_position -= 1
 
-        completed_entries = self.ltm_order_execution(
-            actions=all_entries,
-            execution_type='entry'
-        )
+        # todo: create "completed_entries"  
 
         for _pair_, _info_ in completed_entries.items():
             # 7 - todo : create the position data in nova labs backend
