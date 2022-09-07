@@ -7,8 +7,9 @@ import hashlib
 import time
 import hmac
 import json
-from decouple import config
 import pandas as pd
+from decouple import config
+from multiprocessing import Process, Manager
 
 
 class Bybit:
@@ -174,8 +175,7 @@ class Bybit:
         else:
             return std_interval[-1].upper()
 
-    @staticmethod
-    def _format_data(klines: list, historical: bool = True) -> pd.DataFrame:
+    def _format_data(self, klines: list, historical: bool = True) -> pd.DataFrame:
         """
         Args:
             all_data: output from _full_history
@@ -367,8 +367,6 @@ class Bybit:
             signed=True
         )
 
-        print(response.json())
-
         return response.json()['result']
 
     def enter_market(self,
@@ -411,8 +409,6 @@ class Bybit:
             signed=True
         )
 
-        print(response.json())
-
         if response.json()['result']:
             return response.json()['result']['data']
         else:
@@ -431,6 +427,17 @@ class Bybit:
         )
 
         return response.json()['result']
+
+    def get_last_price(self, pair):
+
+        response = self._send_request(
+            end_point=f"/public/linear/recent-trading-records",
+            request_type="GET",
+            params={"symbol": pair,
+                    "limit": 1},
+        )
+
+        return response.json()['result'][0]['price']
 
     def _verify_limit_order_posted(self,
                                    pair: str,
@@ -520,7 +527,7 @@ class Bybit:
                        pair: str,
                        side: str,
                        position_size: float,
-                       tp_prc: float):
+                       tp_price: float):
         """
         Place a limit order as Take Profit.
         (The market SL is place when entering in position)
@@ -528,8 +535,8 @@ class Bybit:
         Args:
             pair:
             side:
-            qty:
-            tp_prc:
+            position_size:
+            tp_price:
 
         Returns:
             response of the API call
@@ -538,7 +545,7 @@ class Bybit:
         response = self._send_order(pair=pair,
                                     side=side,
                                     qty=position_size,
-                                    price=tp_prc,
+                                    price=tp_price,
                                     reduce_only=True,
                                     order_type='Limit',
                                     time_in_force='PostOnly')
@@ -674,12 +681,28 @@ class Bybit:
 
         return response.json()['result']
 
+    def get_actual_positions(self,
+                             list_pair: list):
+
+        pos_inf = self._get_position_info()
+
+        positions = {}
+
+        for pos in pos_inf:
+            pair = pos['data']['symbol']
+            amt = pos['data']['size']
+            if (pair in list_pair) and (amt != 0):
+                positions[pair] = pos['data']
+
+        return positions
+
     def _looping_limit_orders(self,
                               pair: str,
                               side: str,
                               position_size: float,
                               duration: int,
-                              reduce_only: bool):
+                              reduce_only: bool,
+                              sl_price: float = None):
         """
         This function will try to enter in position by sending only limit orders to be sure to pay limit orders fees.
 
@@ -698,15 +721,20 @@ class Bybit:
 
         t_start = time.time()
 
+        all_limit_orders = []
+
         # Try to enter with limit order during 2 min
         while (residual_size != 0) and (time.time() - t_start < duration):
 
             posted, order = self._send_limit_order_at_best_price(pair=pair,
                                                                  side=side,
                                                                  qty=residual_size,
-                                                                 reduce_only=reduce_only)
+                                                                 reduce_only=reduce_only,
+                                                                 sl_price=sl_price)
 
             if posted:
+
+                all_limit_orders.append(order)
 
                 new_price = order['price']
                 order_status = order['order_status']
@@ -732,13 +760,15 @@ class Bybit:
                 else:
                     residual_size = position_size - pos_info[0]['size']
 
-        return residual_size
+        return {'residual_size': residual_size, 'all_limit_orders': all_limit_orders}
 
-    def enter_limit_then_market(self,
-                                pair,
-                                side,
-                                sl_price,
-                                qty):
+    def _enter_limit_then_market(self,
+                                 pair,
+                                 side,
+                                 qty,
+                                 sl_price,
+                                 tp_price,
+                                 return_dict):
         """
         Optimized way to enter in position. The method tries to enter with limit orders during 2 minutes.
         If after 2min we still did not entered with the desired amount, a market order is sent.
@@ -753,24 +783,41 @@ class Bybit:
             Size of the current position
         """
 
-        residual_size = self._looping_limit_orders(pair=pair, side=side, position_size=qty,
-                                                   duration=120, reduce_only=False)
+        sl_price = round(sl_price, self.pairs_info[pair]['pricePrecision'])
+
+        after_looping_limit = self._looping_limit_orders(pair=pair, side=side, position_size=qty, sl_price=sl_price,
+                                                         duration=120, reduce_only=False)
+
+        residual_size = after_looping_limit['residual_size']
+        all_orders = after_looping_limit['all_limit_orders']
 
         # If there is residual, enter with market order
         if residual_size != 0:
-            self.enter_market(pair=pair,
-                              side=side,
-                              qty=residual_size,
-                              sl_price=sl_price)
+            martket_order = self.enter_market(pair=pair,
+                                              side=side,
+                                              qty=residual_size,
+                                              sl_price=sl_price)
 
+            all_orders.append(martket_order)
+
+        # Get current position info
         pos_info = self._get_position_info(pair=pair)
 
-        return pos_info[0]['size']
+        tp_side = 'Sell' if side == 'Buy' else 'Buy'
 
-    def exit_limit_then_market(self,
-                               pair,
-                               position_size,
-                               side):
+        # Place take profit limit order
+        self.place_limit_tp(pair=pair,
+                            side=tp_side,
+                            position_size=pos_info[0]['size'],
+                            tp_price=round(tp_price, self.pairs_info[pair]['pricePrecision']))
+
+        return_dict[pair] = all_orders
+
+    def _exit_limit_then_market(self,
+                                pair,
+                                side,
+                                position_size,
+                                return_dict):
         """
         Optimized way to exit position. The method tries to exit with limit orders during 2 minutes.
         If after 2min we still did not exit totally, a market order is sent.
@@ -780,16 +827,82 @@ class Bybit:
             side:
         """
 
-        residual_size = self._looping_limit_orders(pair=pair, side=side, position_size=position_size,
-                                                   duration=120, reduce_only=True)
+        after_looping_limit = self._looping_limit_orders(pair=pair, side=side, position_size=position_size,
+                                                         duration=120, reduce_only=True)
+
+        residual_size = after_looping_limit['residual_size']
+        all_orders = after_looping_limit['all_limit_orders']
 
         # If there is residual, exit with market order
         if residual_size != 0:
-            self.exit_market(pair=pair,
-                             side=side,
-                             qty=residual_size)
+            market_order = self.exit_market(pair=pair,
+                                            side=side,
+                                            qty=residual_size)
+
+            all_orders.append(market_order)
 
         pos_info = self._get_position_info(pair=pair)
 
-        return pos_info[0]['size']
+        return_dict[pair] = pos_info[0]
 
+    @staticmethod
+    def prepare_args(args: dict,
+                     return_dict: dict) -> tuple:
+        args = tuple(args.values()) + (return_dict,)
+
+        return args
+
+    def enter_limit_then_market(self,
+                                orders: list) -> dict:
+        """
+        Parallelize the execution of _enter_limit_then_market.
+        Args:
+            orders: list of dict. Each element represents the params of an order.
+            [{'pair': 'BTCUSDT', 'side': 'Buy', 'qty': 0.1, 'sl_price': 18000, 'tp_price': 20000},
+             {'pair': 'ETHUSDT', 'side': 'Buy', 'qty': 1, 'sl_price': 1200, 'tp_price': 2000}]
+        Returns:
+            list of positions info after executing all enter orders.
+        """
+
+        manager = Manager()
+        return_dict = manager.dict()
+
+        running_tasks = [Process(target=self._enter_limit_then_market, args=self.prepare_args(order, return_dict)) for
+                         order in
+                         orders]
+
+        for running_task in running_tasks:
+            running_task.start()
+
+        for running_task in running_tasks:
+            running_task.join()
+
+        return dict(return_dict)
+
+    def exit_limit_then_market(self,
+                               orders: list) -> dict:
+
+        """
+        Parallelize the execution of _exit_limit_then_market.
+        Args:
+            orders: list of dict. Each element represents the params of an order.
+            [{'pair': 'BTCUSDT', 'side': 'Sell', 'position_size': 0.1},
+             {'pair': 'ETHUSDT', 'side': 'Sell', 'position_size': 1}]
+        Returns:
+            list of positions info after executing all exit orders.
+        """
+
+        manager = Manager()
+        return_dict = manager.dict()
+
+        running_tasks = [Process(target=self._exit_limit_then_market, args=self.prepare_args(order, return_dict)) for
+                         order in
+                         orders]
+
+        for running_task in running_tasks:
+            running_task.start()
+
+        for running_task in running_tasks:
+            running_task.join()
+
+        return dict(return_dict)
