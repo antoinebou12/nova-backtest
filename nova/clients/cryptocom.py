@@ -10,7 +10,8 @@ class Cryptocom:
 
     def __init__(self,
                  key: str,
-                 secret: str
+                 secret: str,
+                 testnet: bool
                  ):
         self.api_key = key
         self.api_secret = secret

@@ -15,29 +15,31 @@ def clients(
         exchange: str,
         key: str = "",
         secret: str = "",
-        passphrase: str = ""):
+        passphrase: str = "",
+        testnet: bool = False
+):
 
     if exchange == 'binance':
-        return Binance(key=key, secret=secret)
+        return Binance(key=key, secret=secret, testnet=testnet)
     elif exchange == 'ftx':
-        return FTX(key=key, secret=secret)
+        return FTX(key=key, secret=secret, testnet=testnet)
     elif exchange == 'coinbase':
-        return Coinbase(key=key, secret=secret, pass_phrase=passphrase)
+        return Coinbase(key=key, secret=secret, pass_phrase=passphrase, testnet=testnet)
     elif exchange == 'okx':
-        return OKX(key=key, secret=secret, pass_phrase=passphrase)
+        return OKX(key=key, secret=secret, pass_phrase=passphrase, testnet=testnet)
     elif exchange == 'kraken':
-        return Kraken(key=key, secret=secret)
+        return Kraken(key=key, secret=secret, testnet=testnet)
     elif exchange == 'kucoin':
-        return Kucoin(key=key, secret=secret, pass_phrase=passphrase)
+        return Kucoin(key=key, secret=secret, pass_phrase=passphrase, testnet=testnet)
     elif exchange == 'huobi':
-        return Huobi(key=key, secret=secret)
+        return Huobi(key=key, secret=secret, testnet=testnet)
     elif exchange == 'gemini':
-        return Gemini(key=key, secret=secret)
+        return Gemini(key=key, secret=secret, testnet=testnet)
     elif exchange == 'gate':
-        return Gate(key=key, secret=secret)
+        return Gate(key=key, secret=secret, testnet=testnet)
     elif exchange == 'gate':
-        return Cryptocom(key=key, secret=secret)
+        return Cryptocom(key=key, secret=secret, testnet=testnet)
     elif exchange == 'bybit':
-        return Bybit(key=key, secret=secret)
+        return Bybit(key=key, secret=secret, _testnet=testnet)
 
 
