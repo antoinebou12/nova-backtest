@@ -10,7 +10,9 @@ class FTX:
 
     def __init__(self,
                  key: str,
-                 secret: str):
+                 secret: str,
+                 testnet: bool = False
+                 ):
         self.api_key = key
         self.api_secret = secret
         self.based_endpoint = "https://ftx.com/api"

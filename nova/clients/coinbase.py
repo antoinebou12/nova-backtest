@@ -11,7 +11,8 @@ class Coinbase:
     def __init__(self,
                  key: str,
                  secret: str,
-                 pass_phrase: str):
+                 pass_phrase: str,
+                 testnet: bool):
         self.api_key = key
         self.api_secret = secret
         self.pass_phrase = pass_phrase

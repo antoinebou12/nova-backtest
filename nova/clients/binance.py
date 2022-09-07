@@ -15,15 +15,22 @@ class Binance:
     def __init__(self,
                  key: str,
                  secret: str,
+                 testnet: bool
                  ):
 
         self.api_key = key
         self.api_secret = secret
-        
-        self.based_endpoint = "https://fapi.binance.com"
+
+        if testnet:
+            self.based_endpoint = "https://testnet.binancefuture.com"
+        else:
+            self.based_endpoint = "https://fapi.binance.com"
+
         self._session = Session()
 
         self.historical_limit = 1000
+
+        self.pair_info = self.get_pairs_info()
 
     # API REQUEST FORMAT
     def _send_request(self, end_point: str, request_type: str, params: dict = None, signed: bool = False):
@@ -306,8 +313,7 @@ class Binance:
         )
         print(f"{response['msg']}")
 
-    def get_pairs_info(self,
-                       quote_asset) -> dict:
+    def get_pairs_info(self) -> dict:
         """
         Note: This output is used for standardization purpose because binance order api has
         decimal restriction per pair.
@@ -320,7 +326,7 @@ class Binance:
         output = {}
 
         for symbol in info['symbols']:
-            if symbol['quoteAsset'] == quote_asset and symbol['contractType'] == 'PERPETUAL':
+            if symbol['contractType'] == 'PERPETUAL':
                 output[symbol['symbol']] = {}
 
                 for fil in symbol['filters']:
@@ -574,27 +580,86 @@ class Binance:
 
         return results
 
-    def open_close_order(self, pair: str, side: str, quantity: float, order_type: str, price: float = None):
-        """
-        Args:
-            pair: pair id that we want to create the order for
-            side: could be 'BUY' or 'SELL'
-            quantity: quantity should respect the minimum precision
-            price:
-            order_type:
+    # def open_close_order(self, pair: str, side: str, quantity: float, order_type: str, price: float = None):
+    #     """
+    #     Args:
+    #         pair: pair id that we want to create the order for
+    #         side: could be 'BUY' or 'SELL'
+    #         quantity: quantity should respect the minimum precision
+    #         price:
+    #         order_type:
+    #
+    #     Returns:
+    #         standardized output containing time, pair, order_id, quantity, price, side, is_position_closing
+    #     """
+    #     _params = {
+    #         "symbol": pair,
+    #         "side": side,
+    #         "quantity": float(round(quantity, self.pair_info[pair]['quantityPrecision'])),
+    #         "type": "MARKET" if order_type == 'market' else "LIMIT"
+    #     }
+    #
+    #     if order_type == 'limit':
+    #         _params["price"] = float(round(price, self.pair_info[pair]['pricePrecision']))
+    #
+    #     response = self._send_request(
+    #         end_point=f"/fapi/v1/order",
+    #         request_type="POST",
+    #         params=_params,
+    #         signed=True
+    #     )
+    #
+    #     return self.get_order_trades(
+    #         pair=pair,
+    #         order_id=response['orderId']
+    #     )
 
-        Returns:
-            standardized output containing time, pair, order_id, quantity, price, side, is_position_closing
+    # def sl_market_order(self, pair: str, side: str, quantity: float, stop_price: float):
+    #
+    #     _params = {
+    #         "symbol": pair,
+    #         "side": side,
+    #         "type": 'STOP_MARKET',
+    #         "timeInForce": 'GTC',
+    #         "stopPrice": float(round(stop_price,  self.pair_info[pair]['pricePrecision'])),
+    #     }
+    #
+    #     data = self._send_request(
+    #         end_point=f"/fapi/v1/order",
+    #         request_type="POST",
+    #         params=_params,
+    #         signed=True
+    #     )
+    #
+    #     return {
+    #         'time': data['updateTime'],
+    #         'pair': data['symbol'],
+    #         'order_id': data['orderId'],
+    #         'type': data['type'],
+    #         'sl_price': data['stopPrice'],
+    #         'executedQty': data['executedQty']
+    #     }
+
+    def enter_market_order(self, pair: str, side: str, quantity: float):
+
         """
+            Args:
+                pair: pair id that we want to create the order for
+                side: could be 'BUY' or 'SELL'
+                quantity: quantity should respect the minimum precision
+                price:
+                order_type:
+
+            Returns:
+                standardized output containing time, pair, order_id, quantity, price, side, is_position_closing
+        """
+        
         _params = {
             "symbol": pair,
             "side": side,
             "quantity": float(round(quantity, self.pair_info[pair]['quantityPrecision'])),
-            "type": "MARKET" if order_type == 'market' else "LIMIT"
+            "type": "MARKET",
         }
-
-        if order_type == 'limit':
-            _params["price"] = float(round(price, self.pair_info[pair]['pricePrecision']))
 
         response = self._send_request(
             end_point=f"/fapi/v1/order",
@@ -608,14 +673,52 @@ class Binance:
             order_id=response['orderId']
         )
 
-    def sl_market_order(self, pair: str, side: str, quantity: float, stop_price: float):
+    def exit_market_order(self, pair: str, side: str, quantity: float):
 
         _params = {
             "symbol": pair,
             "side": side,
-            "type": 'STOP_MARKET',
+            "quantity": float(round(quantity, self.pair_info[pair]['quantityPrecision'])),
+            "type": "MARKET",
+            "reduceOnly": "true"
+        }
+
+        response = self._send_request(
+            end_point=f"/fapi/v1/order",
+            request_type="POST",
+            params=_params,
+            signed=True
+        )
+
+        return self.get_order_trades(
+            pair=pair,
+            order_id=response['orderId']
+        )
+
+    def enter_limit_then_market(self, pair: str, side: str, qty: float, price: float, tp_price, sl_price: float):
+        pass
+
+    def exit_limit_then_market(self, pair: str, side: str, position_size: float):
+        pass
+
+    def place_limit_tp(self, pair: str, side: str, position_size: float, tp_prc: float):
+        """
+        Args:
+            pair: pair id that we want to create the order for
+            side: could be 'BUY' or 'SELL'
+            position_size: for binance  quantity is not needed since the tp order "closes" the "opened" position
+            tp_prc: price of the tp or sl
+        Returns:
+            Standardized output
+        """
+        _params = {
+            "symbol": pair,
+            "side": side,
+            "type": 'TAKE_PROFIT',
             "timeInForce": 'GTC',
-            "stopPrice": float(round(stop_price,  self.pair_info[pair]['pricePrecision'])),
+            "price": float(round(tp_prc,  self.pair_info[pair]['pricePrecision'])),
+            "stopPrice": float(round(tp_prc,  self.pair_info[pair]['pricePrecision'])),
+            "quantity": float(round(position_size, self.pair_info[pair]['quantityPrecision']))
         }
 
         data = self._send_request(
@@ -630,29 +733,29 @@ class Binance:
             'pair': data['symbol'],
             'order_id': data['orderId'],
             'type': data['type'],
-            'sl_price': data['stopPrice'],
+            'tp_price': data['price'],
             'executedQty': data['executedQty']
         }
 
-    def tp_order(self, pair: str, side: str, quantity: float, price: float, tp_type: str):
+    def place_market_sl(self, pair: str, side: str, position_size: float, sl_prc: float):
         """
         Args:
             pair: pair id that we want to create the order for
             side: could be 'BUY' or 'SELL'
-            quantity: for binance  quantity is not needed since the tp order "closes" the "opened" position
-            price: price of the tp or sl
-            tp_type: 'market' or 'limit'
+            position_size: for binance  quantity is not needed since the tp order "closes" the "opened" position
+            sl_prc: price of the tp or sl
         Returns:
             Standardized output
         """
         _params = {
             "symbol": pair,
             "side": side,
-            "type": 'TAKE_PROFIT' if tp_type == 'limit' else 'TAKE_PROFIT_MARKET',
+            "type": 'STOP_MARKET',
             "timeInForce": 'GTC',
-            "price": float(round(price,  self.pair_info[pair]['pricePrecision'])),
-            "stopPrice": float(round(price,  self.pair_info[pair]['pricePrecision'])),
-            "quantity": float(round(quantity, self.pair_info[pair]['quantityPrecision']))
+            "price": float(round(sl_prc, self.pair_info[pair]['pricePrecision'])),
+            "stopPrice": float(round(sl_prc, self.pair_info[pair]['pricePrecision'])),
+            "quantity": float(round(position_size, self.pair_info[pair]['quantityPrecision'])),
+            "reduceOnly": "true"
         }
 
         data = self._send_request(
@@ -698,6 +801,6 @@ class Binance:
             'current_quantity': position_info['positionAmt']
         }
 
-    def get_order_book_prices(self, pair, ):
+    def get_order_book(self, pair, ):
         pass
 
