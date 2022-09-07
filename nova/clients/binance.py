@@ -47,14 +47,6 @@ class Binance:
         response = self._session.send(prepared)
         return response.json()
 
-    # GENERAL INFORMATION
-    def get_exchange_info(self):
-        return self._send_request(
-            end_point=f"/fapi/v1/exchangeInfo",
-            request_type="GET",
-        )
-
-    # STANDARDIZED BACKTEST
     def get_server_time(self) -> int:
         """
         Returns:
@@ -110,15 +102,40 @@ class Binance:
         )
         return kline[0][0]
 
-    def _full_history(self, pair: str, interval: str, start_time: int, end_time: int):
+    def _format_data(self, all_data: list, historical: bool = True) -> pd.DataFrame:
+        """
+        Args:
+            all_data: output from _full_history
+
+        Returns:
+            standardized pandas dataframe
+        """
+        # Remove the last row if it's not finished yet
+        if historical:
+            if self.get_server_time() < all_data[-1][6]:
+                del all_data[-1]
+
+        df = pd.DataFrame(all_data, columns=DATA_FORMATING['binance']['columns'])
+
+        for var in DATA_FORMATING['binance']['num_var']:
+            df[var] = pd.to_numeric(df[var], downcast="float")
+
+        if historical:
+            df['next_open'] = df['open'].shift(-1)
+            return df.dropna()
+        else:
+            df['open_time_datetime'] = pd.to_datetime(df['open_time'], unit='ms')
+            return df.dropna()
+
+    def get_historical_data(self, pair: str, interval: str, start_ts: int, end_ts: int) -> pd.DataFrame:
         """
         Args:
             pair: pair to get information from
             interval: granularity of the candle ['1m', '1h', ... '1d']
-            start_time: timestamp in milliseconds of the starting date
-            end_time: timestamp in milliseconds of the end date
+            start_ts: timestamp in milliseconds of the starting date
+            end_ts: timestamp in milliseconds of the end date
         Returns:
-            the complete raw data history desired -> multiple requested could be executed
+            historical data requested in a standardized pandas dataframe
         """
 
         # init our list
@@ -128,7 +145,7 @@ class Binance:
         timeframe = interval_to_milliseconds(interval)
 
         # if a start time was passed convert it
-        start_ts = start_time
+        start_ts = start_ts
 
         # establish first available start timestamp
         first_valid_ts = self._get_earliest_valid_timestamp(
@@ -138,10 +155,10 @@ class Binance:
         start_ts = max(start_ts, first_valid_ts)
 
         # if an end time was passed convert it
-        end_ts = end_time
+        end_ts = end_ts
 
         if end_ts and start_ts and end_ts <= start_ts:
-            return output_data
+            return pd.DataFrame()
 
         idx = 0
         while True:
@@ -176,52 +193,7 @@ class Binance:
             if idx % 3 == 0:
                 time.sleep(1)
 
-        return output_data
-
-    def _format_data(self, all_data: list, historical: bool = True) -> pd.DataFrame:
-        """
-        Args:
-            all_data: output from _full_history
-
-        Returns:
-            standardized pandas dataframe
-        """
-        # Remove the last row if it's not finished yet
-        if historical:
-            if self.get_server_time() < all_data[-1][6]:
-                del all_data[-1]
-
-        df = pd.DataFrame(all_data, columns=DATA_FORMATING['binance']['columns'])
-
-        for var in DATA_FORMATING['binance']['num_var']:
-            df[var] = pd.to_numeric(df[var], downcast="float")
-
-        if historical:
-            df['next_open'] = df['open'].shift(-1)
-            return df.dropna()
-        else:
-            df['open_time_datetime'] = pd.to_datetime(df['open_time'], unit='ms')
-            return df.dropna()
-
-    def get_historical_data(self, pair: str, interval: str, start_ts: int, end_ts: int) -> pd.DataFrame:
-        """
-        Args:
-            pair: pair to get information from
-            interval: granularity of the candle ['1m', '1h', ... '1d']
-            start_time: timestamp in milliseconds of the starting date
-            end_time: timestamp in milliseconds of the end date
-        Returns:
-            historical data requested in a standardized pandas dataframe
-        """
-
-        data = self._full_history(
-            pair=pair,
-            interval=interval,
-            start_time=start_ts,
-            end_time=end_ts
-        )
-
-        return self._format_data(all_data=data)
+        return self._format_data(all_data=output_data)
 
     def update_historical(self, pair: str, interval: str, current_df: pd.DataFrame) -> pd.DataFrame:
         """
@@ -237,16 +209,78 @@ class Binance:
 
         end_date_data_ts = int(current_df['open_time'].max())
         now_date_ts = int(time.time() * 1000)
-        data = self._full_history(
+        df = self.get_historical_data(
             pair=pair,
             interval=interval,
-            start_time=end_date_data_ts,
-            end_time=now_date_ts
+            start_ts=end_date_data_ts,
+            end_ts=now_date_ts
         )
-        format_df = self._format_data(all_data=data)
-        return pd.concat([current_df, format_df], ignore_index=True).drop_duplicates(subset=['open_time'])
+        return pd.concat([current_df, df], ignore_index=True).drop_duplicates(subset=['open_time'])
 
     # BINANCE SPECIFIC FUNCTION
+    def setup_account(self,
+                      quote_asset: str,
+                      leverage: int,
+                      list_pairs: list,
+                      bankroll: float,
+                      max_down: float):
+        """
+        Note: We execute verification of the account (balance, leverage, etc.)
+
+        Args:
+            quote_asset:
+            leverage:
+            list_pairs: todo:  execute setup only if asset in list
+            bankroll:
+            max_down:
+
+        Returns:
+            None
+        """
+        accounts = self.get_account_info()
+        positions_info = self.get_position_info()
+        position_mode = self.get_position_mode()
+
+        for info in positions_info:
+
+            # ISOLATE MARGIN TYPE -> ISOLATED
+            if info['marginType'] != 'isolated':
+                self.change_margin_type(
+                    pair=info['symbol'],
+                    margin_type="ISOLATED",
+                )
+
+            # SET LEVERAGE
+            if int(info['leverage']) != leverage:
+                self.change_leverage(
+                    pair=info['symbol'],
+                    leverage=leverage,
+                )
+
+        if position_mode['dualSidePosition']:
+            self.change_position_mode(
+                dual_position="false",
+            )
+
+        for x in accounts["assets"]:
+
+            if x["asset"] == quote_asset:
+                # Assert_1: The account need to have the minimum bankroll
+                assert float(x['availableBalance']) >= bankroll * (1 + max_down), f"The account has only {round(balance, 2)} {quote_asset}. " \
+                                                             f"{round(bankroll * (1 + max_down), 2)} {quote_asset} is required"
+
+                # Assert_2: The account has margin available
+                assert x['marginAvailable']
+
+            if x['asset'] == "BNB" and float(x["availableBalance"]) == 0:
+                print(f"You can save Tx Fees if you transfer BNB in your Future Account")
+
+    def get_exchange_info(self):
+        return self._send_request(
+            end_point=f"/fapi/v1/exchangeInfo",
+            request_type="GET",
+        )
+
     def change_position_mode(self, dual_position: str):
         response = self._send_request(
             end_point=f"/fapi/v1/positionSide/dual",
@@ -345,55 +379,6 @@ class Binance:
             request_type="GET",
             signed=True
         )
-
-    # STANDARDIZED BOT
-    def setup_account(self, base_asset: str, leverage: int, bankroll: float):
-        """
-        Note: We execute verification of the account (balance, leverage, etc.)
-
-        Args:
-            base_asset:
-            leverage:
-            bankroll:
-
-        Returns:
-            None
-        """
-        accounts = self.get_account_info()
-        positions_info = self.get_position_info()
-        position_mode = self.get_position_mode()
-
-        for info in positions_info:
-
-            # ISOLATE MARGIN TYPE -> ISOLATED
-            if info['marginType'] != 'isolated':
-                self.change_margin_type(
-                    pair=info['symbol'],
-                    margin_type="ISOLATED",
-                )
-
-            # SET LEVERAGE
-            if int(info['leverage']) != leverage:
-                self.change_leverage(
-                    pair=info['symbol'],
-                    leverage=leverage,
-                )
-
-        if position_mode['dualSidePosition']:
-            self.change_position_mode(
-                dual_position="false",
-            )
-
-        for x in accounts["assets"]:
-
-            if x["asset"] == base_asset:
-                # Assert_1: The account need to have the minimum bankroll
-                assert float(x['availableBalance']) >= bankroll
-                # Assert_2: The account has margin available
-                assert x['marginAvailable']
-
-            if x['asset'] == "BNB" and float(x["availableBalance"]) == 0:
-                print(f"You can save Tx Fees if you transfer BNB in your Future Account")
 
     async def get_prod_candles(self, session, pair, interval, window, current_pair_state: dict = None):
 
@@ -503,17 +488,17 @@ class Binance:
 
         return position
 
-    def get_token_balance(self, based_asset: str):
+    def get_token_balance(self, quote_asset: str):
         """
         Args:
-            based_asset: asset used for the trades (USD, USDT, BUSD, ...)
+            quote_asset: asset used for the trades (USD, USDT, BUSD, ...)
 
         Returns:
             Available based_asset amount.
         """
         balances = self.get_balance()
         for balance in balances:
-            if balance['asset'] == based_asset:
+            if balance['asset'] == quote_asset:
                 return float(balance['availableBalance'])
 
     def get_order(self, pair: str, order_id: str):
