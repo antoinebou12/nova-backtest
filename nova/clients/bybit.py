@@ -17,12 +17,12 @@ class Bybit:
     def __init__(self,
                  key: str,
                  secret: str,
-                 _testnet: bool = False):
+                 testnet: bool = False):
 
         self.api_key = key
         self.api_secret = secret
 
-        self.based_endpoint = "https://api-testnet.bybit.com" if _testnet else "https://api.bybit.com"
+        self.based_endpoint = "https://api-testnet.bybit.com" if testnet else "https://api.bybit.com"
 
         self._session = Session()
 
@@ -459,20 +459,14 @@ class Bybit:
         """
 
         last_active_order = None
-        t_start = time.time()
 
         # Keep trying to get order status during 30s
-        while time.time() - t_start < 30:
+        while not last_active_order:
 
             time.sleep(5)
 
             last_active_order = self.get_order(pair=pair,
                                                order_id=order_id)
-            if last_active_order:
-                break
-
-        if not last_active_order:
-            raise ValueError("Failed to retrieve limit order")
 
         return last_active_order[0]['order_status'] != 'Cancelled'
 
@@ -762,6 +756,28 @@ class Bybit:
 
         return {'residual_size': residual_size, 'all_limit_orders': all_limit_orders}
 
+    def _get_all_filled_orders(self, orders: list):
+
+        final_state_orders = []
+
+        for order in orders:
+
+            order_status = 'New'
+
+            while order_status == 'New':
+                final_order = self.get_order(pair=order['symbol'],
+                                             order_id=order['order_id'])
+                if final_order:
+                    order_status = final_order[0]['order_status']
+
+                time.sleep(3)
+
+            if final_order[0]['cum_exec_qty'] != 0:
+
+                final_state_orders.append(final_order[0])
+
+        return final_state_orders
+
     def _enter_limit_then_market(self,
                                  pair,
                                  side,
@@ -793,12 +809,13 @@ class Bybit:
 
         # If there is residual, enter with market order
         if residual_size != 0:
-            martket_order = self.enter_market(pair=pair,
+            market_order = self.enter_market(pair=pair,
                                               side=side,
                                               qty=residual_size,
                                               sl_price=sl_price)
 
-            all_orders.append(martket_order)
+            if market_order:
+                all_orders.append(market_order)
 
         # Get current position info
         pos_info = self._get_position_info(pair=pair)
@@ -811,7 +828,7 @@ class Bybit:
                             position_size=pos_info[0]['size'],
                             tp_price=round(tp_price, self.pairs_info[pair]['pricePrecision']))
 
-        return_dict[pair] = all_orders
+        return_dict[pair] = self._get_all_filled_orders(orders=all_orders)
 
     def _exit_limit_then_market(self,
                                 pair,
@@ -839,11 +856,10 @@ class Bybit:
                                             side=side,
                                             qty=residual_size)
 
-            all_orders.append(market_order)
+            if market_order:
+                all_orders.append(market_order)
 
-        pos_info = self._get_position_info(pair=pair)
-
-        return_dict[pair] = pos_info[0]
+        return_dict[pair] = self._get_all_filled_orders(orders=all_orders)
 
     @staticmethod
     def prepare_args(args: dict,
