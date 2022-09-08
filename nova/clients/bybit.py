@@ -764,7 +764,7 @@ class Bybit:
 
             order_status = 'New'
 
-            while order_status == 'New':
+            while not (order_status in ['Filled', 'Cancelled']):
                 final_order = self.get_order(pair=order['symbol'],
                                              order_id=order['order_id'])
                 if final_order:
