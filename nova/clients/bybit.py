@@ -8,7 +8,8 @@ import time
 import hmac
 import json
 import pandas as pd
-from decouple import config
+import asyncio
+import aiohttp
 from multiprocessing import Process, Manager
 
 
@@ -175,7 +176,10 @@ class Bybit:
         else:
             return std_interval[-1].upper()
 
-    def _format_data(self, klines: list, historical: bool = True) -> pd.DataFrame:
+    def _format_data(self,
+                     klines: list,
+                     timeframe: int,
+                     historical: bool = True) -> pd.DataFrame:
         """
         Args:
             all_data: output from _full_history
@@ -198,6 +202,8 @@ class Bybit:
 
         if historical:
             df['next_open'] = df['open'].shift(-1)
+
+        df['close_time'] = df['open_time'] + timeframe - 1
 
         return df.dropna()
 
@@ -262,9 +268,8 @@ class Bybit:
             if end_ts and start_ts >= end_ts:
                 break
 
-        df = self._format_data(klines=klines)
-
-        df['close_time'] = df['open_time'] + timeframe - 1
+        df = self._format_data(klines=klines,
+                               timeframe=timeframe)
 
         return df
 
@@ -461,12 +466,19 @@ class Bybit:
         last_active_order = None
 
         # Keep trying to get order status during 30s
+        idx = 0
         while not last_active_order:
+
+            # Security
+            if idx >= 10:
+                raise ConnectionError('Failed to retrieve order')
 
             time.sleep(5)
 
             last_active_order = self.get_order(pair=pair,
                                                order_id=order_id)
+
+            idx += 1
 
         return last_active_order[0]['order_status'] != 'Cancelled'
 
@@ -764,16 +776,22 @@ class Bybit:
 
             order_status = 'New'
 
+            idx = 0
             while not (order_status in ['Filled', 'Cancelled']):
+
+                # Security
+                if idx >= 10:
+                    raise ConnectionError('Failed to retrieve order')
+
                 final_order = self.get_order(pair=order['symbol'],
                                              order_id=order['order_id'])
                 if final_order:
                     order_status = final_order[0]['order_status']
 
                 time.sleep(3)
+                idx += 1
 
             if final_order[0]['cum_exec_qty'] != 0:
-
                 final_state_orders.append(final_order[0])
 
         return final_state_orders
@@ -810,9 +828,9 @@ class Bybit:
         # If there is residual, enter with market order
         if residual_size != 0:
             market_order = self.enter_market(pair=pair,
-                                              side=side,
-                                              qty=residual_size,
-                                              sl_price=sl_price)
+                                             side=side,
+                                             qty=residual_size,
+                                             sl_price=sl_price)
 
             if market_order:
                 all_orders.append(market_order)
@@ -922,3 +940,111 @@ class Bybit:
             running_task.join()
 
         return dict(return_dict)
+
+    async def get_prod_candles(self, session, pair, interval, window, current_pair_state: dict = None):
+
+        url = self.based_endpoint + '/public/linear/kline'
+
+        final_dict = {}
+        final_dict[pair] = {}
+
+        if current_pair_state is not None:
+            start_time = int((current_pair_state[pair]['latest_update'] - interval_to_milliseconds(interval=interval)) / 1000)
+        else:
+            start_time = int(time.time() - (window + 1) * interval_to_milliseconds(interval=interval) / 1000)
+
+        params = {
+            'symbol': pair,
+            'interval': self._convert_interval(interval),
+            'limit': 200,
+            'from': start_time
+        }
+
+        # Compute the server time
+        s_time = int(1000 * time.time())
+
+        async with session.get(url=url, params=params) as response:
+            data = await response.json()
+
+            df = self._format_data(data['result'],
+                                   timeframe=interval_to_milliseconds(interval=interval),
+                                   historical=False)
+
+            df = df[df['close_time'] < s_time]
+
+            for var in ['open_time', 'close_time']:
+                df[var] = pd.to_datetime(df[var], unit='ms')
+
+            if current_pair_state is None:
+                final_dict[pair]['latest_update'] = s_time
+                final_dict[pair]['data'] = df
+
+            else:
+                df_new = pd.concat([current_pair_state[pair]['data'], df])
+                df_new = df_new.drop_duplicates(subset=['open_time']).sort_values(by=['open_time'],
+                                                                                  ascending=True)
+                df_new = df_new.tail(window)
+                df_new = df_new.reset_index(drop=True)
+
+                final_dict[pair]['latest_update'] = s_time
+                final_dict[pair]['data'] = df_new
+
+            return final_dict
+
+    async def get_prod_data(self, list_pair: list, interval: str, nb_candles: int, current_state: dict):
+        """
+        Note: This function is called once when the bot is instantiated.
+        This function execute n API calls with n representing the number of pair in the list
+        Args:
+            list_pair: list of all the pairs you want to run the bot on.
+            interval: time interval
+            nb_candles: number of candles needed
+            current_state: boolean indicate if this is an update
+        Returns: None, but it fills the dictionary self.prod_data that will contain all the data
+        needed for the analysis.
+        !! Command to run async function: asyncio.run(self.get_prod_data(list_pair=list_pair)) !!
+        """
+
+        # If we need more than 200 candles (which is the API's limit) we call self.get_historical_data instead
+        if nb_candles > 200 and current_state is None:
+
+            final_dict = {}
+
+            for pair in list_pair:
+                final_dict[pair] = {}
+                start_time = int(1000 * time.time() - (nb_candles + 1) * interval_to_milliseconds(interval=interval))
+                last_update = int(1000 * time.time())
+
+                df = self.get_historical_data(pair=pair,
+                                              start_ts=start_time,
+                                              interval=interval,
+                                              end_ts=int(1000 * time.time()))
+
+                df = df[df['close_time'] < last_update]
+
+                for var in ['open_time', 'close_time']:
+                    df[var] = pd.to_datetime(df[var], unit='ms')
+
+                final_dict[pair]['latest_update'] = last_update
+                final_dict[pair]['data'] = df
+
+            return final_dict
+
+        async with aiohttp.ClientSession(connector=aiohttp.TCPConnector(ssl=False)) as session:
+            tasks = []
+            for pair in list_pair:
+                task = asyncio.ensure_future(
+                    self.get_prod_candles(
+                        session=session,
+                        pair=pair,
+                        interval=interval,
+                        window=nb_candles,
+                        current_pair_state=current_state)
+                )
+                tasks.append(task)
+            all_info = await asyncio.gather(*tasks)
+
+            all_data = {}
+            for info in all_info:
+                all_data.update(info)
+            return all_data
