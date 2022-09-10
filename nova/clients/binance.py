@@ -1,5 +1,5 @@
 from nova.utils.helpers import interval_to_milliseconds
-from nova.utils.constant import DATA_FORMATING, STD_CANDLE_FORMAT
+from nova.utils.constant import DATA_FORMATING
 from requests import Request, Session
 from urllib.parse import urlencode
 import pandas as pd
@@ -89,7 +89,7 @@ class Binance:
             params=_params
         )
 
-    def _get_earliest_valid_timestamp(self, pair: str, interval: str):
+    def _get_earliest_timestamp(self, pair: str, interval: str):
         """
         Args:
             pair: Name of symbol pair
@@ -107,7 +107,8 @@ class Binance:
         )
         return kline[0][0]
 
-    def _format_data(self, all_data: list, historical: bool = True) -> pd.DataFrame:
+    @staticmethod
+    def _format_data(all_data: list, historical: bool = True) -> pd.DataFrame:
         """
         Args:
             all_data: output from _full_history
@@ -115,10 +116,6 @@ class Binance:
         Returns:
             standardized pandas dataframe
         """
-        # Remove the last row if it's not finished yet
-        if historical:
-            if self.get_server_time() < all_data[-1][6]:
-                del all_data[-1]
 
         df = pd.DataFrame(all_data, columns=DATA_FORMATING['binance']['columns'])
 
@@ -153,7 +150,7 @@ class Binance:
         start_ts = start_ts
 
         # establish first available start timestamp
-        first_valid_ts = self._get_earliest_valid_timestamp(
+        first_valid_ts = self._get_earliest_timestamp(
             pair=pair,
             interval=interval
         )
@@ -198,7 +195,7 @@ class Binance:
             if idx % 3 == 0:
                 time.sleep(1)
 
-        return self._format_data(all_data=output_data)
+        return self._format_data(all_data=output_data, historical=True)
 
     def update_historical(self, pair: str, interval: str, current_df: pd.DataFrame) -> pd.DataFrame:
         """
@@ -327,6 +324,8 @@ class Binance:
             if symbol['contractType'] == 'PERPETUAL':
                 output[symbol['symbol']] = {}
 
+                output[symbol['symbol']]['quote_asset'] = symbol['quoteAsset']
+
                 for fil in symbol['filters']:
                     if fil['filterType'] == 'PRICE_FILTER':
                         tick_size = str(float(fil['tickSize']))
@@ -403,7 +402,7 @@ class Binance:
 
         async with session.get(url=url, params=params) as response:
             data = await response.json()
-            df = self._format_data(data, historical=False)
+            df = self._format_data(all_data=data, historical=False)
             df = df[df['close_time'] < s_time]
 
             if current_pair_state is None:
@@ -451,27 +450,6 @@ class Binance:
             for info in all_info:
                 all_data.update(info)
             return all_data
-
-    def get_last_price(self, pair: str) -> dict:
-        """
-        Args:
-            pair: pair desired
-        Returns:
-            a dictionary containing the pair_id, latest_price, price_timestamp in timestamp
-        """
-        data = self._send_request(
-            end_point=f"/fapi/v1/ticker/price",
-            request_type="GET",
-            params={"symbol": pair}
-        )
-
-        last_info = {
-            'pair_id': data['symbol'],
-            'price_timestamp': data['time'],
-            'latest_price': data['price']
-        }
-
-        return last_info
 
     def get_actual_positions(self, list_pair: list):
         """
@@ -635,11 +613,10 @@ class Binance:
                                    pair: str,
                                    order_id: str):
         """
-
         When posting a limit order (with time_in_force='PostOnly') the order can be immediately canceled if its
-        price is to high for buy orders and to low for sell orders. Sometimes the first order book changes too quickly
-        that the first buy or sell order prices are no longer the same since the time we retrieve the OB. This can
-        eventually get our limit order automatically canceled and never posted. Thus each time we send a limit order
+        price is too high for buy orders and to low for a sell orders. Sometimes the first order book changes too
+        quickly that the first buy or sell order prices are no longer the same since the time we retrieve the OB. This
+        can eventually get our limit order automatically canceled and never posted. Thus each time we send a limit order
         we verify that the order is posted.
 
         Args:
@@ -658,26 +635,39 @@ class Binance:
 
             time.sleep(5)
 
-            last_active_order = self.get_order(pair=pair,
-                                               order_id=order_id)
+            last_active_order = self.get_order(
+                pair=pair,
+                order_id=order_id
+            )
+
             if last_active_order:
                 break
 
         if not last_active_order:
-            raise ValueError("Failed to retrieve limit order")
+            return False
 
-        return last_active_order[0]['order_status'] != 'Cancelled'
+        return last_active_order['status'] != 'CANCELLED'
 
     def _limit_order_best_price(self,
-                                pair,
-                                side,
-                                qty,
+                                pair: str,
+                                side: str,
+                                qty: float,
                                 reduce_only: bool = False
                                 ):
+
+        """
+
+        Args:
+            pair:
+            side:
+            qty:
+            reduce_only:
+
+        Returns:
+
+        """
         ob = self.get_order_book(pair=pair)
-
-        _type = 'asks' if 'BUY' else 'bids'
-
+        _type = 'bids' if side == 'BUY' else 'asks'
         price = float(ob[_type][0]['price'])
 
         _params = {
@@ -697,23 +687,24 @@ class Binance:
             signed=True
         )
 
-        return response
+        if not response:
+            return False, ''
 
-        # if not response:
-        #     return False, ''
-        #
-        # limit_order_posted = self._verify_limit_order_posted(order_id=response['order_id'],
-        #                                                      pair=pair)
-        #
-        # return limit_order_posted, response
+        limit_order_posted = self._verify_limit_order_posted(
+            order_id=response['orderId'],
+            pair=pair
+        )
 
-    def _looping_limit_orders(self,
-                              pair: str,
-                              side: str,
-                              position_size: float,
-                              duration: int,
-                              reduce_only: bool,
-                              sl_price: float = None):
+        return limit_order_posted, response
+
+    def _looping_limit_orders(
+            self,
+            pair: str,
+            side: str,
+            position_size: float,
+            duration: int,
+            reduce_only: bool
+    ):
         """
         This function will try to enter in position by sending only limit orders to be sure to pay limit orders fees.
 
@@ -737,34 +728,39 @@ class Binance:
         # Try to enter with limit order during 2 min
         while (residual_size != 0) and (time.time() - t_start < duration):
 
-            posted, order = self._send_limit_order_at_best_price(pair=pair,
-                                                                 side=side,
-                                                                 qty=residual_size,
-                                                                 reduce_only=reduce_only,
-                                                                 sl_price=sl_price)
+            posted, order = self._limit_order_best_price(
+                pair=pair,
+                side=side,
+                qty=residual_size,
+                reduce_only=reduce_only
+            )
 
             if posted:
 
                 all_limit_orders.append(order)
 
                 new_price = order['price']
-                order_status = order['order_status']
+                order_status = order['status']
 
                 # If the best order book price stays the same, do not cancel current order
-                while (new_price == order['price']) and (time.time() - t_start < 120) and (order_status != 'Filled'):
+                while (new_price == order['price']) and (time.time() - t_start < 120) and (order_status != 'FILLED'):
                     time.sleep(10)
 
-                    orderBook = self.get_order_book(pair=pair)
-                    new_price = float(orderBook[side.lower()][0]['price'])
+                    ob = self.get_order_book(pair=pair)
+                    _type = 'bids' if side == 'BUY' else 'asks'
 
-                    order_status = self.get_order(pair=pair, order_id=order['order_id'])
+                    new_price = float(ob[_type][0]['price'])
+
+                    order_status = self.get_order(pair=pair, order_id=order['orderId'])
 
                 # Cancel order
-                self._cancel_order(pair=pair,
-                                   order_id=order['order_id'])
+                self.cancel_order(
+                    pair=pair,
+                    order_id=order['orderId']
+                )
 
                 # Get current position size
-                pos_info = self._get_position_info(pair=pair)
+                pos_info = self.get_position_info(pair=pair)
 
                 if reduce_only:
                     residual_size = pos_info[0]['size']
@@ -794,33 +790,44 @@ class Binance:
             Size of the current position
         """
 
-        sl_price = round(sl_price, self.pairs_info[pair]['pricePrecision'])
-
-        after_looping_limit = self._looping_limit_orders(pair=pair, side=side, position_size=qty, sl_price=sl_price,
-                                                         duration=120, reduce_only=False)
+        after_looping_limit = self._looping_limit_orders(
+            pair=pair,
+            side=side,
+            position_size=qty,
+            duration=120,
+            reduce_only=False
+        )
 
         residual_size = after_looping_limit['residual_size']
         all_orders = after_looping_limit['all_limit_orders']
 
         # If there is residual, enter with market order
         if residual_size != 0:
-            martket_order = self.enter_market_order(pair=pair,
-                                                    side=side,
-                                                    qty=residual_size,
-                                                    sl_price=sl_price)
+            market_order = self.enter_market_order(
+                pair=pair,
+                side=side,
+                quantity=residual_size
+            )
 
-            all_orders.append(martket_order)
+            all_orders.append(market_order)
 
         # Get current position info
-        pos_info = self._get_position_info(pair=pair)
+        pos_info = self.get_position_info(pair=pair)
 
-        tp_side = 'Sell' if side == 'Buy' else 'Buy'
+        exit_side = 'SELL' if side == 'BUY' else 'BUY'
 
         # Place take profit limit order
         self.place_limit_tp(pair=pair,
-                            side=tp_side,
+                            side=exit_side,
                             position_size=pos_info[0]['size'],
-                            tp_price=round(tp_price, self.pairs_info[pair]['pricePrecision']))
+                            tp_prc=tp_price
+                            )
+
+        self.place_market_sl(pair=pair,
+                             side=exit_side,
+                             position_size=pos_info[0]['size'],
+                             sl_prc=sl_price
+                             )
 
         return_dict[pair] = all_orders
 

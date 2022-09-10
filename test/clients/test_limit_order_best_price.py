@@ -18,10 +18,11 @@ def test_limit_order_best_price(exchange: str, pair: str, side: str, quantity: f
         reduce_only=reduce_only
     )
 
-    print(data)
+    print(data[0])
+    print(data[1])
 
 
 test_limit_order_best_price('binance', 'BTCUSDT', 'BUY', 0.002, False)
-
+test_limit_order_best_price('binance', 'BTCUSDT', 'SELL', 0.002, True)
 
 
