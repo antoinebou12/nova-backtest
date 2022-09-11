@@ -45,7 +45,7 @@ def limit_to_start_date(interval: str, nb_candles: int):
 
 def get_timedelta_unit(interval: str) -> timedelta:
     """
-    Returns: a tuple that contains the unit and the multiplier needed to extract the data
+    Returns: timedelta
     """
     multi = int(float(re.findall(r'\d+', interval)[0]))
 
@@ -61,18 +61,20 @@ def is_opening_candle(interval: str):
     multi = int(float(re.findall(r'\d+', interval)[0]))
     unit = interval[-1]
 
+    now = datetime.utcnow()
+
     if multi == 1:
         if unit == 'm':
-            return datetime.utcnow().second == 0
+            return now.second == 0
         elif unit == 'h':
-            return datetime.utcnow().minute == 0
+            return now.minute + now.second == 0
         elif unit == 'd':
-            return datetime.utcnow().hour == 0
+            return now.hour + now.minute + now.second == 0
     else:
         if unit == 'm':
-            return datetime.utcnow().minute % multi == 0
+            return now.minute % multi + now.second == 0
         elif unit == 'h':
-            return datetime.utcnow().hour % multi == 0
+            return now.hour % multi + now.minute + now.second == 0
 
 
 def compute_time_difference(
