@@ -54,7 +54,7 @@ for i in range(5):
     pos_size = 0
 
     for order in entry_orders[pair]:
-        pos_size += order['cum_exec_qty']
+        pos_size += order['executedQuantity']
         entry_price += order['cum_exec_value']
         fees += order['cum_exec_fee']
 
@@ -65,7 +65,7 @@ for i in range(5):
     d_exit = 0
 
     for order in exit_orders[pair]:
-        d_exit += order['cum_exec_qty']
+        d_exit += order['executedQuantity']
         exit_price += order['cum_exec_value']
         fees += order['cum_exec_fee']
 
