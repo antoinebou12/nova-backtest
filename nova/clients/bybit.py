@@ -132,6 +132,7 @@ class Bybit:
                 pairs_info[pair['name']]['quote_asset'] = pair['quote_currency']
                 pairs_info[pair['name']]['pricePrecision'] = pair['price_scale']
                 pairs_info[pair['name']]['max_market_trading_qty'] = pair['lot_size_filter']['max_trading_qty']
+                pairs_info[pair['name']]['qtyPrecision'] = str(pair['lot_size_filter']['qty_step'])[::-1].find('.')
 
         return pairs_info
 
@@ -747,6 +748,7 @@ class Bybit:
         # Rename key
         tp_order['executedQuantity'] = tp_order.pop('cum_exec_qty')
         tp_order['originalQuantity'] = tp_order.pop('qty')
+        sl_order['order_id'] = sl_order.pop('stop_order_id')
 
         current_pos_size = self._get_position_info(pair=pair)[0]['size']
 
@@ -880,7 +882,7 @@ class Bybit:
 
         sl_price = round(sl_price, self.pairs_info[pair]['pricePrecision'])
         tp_price = round(tp_price, self.pairs_info[pair]['pricePrecision'])
-        qty = round(qty, 2)
+        qty = round(qty, self.pairs_info[pair]['qtyPrecision'])
 
         after_looping_limit = self._looping_limit_orders(pair=pair, side=side, position_size=qty, sl_price=sl_price,
                                                          duration=120, reduce_only=False)
@@ -922,7 +924,8 @@ class Bybit:
                                       tp_order: dict,
                                       sl_order: dict):
 
-        entry_info = {'pair': tp_order['symbol'],
+        pair = tp_order['symbol']
+        entry_info = {'pair': pair,
                       'type_pos': 'LONG' if tp_order['side'] == 'Sell' else 'SHORT'}
 
         pos_size = sum([order['cum_exec_qty'] for order in all_filled_orders])
@@ -930,7 +933,7 @@ class Bybit:
         fees_paid = sum([order['cum_exec_fee'] for order in all_filled_orders])
 
         entry_info['pos_size'] = pos_size
-        entry_info['entry_price'] = round(entry_price, self.pairs_info[entry_info['pair']]['pricePrecision'])
+        entry_info['entry_price'] = round(entry_price, self.pairs_info[pair]['pricePrecision'])
         entry_info['entry_fees'] = fees_paid
 
         entry_time = datetime.strptime(all_filled_orders[-1]['created_time'], "%Y-%m-%dT%H:%M:%SZ")
@@ -989,6 +992,14 @@ class Bybit:
 
     def _get_exit_info_from_orders(self,
                                    all_filled_orders: list) -> dict:
+        """
+        Create a dict of all exit information from all orders.
+        Args:
+            all_filled_orders:
+
+        Returns:
+
+        """
 
         exit_info = {"pair": all_filled_orders[0]['symbol']}
 
