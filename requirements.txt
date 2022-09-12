@@ -4,3 +4,4 @@ numpy~=1.14.6
 pytz~=2018.9
 matplotlib~=3.0.2
 setuptools~=40.8.0
+decouple
