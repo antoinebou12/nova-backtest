@@ -81,4 +81,8 @@ def test_get_prod_data(exchange: str):
             _verify_open_times(self.prod_data, int(t0))
 
             idx += 1
+        
+            if idx == 2:
+                print('Wait 2 candles to close')
+                time.sleep(120)
 
