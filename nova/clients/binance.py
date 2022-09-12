@@ -383,7 +383,13 @@ class Binance:
             signed=True
         )
 
-    async def get_prod_candles(self, session, pair, interval, window, current_pair_state: dict = None):
+    async def get_prod_candles(
+            self,
+            session,
+            pair: str,
+            interval: str,
+            window: int,
+            current_pair_state: dict = None):
 
         url = "https://fapi.binance.com/fapi/v1/klines"
 
@@ -392,6 +398,8 @@ class Binance:
 
         if current_pair_state is not None:
             limit = 3
+            final_dict[pair]['data'] = current_pair_state[pair]['data']
+            final_dict[pair]['latest_update'] = current_pair_state[pair]['latest_update']
         else:
             limit = window
 
@@ -410,15 +418,19 @@ class Binance:
                 final_dict[pair]['data'] = df
 
             else:
-                df_new = pd.concat([current_pair_state['data'], df])
+                df_new = pd.concat([final_dict[pair]['data'], df])
                 df_new = df_new.drop_duplicates(subset=['open_time_datetime']).sort_values(by=['open_time_datetime'],
                                                                                            ascending=True)
-                final_dict[pair]['latest_update'] = s_time
+                final_dict[pair]['t'] = s_time
                 final_dict[pair]['data'] = df_new.tail(window)
 
             return final_dict
 
-    async def get_prod_data(self, list_pair: list, interval: str, nb_candles: int, current_state: dict):
+    async def get_prod_data(self,
+                            list_pair: list,
+                            interval: str,
+                            nb_candles: int,
+                            current_state: dict):
         """
         Note: This function is called once when the bot is instantiated.
         This function execute n API calls with n representing the number of pair in the list
