@@ -740,6 +740,10 @@ class Bybit:
 
         if sl_order['order_status'] == 'Triggered':
             sl_order['order_status'] = 'FILLED'
+            sl_order['executedQuantity'] = sl_order.pop('qty')
+        else:
+            sl_order['executedQuantity'] = 0
+
         if sl_order['order_status'] == 'Cancelled':
             sl_order['order_status'] = 'CANCELED'
         if tp_order['order_status'] == 'Cancelled':
@@ -947,6 +951,13 @@ class Bybit:
         entry_info['sl_price'] = sl_order['trigger_price']
 
         entry_info['trade_id'] = uuid.uuid4().__str__()
+        entry_info['trade_status'] = 'ACTIVE'
+
+        # Initialize exit info
+        entry_info['qty_exited'] = 0
+        entry_info['exit_fees'] = 0
+        entry_info['last_exit_time'] = 0
+        entry_info['exit_price'] = 0
 
         return entry_info
 
@@ -1003,15 +1014,15 @@ class Bybit:
 
         exit_info = {"pair": all_filled_orders[0]['symbol']}
 
-        pos_size = sum([order['cum_exec_qty'] for order in all_filled_orders])
-        exit_price = sum([order['cum_exec_value'] for order in all_filled_orders]) / pos_size
+        executed_qty = sum([order['cum_exec_qty'] for order in all_filled_orders])
+        exit_price = sum([order['cum_exec_value'] for order in all_filled_orders]) / executed_qty
         fees_paid = sum([order['cum_exec_fee'] for order in all_filled_orders])
 
         exit_info['exit_price'] = round(exit_price, self.pairs_info[exit_info['pair']]['pricePrecision'])
 
-        entry_time = datetime.strptime(all_filled_orders[-1]['created_time'], "%Y-%m-%dT%H:%M:%SZ")
-        entry_time = entry_time.replace(tzinfo=timezone.utc).timestamp()
-        exit_info['exit_time'] = int(1000 * entry_time)
+        exit_time = datetime.strptime(all_filled_orders[-1]['created_time'], "%Y-%m-%dT%H:%M:%SZ")
+        exit_time = exit_time.replace(tzinfo=timezone.utc).timestamp()
+        exit_info['last_exit_time'] = int(1000 * exit_time)
 
         exit_info['exit_fees'] = fees_paid
 
@@ -1087,8 +1098,7 @@ class Bybit:
         final_dict[pair] = {}
 
         if current_pair_state is not None:
-            start_time = int(
-                (current_pair_state[pair]['latest_update'] - interval_to_milliseconds(interval=interval)) / 1000)
+            start_time = int(current_pair_state[pair]['latest_candle_open_time'] / 1000)
         else:
             start_time = int(time.time() - (window + 1) * interval_to_milliseconds(interval=interval) / 1000)
 
@@ -1111,11 +1121,12 @@ class Bybit:
 
             df = df[df['close_time'] < s_time]
 
+            latest_candle_open_time = df['open_time'].values[-1]
             for var in ['open_time', 'close_time']:
                 df[var] = pd.to_datetime(df[var], unit='ms')
 
             if current_pair_state is None:
-                final_dict[pair]['latest_update'] = s_time
+                final_dict[pair]['latest_candle_open_time'] = latest_candle_open_time
                 final_dict[pair]['data'] = df
 
             else:
@@ -1125,7 +1136,7 @@ class Bybit:
                 df_new = df_new.tail(window)
                 df_new = df_new.reset_index(drop=True)
 
-                final_dict[pair]['latest_update'] = s_time
+                final_dict[pair]['latest_candle_open_time'] = latest_candle_open_time
                 final_dict[pair]['data'] = df_new
 
             return final_dict
@@ -1161,10 +1172,11 @@ class Bybit:
 
                 df = df[df['close_time'] < last_update]
 
+                latest_candle_open_time = df['open_time'].values[-1]
                 for var in ['open_time', 'close_time']:
                     df[var] = pd.to_datetime(df[var], unit='ms')
 
-                final_dict[pair]['latest_update'] = last_update
+                final_dict[pair]['latest_candle_open_time'] = latest_candle_open_time
                 final_dict[pair]['data'] = df
 
             return final_dict
