@@ -71,7 +71,7 @@ class Bot(TelegramBOT):
             if list_pair != 'All pairs':
                 raise Exception("Please enter valid list_pair")
             # else:
-            # self.list_pair = self.nova.trading_pairs()
+                # self.list_pair = self.nova.trading_pairs()
         elif type(list_pair).__name__ == 'list':
             # raw_list = self.nova.trading_pairs()
             # assert list_pair in raw_list
@@ -166,24 +166,69 @@ class Bot(TelegramBOT):
 
         for _pair_, _info_ in completed_entries.items():
             # 7 - todo : create the position data in nova labs backend
-
             self.position_opened[_pair_] = _info_
-
-            print(_info_)
 
             # 9 - todo : send Telegram notification
             self.telegram_enter_position(_info_=_info_)
 
     def _compute_profit(self,
-                        _info_: dict):
+                        pair: str):
+        """
+        Must be call only when the position has been completely exit
+        Args:
+            pair:
 
-        pair = _info_['pair']
-        side = 1 if self.position_opened[pair]['type_pos'] == 'LONG' else -1
-        exit_price = round(_info_['exit_price'], self.client.pairs_info[pair]['pricePrecision'])
-        entry_price = self.position_opened[pair]['entry_price']
-        non_realized_pnl = side * (exit_price - entry_price) * self.position_opened[pair]['pos_size']
+        Returns:
 
-        return round(non_realized_pnl - _info_['cum_exec_fees'], 2)
+        """
+
+        trade_info = self.position_opened[pair]
+
+        # Get total fees paid
+        trade_info['cum_exec_fees'] = trade_info['exit_fees'] + trade_info['entry_fees']
+
+        side = 1 if trade_info['type_pos'] == 'LONG' else -1
+        exit_price = round(trade_info['exit_price'], self.client.pairs_info[pair]['pricePrecision'])
+        entry_price = trade_info['entry_price']
+        non_realized_pnl = side * (exit_price - entry_price) * trade_info['pos_size']
+
+        trade_info['realized_pnl'] = round(non_realized_pnl - trade_info['cum_exec_fees'], 2)
+
+        self.position_opened[pair] = trade_info
+
+    def add_exit_info(self,
+                      pair: str,
+                      exit_info: dict,
+                      exit_type: str):
+
+        trade_info = self.position_opened[pair]
+
+        trade_info['exit_fees'] += trade_info['exit_fees']
+        trade_info['qty_exited'] += exit_info['executedQuantity']
+        trade_info['current_pos_size'] = trade_info['original_pos_size'] - trade_info['qty_exited']
+        trade_info['last_exit_time'] = exit_info['last_exit_time']
+
+        if exit_type == 'TP':
+            trade_info['exit_price'] = (exit_info['exit_price'] * exit_info['executedQuantity']) \
+                                       / trade_info['original_pos_size']
+        else:
+            trade_info['exit_price'] += (exit_info['exit_price'] * exit_info['executedQuantity'])\
+                                        / trade_info['original_pos_size']
+
+        if trade_info['current_pos_size'] == 0:
+            trade_info['trade_status'] = 'CLOSED'
+
+        self.position_opened[pair] = trade_info
+
+    def update_local_state(self,
+                           pair: str):
+
+        self.realizedPNL += self.position_opened[pair]['realized_pnl']
+
+    def delete_position_in_local(self,
+                             pair: str):
+
+        del self.position_opened[pair]
 
     def exiting_positions(self):
         """
@@ -223,28 +268,28 @@ class Bot(TelegramBOT):
             orders=all_exits
         )
 
-        for _pair_, _info_ in completed_exits.items():
-            # Get total fees paid
-            _info_['cum_exec_fees'] = _info_['exit_fees'] + self.position_opened[_pair_]['entry_fees']
+        for _pair_, _exit_info in completed_exits.items():
 
-            # Compute profit
-            _info_['realized_pnl'] = self._compute_profit(_info_=_info_)
+            # Add new exit information to local bot positions data
+            self.add_exit_info(pair=_pair_,
+                               exit_info=_exit_info,
+                               exit_type='ExitSignal')
 
-            # trade_id
-            _info_['trade_id'] = self.position_opened[_pair_]['trade_id']
+            # Compute total fees, profits and get trade_id
+            self._compute_profit(pair=_pair_)
+
+            # 8 - update bot state (PnL; current_positions_amt; etc) + delete position
+            self.update_local_state(pair=_pair_)
 
             # 7 - todo : create the position data in nova labs backend
             self._push_backend()
 
-            # 9 - todo : send Telegram notification
+            # 9 - todo: send telegram notification
             self.telegram_exit_position(
-                _info_=_info_
+                 _exit_info=_exit_info
             )
 
-            # 8 - todo: update bot state (PnL; current_positions_amt; etc) + delete position
-            del self.position_opened[_pair_]
-
-            print(_info_)
+            self.delete_position_in_local(pair=_pair_)
 
     def verify_positions(self):
         """
@@ -272,24 +317,35 @@ class Bot(TelegramBOT):
             # 1 Verify if still opened and not Cancelled
             if tp_manually_canceled or sl_manually_canceled or position_size_manually_changed:
                 print(f"{_pair} Position or Orders have been manually changed -> delete pos from bot's management")
+
+                # todo: delete the position data in nova labs backend
                 self._push_backend()
 
-                del self.position_opened[_pair]
+                self.delete_position_in_local(pair=_pair)
 
                 continue
 
             # 2 Verify if sl has been executed (ALL SL ARE MARKET)
-            if data['sl']['order_status'] == 'FILLED':
-                print('sl order has been triggered')
+            if data['sl']['order_status'] in ['FILLED', 'PARTIALLY_FILLED']:
 
-                # todo: compute exit_info to push on the back end
-
+                # Cancel TP order
                 self.client.cancel_order(pair=_pair, order_id=data['tp']['order_id'])
 
-                self._push_backend()
-                self.telegram_sl_triggered()
+                print('SL market order has been triggered')
 
-                del self.position_opened[_pair]
+                self.add_exit_info(pair=_pair,
+                                   exit_info=data['sl'],
+                                   exit_type='SL')
+
+                self._compute_profit(pair=_pair)
+
+                self.update_local_state(pair=_pair)
+
+                # todo: push data in nova labs backend
+                self._push_backend()
+
+                # todo: send telegram notification
+                self.telegram_sl_triggered()
 
                 continue
 
@@ -299,26 +355,38 @@ class Bot(TelegramBOT):
                 remaining_quantity = data['tp']['originalQuantity'] - data['tp']['executedQuantity']
 
                 if remaining_quantity == 0:
-
-                    print('TP completely executed -> Remove Position')
-
-                    # todo: compute exit_info to push on the back end
-
+                    # Cancel sl order
                     self.client.cancel_order(pair=_pair, order_id=data['sl']['order_id'])
 
+                    print('TP limit order completely executed -> Remove Position')
+
+                    self.add_exit_info(pair=_pair,
+                                       exit_info=data['tp'],
+                                       exit_type='TP')
+
+                    self._compute_profit(pair=_pair)
+
+                    self.update_local_state(pair=_pair)
+
+                    # todo: push data in nova labs backend
                     self._push_backend()
+
+                    # todo: send telegram notification
                     self.telegram_tp_fully_filled()
 
                     del self.position_opened[_pair]
 
                 else:
 
-                    print('TP partially executed -> Update Position')
-                    # todo: compute exit_info to push on the back end
+                    print('TP partially executed')
+                    self.add_exit_info(pair=_pair,
+                                       exit_info=data['tp'],
+                                       exit_type='TP')
 
-                    self.position_opened[_pair]['pos_size'] = remaining_quantity
-
+                    # todo: push data in nova labs backend
                     self._push_backend()
+
+                    # todo: send telegram notification
                     self.telegram_tp_partially_filled()
 
         print('All Positions under BOT management updated')
@@ -366,6 +434,7 @@ class Bot(TelegramBOT):
         positions = self.position_opened.copy()
 
         for _pair, _info in positions:
+
             self.client.cancel_order(pair=_pair, order_id=_info['tp_id'])
             self.client.cancel_order(pair=_pair, order_id=_info['sl_id'])
 
@@ -389,24 +458,20 @@ class Bot(TelegramBOT):
         """
         return None
 
-    def production_run(self):
+    def update_available_trading_pairs(self):
 
-        last_crashed_time = datetime.utcnow()
+        pairs_info = self.client.get_pairs_info(quote_asset=self.quote_asset)
 
-        # 1 - Print and send telegram message
-        print(f'Nova L@bs {self.bot_name} starting')
-        # self.telegram_bot_sendtext(bot_message=f'Nova L@bs {self.bot_name} starting')
+        for pair in self.list_pair:
 
-        print(f'Setting up account', "\U000023F3", end="\r")
-        self.client.setup_account(bankroll=self.bankroll,
-                                  quote_asset=self.quote_asset,
-                                  leverage=self.leverage,
-                                  max_down=self.max_down,
-                                  list_pairs=self.list_pair
-                                  )
-        print(f'Account set', "\U00002705")
+            if pair not in pairs_info.keys():
 
-        # 2 - Download the production data
+                print(f'{pair} not available for trading -> removing from list pairs')
+
+                self.list_pair.remove(pair)
+
+    def get_historical_data(self):
+
         print(f'Fetching historical data', "\U000023F3", end="\r")
         t0 = time.time()
         self.prod_data = asyncio.run(self.client.get_prod_data(
@@ -417,7 +482,48 @@ class Bot(TelegramBOT):
         ))
         print(f'Historical data downloaded (in {round(time.time() - t0, 2)}s)', "\U00002705")
 
-        # 3 - Begin the infinite loop
+    def update_historical_data(self):
+
+        print("Updating historical data", "\U000023F3", end="\r")
+
+        t0 = time.time()
+        # 4 - Update dataframes
+        self.prod_data = asyncio.run(self.client.get_prod_data(
+            list_pair=self.list_pair,
+            interval=self.candle,
+            nb_candles=self.historical_window,
+            current_state=self.prod_data
+        ))
+
+        print(f"Historical data updated (in {round(time.time() - t0, 2)}s)", "\U00002705")
+
+    def set_up_account(self):
+
+        print(f'Setting up account', "\U000023F3", end="\r")
+        self.client.setup_account(bankroll=self.bankroll,
+                                  quote_asset=self.quote_asset,
+                                  leverage=self.leverage,
+                                  max_down=self.max_down,
+                                  list_pairs=self.list_pair
+                                  )
+        print(f'Account set', "\U00002705")
+
+    def production_run(self):
+
+        last_crashed_time = datetime.utcnow()
+
+        print(f'Nova L@bs {self.bot_name} starting')
+
+        # todo: send telegram notification
+        self.telegram_bot_starting()
+
+        # start account
+        self.set_up_account()
+
+        # get historical price (and volume) evolution
+        self.get_historical_data()
+
+        # Begin the infinite loop
         while True:
 
             try:
@@ -426,26 +532,23 @@ class Bot(TelegramBOT):
                 if is_opening_candle(interval=self.candle):
 
                     print(f'------- time : {datetime.utcnow()} -------\nNew candle opens')
+
+                    # todo: check if we reached max down
                     self.security_max_down()
 
-                    print("Updating historical data", "\U000023F3", end="\r")
-                    t0 = time.time()
-                    # 4 - Update dataframes
-                    self.prod_data = asyncio.run(self.client.get_prod_data(
-                        list_pair=self.list_pair,
-                        interval=self.candle,
-                        nb_candles=self.historical_window,
-                        current_state=self.prod_data
-                    ))
-                    print(f"Historical data updated (in {round(time.time() - t0, 2)}s)", "\U00002705")
+                    self.update_available_trading_pairs()
 
-                    # 5 - Verify Positions
+                    # update historical data
+                    self.update_historical_data()
+
                     if len(self.position_opened) > 0:
+                        # verify positions (reach tp or sl)
                         self.verify_positions()
 
+                        # check exit signals and perform actions
                         self.exiting_positions()
 
-                    # 6 - Enter Positions
+                    # check entry signals and perform actions
                     self.entering_positions()
 
             except Exception as e:
@@ -455,13 +558,18 @@ class Bot(TelegramBOT):
                 since_last_crash = datetime.utcnow() - last_crashed_time
 
                 if since_last_crash < self.time_step * 1.5:
+
+                    # exit all current positions
                     self.security_close_all_positions()
 
+                    # todo: send telegram notification
                     self.telegram_bot_crashed()
+
                     self.telegram_bot_stopped()
 
                     return str(e)
 
+                # todo: send telegram notification
                 self.telegram_bot_crashed()
 
                 last_crashed_time = datetime.utcnow()
