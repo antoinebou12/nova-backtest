@@ -169,7 +169,7 @@ class Bot(TelegramBOT):
             self.position_opened[_pair_] = _info_
 
             # 9 - todo : send Telegram notification
-            self.telegram_enter_position(_info_=_info_)
+            # self.telegram_enter_position(_info_=_info_)
 
     def _compute_profit(self,
                         pair: str):
@@ -224,6 +224,11 @@ class Bot(TelegramBOT):
                            pair: str):
 
         self.realizedPNL += self.position_opened[pair]['realized_pnl']
+
+        # todo: send telegram notification
+        # self.telegram_realized_pnl()
+
+        print(f'Current pnl = {round(self.realizedPNL, 2)} $')
 
     def delete_position_in_local(self,
                              pair: str):
@@ -285,9 +290,7 @@ class Bot(TelegramBOT):
             self._push_backend()
 
             # 9 - todo: send telegram notification
-            self.telegram_exit_position(
-                 _exit_info=_exit_info
-            )
+            # self.telegram_exit_position()
 
             self.delete_position_in_local(pair=_pair_)
 
@@ -345,7 +348,7 @@ class Bot(TelegramBOT):
                 self._push_backend()
 
                 # todo: send telegram notification
-                self.telegram_sl_triggered()
+                # self.telegram_sl_triggered()
 
                 continue
 
@@ -372,7 +375,7 @@ class Bot(TelegramBOT):
                     self._push_backend()
 
                     # todo: send telegram notification
-                    self.telegram_tp_fully_filled()
+                    # self.telegram_tp_fully_filled()
 
                     del self.position_opened[_pair]
 
@@ -387,7 +390,7 @@ class Bot(TelegramBOT):
                     self._push_backend()
 
                     # todo: send telegram notification
-                    self.telegram_tp_partially_filled()
+                    # self.telegram_tp_partially_filled()
 
         print('All Positions under BOT management updated')
 
@@ -515,7 +518,7 @@ class Bot(TelegramBOT):
         print(f'Nova L@bs {self.bot_name} starting')
 
         # todo: send telegram notification
-        self.telegram_bot_starting()
+        # self.telegram_bot_starting()
 
         # start account
         self.set_up_account()
@@ -563,14 +566,14 @@ class Bot(TelegramBOT):
                     self.security_close_all_positions()
 
                     # todo: send telegram notification
-                    self.telegram_bot_crashed()
+                    # self.telegram_bot_crashed()
 
-                    self.telegram_bot_stopped()
+                    # self.telegram_bot_stopped()
 
                     return str(e)
 
                 # todo: send telegram notification
-                self.telegram_bot_crashed()
+                # self.telegram_bot_crashed()
 
                 last_crashed_time = datetime.utcnow()
                 time.sleep(60)
