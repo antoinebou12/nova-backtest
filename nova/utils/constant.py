@@ -7,7 +7,6 @@ VAR_NEEDED_FOR_POSITION = [
     'all_exit_time', 'all_exit_point', 'all_tp', 'all_sl'
 ]
 
-
 DATA_FORMATING = {
     "binance": {
         "columns": [
@@ -32,12 +31,24 @@ DATA_FORMATING = {
         ]
     },
     "bybit": {
-            "columns": [
-                'open_time', 'open', 'high', 'low', 'close', 'volume', 'turnover'
-            ],
-            "num_var": [
-                'open', 'high', 'low', 'close', 'volume', 'turnover'
-            ]
-        }
+        "columns": [
+            'open_time', 'open', 'high', 'low', 'close', 'volume', 'turnover'
+        ],
+        "num_var": [
+            'open', 'high', 'low', 'close', 'volume', 'turnover'
+        ]
+    }
+
+}
+
+ORDER_STD = {
+    'bybit': {'order_status': {'Filled': 'FILLED',
+                               'Cancelled': 'CANCELED',
+                               'PartiallyFilled': 'PARTIALLY_FILLED'},
+              'order_type': {'Limit': 'LIMIT',
+                             'Market': 'MARKET'},
+              'rename_keys': {'qty': 'originalQty',
+                              'cum_exec_qty': 'executedQty',
+                              'cum_exec_fee': 'exit_fees'}}
 
 }
