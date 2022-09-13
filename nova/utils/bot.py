@@ -33,7 +33,7 @@ class Bot(TelegramBOT):
                  max_pos: int,
 
                  max_down: float,
-                 max_hold: int,
+                 max_hold: float,
 
                  limit_time_execution: int = 15,
 
@@ -463,7 +463,7 @@ class Bot(TelegramBOT):
 
     def update_available_trading_pairs(self):
 
-        pairs_info = self.client.get_pairs_info(quote_asset=self.quote_asset)
+        pairs_info = self.client.get_pairs_info()
 
         for pair in self.list_pair:
 
