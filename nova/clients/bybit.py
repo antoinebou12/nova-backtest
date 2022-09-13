@@ -1,5 +1,5 @@
 from nova.utils.helpers import interval_to_milliseconds
-from nova.utils.constant import DATA_FORMATING
+from nova.utils.constant import DATA_FORMATING, ORDER_STD
 
 from requests import Request, Session
 from urllib.parse import urlencode
@@ -414,32 +414,31 @@ class Bybit:
 
     def get_order(self,
                   pair,
-                  order_id):
+                  order_id: str = None):
+
+        params = {'symbol': pair}
+
+        if order_id:
+            params['order_id'] = order_id
 
         response = self._send_request(
-            end_point=f"/private/linear/order/list",
+            end_point=f"/private/linear/order/search",
             request_type="GET",
-            params={"symbol": pair,
-                    "order_id": order_id},
+            params=params,
             signed=True
         )
 
-        if response.json()['result']['data']:
-            order = response.json()['result']['data'][0]
+        if response.json()['result']:
+            order = response.json()['result']
             return order
 
         else:
             return None
 
-    def get_stop_order(self,
-                       pair: str,
-                       stop_order_id: str = None):
+    def get_sl_order(self,
+                  pair: str):
 
-        params = {"symbol": pair,
-                  'limit': 1}
-
-        if stop_order_id:
-            params['stop_order_id'] = stop_order_id
+        params = {"symbol": pair}
 
         response = self._send_request(
             end_point="/private/linear/stop-order/list",
@@ -733,33 +732,42 @@ class Bybit:
 
         return positions
 
+    @staticmethod
+    def standard_order(order: dict):
+
+        # rename order_status and order_type values
+        order['order_status'] = ORDER_STD['bybit']['order_status'][order['order_status']]
+        order['order_type'] = ORDER_STD['bybit']['order_type'][order['order_type']]
+
+        # rename keys
+        for old_key, new_key in ORDER_STD['bybit']['rename_keys'].items():
+            order[new_key] = order.pop(old_key)
+
+        return order
+
     def get_tp_sl_state(self, pair: str, tp_id: str, sl_id: str):
 
         tp_order = self.get_order(pair=pair, order_id=tp_id)
-        sl_order = self.get_stop_order(pair=pair, stop_order_id=sl_id)
+        sl_order = self.get_order(pair=pair, order_id=sl_id)
 
-        if sl_order['order_status'] == 'Triggered':
-            sl_order['order_status'] = 'FILLED'
-            sl_order['executedQuantity'] = sl_order.pop('qty')
-        else:
-            sl_order['executedQuantity'] = 0
+        if tp_order['cum_exec_qty'] != 0:
+            tp_order['exit_price'] = round(tp_order['cum_exec_value'] / tp_order['cum_exec_qty'],
+                                           self.pairs_info[pair]['pricePrecision'])
+            tp_order['last_exit_time'] = self._convert_datetimestr_to_ts(time_str=tp_order['updated_time'])
 
-        if sl_order['order_status'] == 'Cancelled':
-            sl_order['order_status'] = 'CANCELED'
-        if tp_order['order_status'] == 'Cancelled':
-            tp_order['order_status'] = 'CANCELED'
+        if sl_order['cum_exec_qty'] != 0:
+            sl_order['exit_price'] = round(sl_order['cum_exec_value'] / sl_order['cum_exec_qty'],
+                                           self.pairs_info[pair]['pricePrecision'])
+            sl_order['last_exit_time'] = self._convert_datetimestr_to_ts(time_str=sl_order['updated_time'])
 
-        # Rename key
-        tp_order['executedQuantity'] = tp_order.pop('cum_exec_qty')
-        tp_order['originalQuantity'] = tp_order.pop('qty')
-        sl_order['order_id'] = sl_order.pop('stop_order_id')
-
-        current_pos_size = self._get_position_info(pair=pair)[0]['size']
+        # rename keys and values to standardize
+        tp_order = self.standard_order(order=tp_order)
+        sl_order = self.standard_order(order=sl_order)
 
         return {
             'tp': tp_order,
             'sl': sl_order,
-            'current_quantity': current_pos_size
+            'current_quantity': self._get_position_info(pair=pair)[0]['size']
         }
 
     def _looping_limit_orders(self,
@@ -837,7 +845,8 @@ class Bybit:
             order_status = 'New'
 
             idx = 0
-            while not (order_status in ['Filled', 'Cancelled']):
+            # note: partially filled orders are already canceled
+            while not (order_status in ['FILLED', 'CANCELED']):
 
                 # Security
                 if idx >= 10:
@@ -851,7 +860,7 @@ class Bybit:
                 time.sleep(3)
                 idx += 1
 
-            if final_order['cum_exec_qty'] != 0:
+            if final_order['executedQuantity'] != 0:
                 final_state_orders.append(final_order)
 
         return final_state_orders
@@ -915,13 +924,21 @@ class Bybit:
                                        position_size=pos_info[0]['size'],
                                        tp_price=round(tp_price, self.pairs_info[pair]['pricePrecision']))
 
-        sl_order = self.get_stop_order(pair=pair)
+        sl_order = self.get_sl_order(pair=pair)
 
         all_filled_orders = self._get_all_filled_orders(orders=all_orders)
 
         return_dict[pair] = self._get_entries_info_from_orders(all_filled_orders=all_filled_orders,
                                                                tp_order=tp_order,
                                                                sl_order=sl_order)
+
+    @staticmethod
+    def _convert_datetimestr_to_ts(time_str: str):
+
+        entry_time = datetime.strptime(time_str, "%Y-%m-%dT%H:%M:%SZ")
+        entry_time = entry_time.replace(tzinfo=timezone.utc).timestamp()
+
+        return int(1000 * entry_time)
 
     def _get_entries_info_from_orders(self,
                                       all_filled_orders: list,
@@ -936,13 +953,12 @@ class Bybit:
         entry_price = sum([order['cum_exec_value'] for order in all_filled_orders]) / pos_size
         fees_paid = sum([order['cum_exec_fee'] for order in all_filled_orders])
 
-        entry_info['pos_size'] = pos_size
+        entry_info['current_pos_size'] = pos_size
+        entry_info['original_pos_size'] = pos_size
         entry_info['entry_price'] = round(entry_price, self.pairs_info[pair]['pricePrecision'])
         entry_info['entry_fees'] = fees_paid
 
-        entry_time = datetime.strptime(all_filled_orders[-1]['created_time'], "%Y-%m-%dT%H:%M:%SZ")
-        entry_time = entry_time.replace(tzinfo=timezone.utc).timestamp()
-        entry_info['entry_time'] = int(1000 * entry_time)
+        entry_info['entry_time'] = self._convert_datetimestr_to_ts(time_str=all_filled_orders[-1]['created_time'])
 
         entry_info['tp_id'] = tp_order['order_id']
         entry_info['tp_price'] = tp_order['price']
@@ -1018,6 +1034,7 @@ class Bybit:
         exit_price = sum([order['cum_exec_value'] for order in all_filled_orders]) / executed_qty
         fees_paid = sum([order['cum_exec_fee'] for order in all_filled_orders])
 
+        exit_info['executedQuantity'] = executed_qty
         exit_info['exit_price'] = round(exit_price, self.pairs_info[exit_info['pair']]['pricePrecision'])
 
         exit_time = datetime.strptime(all_filled_orders[-1]['created_time'], "%Y-%m-%dT%H:%M:%SZ")
