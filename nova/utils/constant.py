@@ -44,7 +44,10 @@ DATA_FORMATING = {
 ORDER_STD = {
     'bybit': {'order_status': {'Filled': 'FILLED',
                                'Cancelled': 'CANCELED',
-                               'PartiallyFilled': 'PARTIALLY_FILLED'},
+                               'PartiallyFilled': 'PARTIALLY_FILLED',
+                               'New': 'NEW',
+                               'Created': 'CREATED',
+                               'Rejected': 'REJECTED'},
               'order_type': {'Limit': 'LIMIT',
                              'Market': 'MARKET'},
               'rename_keys': {'qty': 'originalQty',
