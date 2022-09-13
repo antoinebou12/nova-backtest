@@ -2,24 +2,39 @@ from nova.clients.clients import clients
 from decouple import config
 
 
-def test_get_token_balance(
+def assert_get_token_balance(
         exchange: str,
-        based_asset: str
+        quote_asset: str
 ):
 
     client = clients(
         exchange=exchange,
-        key=config(f"{exchange}APIKey"),
-        secret=config(f"{exchange}APISecret"),
+        key=config(f"{exchange}TestAPIKey"),
+        secret=config(f"{exchange}TestAPISecret"),
+        testnet=True
     )
 
-    balances = client.get_token_balance(based_asset=based_asset)
+    balances = client.get_token_balance(quote_asset=quote_asset)
 
-    assert balances > 0
+    assert isinstance(balances, float)
+    assert balances >= 0
+
+    print(f"Test get_token_balance for {exchange.upper()} successful")
 
 
-_based_asset = 'USDT'
-test_get_token_balance(
-    exchange='binance',
-    based_asset=_based_asset,
-)
+def test_get_token_balance():
+    all_tests = [
+        {
+            'exchange': 'binance',
+            'quote_asset': 'USDT'
+        }
+    ]
+
+    for _test in all_tests:
+        assert_get_token_balance(
+            exchange=_test['exchange'],
+            quote_asset=_test['quote_asset']
+        )
+
+
+test_get_token_balance()

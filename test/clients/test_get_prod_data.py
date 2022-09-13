@@ -1,61 +1,23 @@
 import time
 import asyncio
-import random
 from datetime import timedelta, datetime
 from nova.clients.clients import clients
 from decouple import config
 
-nb_candles = 300
 
-
-def _verify_open_times(prod_data: dict,
-                       t_start: int):
-
-    print('Verify DataFrame')
-
-    t_verify = datetime.utcfromtimestamp(t_start)
-    t_verify = t_verify - timedelta(microseconds=t_verify.microsecond,
-                                    seconds=t_verify.second)
-
-    # Last closed candle's open time
-    t_last_open = t_verify - timedelta(minutes=1)
-
-    for pair in prod_data.keys():
-        data = prod_data[pair]['data']
-
-        open_diff = data['open_time'] - data['open_time'].shift(1)
-
-        assert len(data) == nb_candles, f'DataFrame has the wrong size. {pair}'
-
-        assert not False in open_diff[1:] == timedelta(minutes=1), \
-            f'Missing row in the DataFrame. {pair}'
-
-        assert (data['open_time'] == t_last_open).values[-1], \
-            f'Wrong last candle. {pair}'
-
-
-def test_get_prod_data(exchange: str):
+def assert_get_prod_data(
+        exchange: str,
+        list_pair: list,
+        nb_candles: int
+):
 
     client = clients(
         exchange=exchange,
-        key=config(f"{exchange}APIKey"),
-        secret=config(f"{exchange}APISecret"),
+        key=config(f"{exchange}TestAPIKey"),
+        secret=config(f"{exchange}TestAPISecret"),
     )
 
-    info = client.get_pairs_info()
-
-    list_pair = []
-
-    for pair in info.keys():
-        if info[pair]['quote_asset'] == 'USDT':
-            list_pair.append(pair)
-
-    list_pair = random.sample(list_pair, 50)
-
-    print(f'Fetching historical data')
-
-    t_start_fetching = int(time.time())
-
+    print('Fetching Data')
     client.prod_data = asyncio.run(client.get_prod_data(
         list_pair=list_pair,
         interval='1m',
@@ -63,16 +25,30 @@ def test_get_prod_data(exchange: str):
         current_state=None
     ))
 
-    print(f'Get data in {round(time.time() - t_start_fetching, 2)}s')
+    assert list(client.prod_data.keys()) == list_pair
+
+    for _pair in list_pair:
+        data = client.prod_data[_pair]['data']
+        data['time_dif'] = data['open_time'] - data['open_time'].shift(1)
+
+        # First Call have to return n - 1 candles
+        assert len(client.prod_data[_pair]['data']) == (nb_candles - 1)
+        assert str(client.prod_data[_pair]['data'].dtypes['open_time']) == 'datetime64[ns]'
+        assert str(client.prod_data[_pair]['data'].dtypes['close_time']) == 'datetime64[ns]'
+
+        assert data['time_dif'].min() == timedelta(minutes=1), f'Wrong incrementation'
+        assert data['time_dif'].max() == timedelta(minutes=1), f'Wrong incrementation'
 
     idx = 0
 
-    while idx < 10:
+    while idx < 2:
 
         if datetime.now().second == 0:
 
-            print('Update all data')
-            t0 = time.time()
+            print('Update Production Data')
+
+            t_verify = datetime.utcfromtimestamp(time.time())
+
             client.prod_data = asyncio.run(client.get_prod_data(
                 list_pair=list_pair,
                 interval='1m',
@@ -80,11 +56,50 @@ def test_get_prod_data(exchange: str):
                 current_state=client.prod_data
             ))
 
-            print(f'Updated data in {round(time.time() - t0, 2)}s')
+            t_last_open = t_verify - timedelta(
+                microseconds=t_verify.microsecond,
+                seconds=t_verify.second
+            ) - timedelta(minutes=1)
 
-            _verify_open_times(client.prod_data, int(t0))
+            for pair in client.prod_data.keys():
+
+                data = client.prod_data[pair]['data']
+
+                data['time_dif'] = data['open_time'] - data['open_time'].shift(1)
+
+                print(data[data['time_dif'] != timedelta(minutes=1)])
+                assert len(data) == nb_candles, f'DataFrame has the wrong size. {pair}'
+                assert data['time_dif'].min() == timedelta(minutes=1), f'Missing row in the DataFrame. {pair}'
+                assert data['time_dif'].max() == timedelta(minutes=1), f'Missing row in the DataFrame. {pair}'
+                assert (data['open_time'] == t_last_open).values[-1], f'Wrong last candle. {pair}'
 
             idx += 1
 
+    print(f"Test get_prod_data for {exchange.upper()} successful")
 
-test_get_prod_data('binance')
+
+def test_get_prod_data():
+
+    all_tests = [
+        {
+            'exchange': 'binance',
+            'list_pair': ['BTCUSDT', 'ETHUSDT', 'ADAUSDT'],
+            'nb_candles': 300,
+        },
+        {
+            'exchange': 'bybit',
+            'list_pair': ['BTCUSDT', 'ETHUSDT', 'ADAUSDT'],
+            'nb_candles': 300,
+        }
+    ]
+
+    for _test in all_tests:
+
+        assert_get_prod_data(
+            exchange=_test['exchange'],
+            list_pair=_test['list_pair'],
+            nb_candles=_test['nb_candles']
+        )
+
+
+test_get_prod_data()

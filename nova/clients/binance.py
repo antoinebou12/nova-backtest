@@ -124,10 +124,8 @@ class Binance:
 
         if historical:
             df['next_open'] = df['open'].shift(-1)
-            return df.dropna()
-        else:
-            df['open_time_datetime'] = pd.to_datetime(df['open_time'], unit='ms')
-            return df.dropna()
+
+        return df.dropna()
 
     def get_historical_data(self, pair: str, interval: str, start_ts: int, end_ts: int) -> pd.DataFrame:
         """
@@ -406,12 +404,17 @@ class Binance:
         params = dict(symbol=pair, interval=interval, limit=limit)
 
         # Compute the server time
-        s_time = self.get_server_time()
+        s_time = int(1000 * time.time())
 
         async with session.get(url=url, params=params) as response:
             data = await response.json()
+
             df = self._format_data(all_data=data, historical=False)
+
             df = df[df['close_time'] < s_time]
+
+            for var in ['open_time', 'close_time']:
+                df[var] = pd.to_datetime(df[var], unit='ms')
 
             if current_pair_state is None:
                 final_dict[pair]['latest_update'] = s_time
@@ -419,8 +422,8 @@ class Binance:
 
             else:
                 df_new = pd.concat([final_dict[pair]['data'], df])
-                df_new = df_new.drop_duplicates(subset=['open_time_datetime']).sort_values(by=['open_time_datetime'],
-                                                                                           ascending=True)
+                df_new = df_new.drop_duplicates(subset=['open_time']).sort_values(by=['open_time'],
+                                                                                  ascending=True)
                 final_dict[pair]['t'] = s_time
                 final_dict[pair]['data'] = df_new.tail(window)
 
@@ -463,7 +466,7 @@ class Binance:
                 all_data.update(info)
             return all_data
 
-    def get_actual_positions(self, list_pair: list):
+    def get_actual_positions(self, list_pair: list) -> dict:
         """
         Args:
             list_pair: list of pair that we want to run analysis on
@@ -471,14 +474,17 @@ class Binance:
             a dictionary containing all the current OPEN positions
         """
         all_pos = self.get_position_info()
-        position = {}
 
+        position = {}
         for pos in all_pos:
+
             if (pos['symbol'] in list_pair) and (float(pos['positionAmt']) != 0):
                 position[pos['symbol']] = {}
-                position[pos['symbol']]['position_amount'] = pos['positionAmt']
-                position[pos['symbol']]['entry_price'] = pos['entryPrice']
-                position[pos['symbol']]['unrealized_pnl'] = pos['unRealizedProfit']
+                position[pos['symbol']]['position_size'] = abs(float(pos['positionAmt']))
+                position[pos['symbol']]['entry_price'] = float(pos['entryPrice'])
+                position[pos['symbol']]['unrealized_pnl'] = float(pos['unRealizedProfit'])
+                position[pos['symbol']]['type'] = 'LONG' if float(pos['positionAmt']) > 0 else 'SHORT'
+                position[pos['symbol']]['exit_side'] = 'SELL' if float(pos['positionAmt']) > 0 else 'BUY'
 
         return position
 

@@ -51,9 +51,6 @@ def test_format_data(exchange: str, pair: str, interval: str, start_time: int, e
         assert str(df.loc[0, 'open_time'])[-3:] == '000'
         assert str(df.loc[0, 'close_time'])[-3:] == '999'
 
-    assert 'open_time_datetime' in list(data.columns)
-    assert str(data.dtypes['open_time_datetime']) == 'datetime64[ns]'
-
     print(f"Test _get_historical_data for {exchange.upper()} successful")
 
 
