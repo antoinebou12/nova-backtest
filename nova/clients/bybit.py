@@ -814,7 +814,7 @@ class Bybit:
                 order_status = order['order_status']
 
                 # If the best order book price stays the same, do not cancel current order
-                while (new_price == order['price']) and (time.time() - t_start < 120) and (order_status != 'Filled'):
+                while (new_price == order['price']) and (time.time() - t_start < duration) and (order_status != 'Filled'):
                     time.sleep(10)
 
                     orderBook = self.get_order_book(pair=pair)
@@ -846,7 +846,7 @@ class Bybit:
 
             idx = 0
             # note: partially filled orders are already canceled
-            while not (order_status in ['FILLED', 'CANCELED']):
+            while not (order_status in ['Filled', 'Cancelled']):
 
                 # Security
                 if idx >= 10:
@@ -860,7 +860,7 @@ class Bybit:
                 time.sleep(3)
                 idx += 1
 
-            if final_order['executedQuantity'] != 0:
+            if final_order['cum_exec_qty'] != 0:
                 final_state_orders.append(final_order)
 
         return final_state_orders
@@ -898,7 +898,7 @@ class Bybit:
         qty = round(qty, self.pairs_info[pair]['qtyPrecision'])
 
         after_looping_limit = self._looping_limit_orders(pair=pair, side=side, position_size=qty, sl_price=sl_price,
-                                                         duration=120, reduce_only=False)
+                                                         duration=20, reduce_only=False)
 
         residual_size = after_looping_limit['residual_size']
         all_orders = after_looping_limit['all_limit_orders']
@@ -999,7 +999,7 @@ class Bybit:
             raise ValueError(f'type_pos = {type_pos}')
 
         after_looping_limit = self._looping_limit_orders(pair=pair, side=side, position_size=position_size,
-                                                         duration=120, reduce_only=True)
+                                                         duration=20, reduce_only=True)
 
         residual_size = after_looping_limit['residual_size']
         all_orders = after_looping_limit['all_limit_orders']
