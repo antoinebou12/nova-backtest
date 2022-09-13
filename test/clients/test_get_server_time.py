@@ -3,12 +3,13 @@ from decouple import config
 import time
 
 
-def test_get_server_time(exchange: str):
+def asserts_get_server_time(exchange: str):
 
     client = clients(
         exchange=exchange,
         key=config(f"{exchange}TestAPIKey"),
         secret=config(f"{exchange}TestAPISecret"),
+        testnet=True
     )
 
     server_time = client.get_server_time()
@@ -23,7 +24,9 @@ def test_get_server_time(exchange: str):
     print(f"Test get_server_time for {exchange.upper()} successful")
 
 
-for _exchange in ['binance']:
-    test_get_server_time(_exchange)
+def test_get_server_time():
+    for _exchange in ['binance', 'bybit']:
+        asserts_get_server_time(_exchange)
 
 
+test_get_server_time()

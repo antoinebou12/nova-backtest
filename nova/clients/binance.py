@@ -122,6 +122,9 @@ class Binance:
         for var in DATA_FORMATING['binance']['num_var']:
             df[var] = pd.to_numeric(df[var], downcast="float")
 
+        for var in DATA_FORMATING['binance']['date_var']:
+            df[var] = pd.to_numeric(df[var], downcast="integer")
+
         if historical:
             df['next_open'] = df['open'].shift(-1)
 

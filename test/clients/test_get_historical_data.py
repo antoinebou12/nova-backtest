@@ -53,10 +53,10 @@ def test_get_historical_data():
         {'exchange': 'binance',
          'interval': '4h',
          'pair': 'ETHUSDT',
-         'start_ts': int(datetime(2021, 1, 1).timestamp() * 1000),
+         'start_ts': int(datetime(2018, 1, 1).timestamp() * 1000),
          'end_ts': int(datetime(2022, 4, 10).timestamp() * 1000)
          },
-        {'exchange': 'binance',
+        {'exchange': 'bybit',
          'interval': '4h',
          'pair': 'BTCUSDT',
          'start_ts': int(datetime(2018, 1, 1).timestamp() * 1000),

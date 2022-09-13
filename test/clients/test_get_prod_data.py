@@ -5,7 +5,7 @@ from nova.clients.clients import clients
 from decouple import config
 
 
-def assert_get_prod_data(
+def asserts_get_prod_data(
         exchange: str,
         list_pair: list,
         nb_candles: int
@@ -67,7 +67,6 @@ def assert_get_prod_data(
 
                 data['time_dif'] = data['open_time'] - data['open_time'].shift(1)
 
-                print(data[data['time_dif'] != timedelta(minutes=1)])
                 assert len(data) == nb_candles, f'DataFrame has the wrong size. {pair}'
                 assert data['time_dif'].min() == timedelta(minutes=1), f'Missing row in the DataFrame. {pair}'
                 assert data['time_dif'].max() == timedelta(minutes=1), f'Missing row in the DataFrame. {pair}'
@@ -81,11 +80,11 @@ def assert_get_prod_data(
 def test_get_prod_data():
 
     all_tests = [
-        {
-            'exchange': 'binance',
-            'list_pair': ['BTCUSDT', 'ETHUSDT', 'ADAUSDT'],
-            'nb_candles': 300,
-        },
+        # {
+        #     'exchange': 'binance',
+        #     'list_pair': ['BTCUSDT', 'ETHUSDT', 'ADAUSDT'],
+        #     'nb_candles': 300,
+        # },
         {
             'exchange': 'bybit',
             'list_pair': ['BTCUSDT', 'ETHUSDT', 'ADAUSDT'],
@@ -95,7 +94,7 @@ def test_get_prod_data():
 
     for _test in all_tests:
 
-        assert_get_prod_data(
+        asserts_get_prod_data(
             exchange=_test['exchange'],
             list_pair=_test['list_pair'],
             nb_candles=_test['nb_candles']
