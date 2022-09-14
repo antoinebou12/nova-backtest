@@ -98,7 +98,9 @@ class Bot(TelegramBOT):
     def entry_signals_prod(self, pair: str) -> dict:
         return {}
 
-    def exit_signals_prod(self, pair: str) -> bool:
+    def exit_signals_prod(self,
+                          pair: str,
+                          type_pos: str) -> bool:
         return False
 
     def get_position_size(self):
@@ -259,7 +261,8 @@ class Bot(TelegramBOT):
             diff = date - entry_time_date + timedelta(minutes=3)
             diff_in_hours = diff.total_seconds() / 3600
 
-            exit_signal = self.exit_signals_prod(pair=_pair)
+            exit_signal = self.exit_signals_prod(pair=_pair,
+                                                 type_pos=self.position_opened[_pair]['type_pos'])
 
             in_position = _pair in current_positions.keys()
 
