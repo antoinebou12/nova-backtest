@@ -71,7 +71,7 @@ class Bot(TelegramBOT):
             if list_pair != 'All pairs':
                 raise Exception("Please enter valid list_pair")
             # else:
-                # self.list_pair = self.nova.trading_pairs()
+            # self.list_pair = self.nova.trading_pairs()
         elif type(list_pair).__name__ == 'list':
             # raw_list = self.nova.trading_pairs()
             # assert list_pair in raw_list
@@ -188,9 +188,8 @@ class Bot(TelegramBOT):
         trade_info['cum_exec_fees'] = trade_info['exit_fees'] + trade_info['entry_fees']
 
         side = 1 if trade_info['type_pos'] == 'LONG' else -1
-        exit_price = round(trade_info['exit_price'], self.client.pairs_info[pair]['pricePrecision'])
-        entry_price = trade_info['entry_price']
-        non_realized_pnl = side * (exit_price - entry_price) * trade_info['pos_size']
+        non_realized_pnl = side * (trade_info['exit_price'] - trade_info['entry_price']) \
+                           * trade_info['original_pos_size']
 
         trade_info['realized_pnl'] = round(non_realized_pnl - trade_info['cum_exec_fees'], 2)
 
@@ -203,7 +202,7 @@ class Bot(TelegramBOT):
 
         trade_info = self.position_opened[pair]
 
-        trade_info['exit_fees'] += trade_info['exit_fees']
+        trade_info['exit_fees'] += exit_info['exit_fees']
         trade_info['qty_exited'] += exit_info['executedQuantity']
         trade_info['current_pos_size'] = trade_info['original_pos_size'] - trade_info['qty_exited']
         trade_info['last_exit_time'] = exit_info['last_exit_time']
@@ -212,7 +211,7 @@ class Bot(TelegramBOT):
             trade_info['exit_price'] = (exit_info['exit_price'] * exit_info['executedQuantity']) \
                                        / trade_info['original_pos_size']
         else:
-            trade_info['exit_price'] += (exit_info['exit_price'] * exit_info['executedQuantity'])\
+            trade_info['exit_price'] += (exit_info['exit_price'] * exit_info['executedQuantity']) \
                                         / trade_info['original_pos_size']
 
         if trade_info['current_pos_size'] == 0:
@@ -225,13 +224,17 @@ class Bot(TelegramBOT):
 
         self.realizedPNL += self.position_opened[pair]['realized_pnl']
 
+        self.delete_position_in_local(pair=pair)
+
         # todo: send telegram notification
         # self.telegram_realized_pnl()
+
+        # todo: add exited position to local trades history
 
         print(f'Current pnl = {round(self.realizedPNL, 2)} $')
 
     def delete_position_in_local(self,
-                             pair: str):
+                                 pair: str):
 
         del self.position_opened[pair]
 
@@ -265,7 +268,7 @@ class Bot(TelegramBOT):
                 print(f'Exiting {_pair} position')
                 all_exits.append({'pair': _pair,
                                   'type_pos': _info['type_pos'],
-                                  'position_size': _info['pos_size'],
+                                  'position_size': _info['current_pos_size'],
                                   })
 
         # Execute Exit Orders
@@ -274,7 +277,6 @@ class Bot(TelegramBOT):
         )
 
         for _pair_, _exit_info in completed_exits.items():
-
             # Add new exit information to local bot positions data
             self.add_exit_info(pair=_pair_,
                                exit_info=_exit_info,
@@ -291,8 +293,6 @@ class Bot(TelegramBOT):
 
             # 9 - todo: send telegram notification
             # self.telegram_exit_position()
-
-            self.delete_position_in_local(pair=_pair_)
 
     def verify_positions(self):
         """
@@ -312,25 +312,25 @@ class Bot(TelegramBOT):
                 sl_id=_info['sl_id']
             )
 
-            tp_manually_canceled = (data['tp']['order_status'] == 'CANCELED') and (data['current_quantity'] != 0)
-            sl_manually_canceled = (data['sl']['order_status'] == 'CANCELED') and (data['current_quantity'] != 0)
-            position_size_manually_changed = (data['current_quantity'] != _info['pos_size']) and \
-                                             (data['tp']['executedQuantity'] == 0)
-
-            # 1 Verify if still opened and not Cancelled
-            if tp_manually_canceled or sl_manually_canceled or position_size_manually_changed:
-                print(f"{_pair} Position or Orders have been manually changed -> delete pos from bot's management")
-
-                # todo: delete the position data in nova labs backend
-                self._push_backend()
-
-                self.delete_position_in_local(pair=_pair)
-
-                continue
+            # tp_manually_canceled = (data['tp']['order_status'] == 'CANCELED') and (data['current_quantity'] != 0)
+            # sl_manually_canceled = (data['sl']['order_status'] == 'CANCELED') and (data['current_quantity'] != 0)
+            # position_size_manually_changed = (data['current_quantity'] != _info['original_pos_size']) and \
+            #                                  (data['tp']['executedQuantity'] == 0) and \
+            #                                  (data['sl']['order_status'] != 'FILLED')
+            #
+            # # 1 Verify if still opened and not Cancelled
+            # if tp_manually_canceled or sl_manually_canceled or position_size_manually_changed:
+            #     print(f"{_pair} Position or Orders have been manually changed -> delete pos from bot's management")
+            #
+            #     # todo: delete the position data in nova labs backend
+            #     self._push_backend()
+            #
+            #     self.delete_position_in_local(pair=_pair)
+            #
+            #     continue
 
             # 2 Verify if sl has been executed (ALL SL ARE MARKET)
-            if data['sl']['order_status'] in ['FILLED', 'PARTIALLY_FILLED']:
-
+            if data['sl']['order_status'] == 'FILLED':
                 # Cancel TP order
                 self.client.cancel_order(pair=_pair, order_id=data['tp']['order_id'])
 
@@ -353,7 +353,7 @@ class Bot(TelegramBOT):
                 continue
 
             # 3 Verify if tp has been executed
-            if data['tp']['executedQuantity'] != 0:
+            if data['tp']['order_status'] in ['FILLED', 'PARTIALLY_FILLED']:
 
                 remaining_quantity = data['tp']['originalQuantity'] - data['tp']['executedQuantity']
 
@@ -376,8 +376,6 @@ class Bot(TelegramBOT):
 
                     # todo: send telegram notification
                     # self.telegram_tp_fully_filled()
-
-                    del self.position_opened[_pair]
 
                 else:
 
@@ -436,15 +434,14 @@ class Bot(TelegramBOT):
 
         positions = self.position_opened.copy()
 
-        for _pair, _info in positions:
-
+        for _pair, _info in positions.items():
             self.client.cancel_order(pair=_pair, order_id=_info['tp_id'])
             self.client.cancel_order(pair=_pair, order_id=_info['sl_id'])
 
             self.client.exit_market(
                 pair=_pair,
                 type_pos=_info['type_pos'],
-                quantity=_info['pos_size']
+                quantity=_info['original_pos_size']
             )
 
             del self.position_opened[_pair]
@@ -468,7 +465,6 @@ class Bot(TelegramBOT):
         for pair in self.list_pair:
 
             if pair not in pairs_info.keys():
-
                 print(f'{pair} not available for trading -> removing from list pairs')
 
                 self.list_pair.remove(pair)
@@ -561,7 +557,6 @@ class Bot(TelegramBOT):
                 since_last_crash = datetime.utcnow() - last_crashed_time
 
                 if since_last_crash < self.time_step * 1.5:
-
                     # exit all current positions
                     self.security_close_all_positions()
 
