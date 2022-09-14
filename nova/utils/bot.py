@@ -29,7 +29,6 @@ class Bot(TelegramBOT):
                  list_pair: Union[str, list],
                  bankroll: float,
                  leverage: int,
-                 geometric_size: bool,
                  max_pos: int,
 
                  max_down: float,
@@ -38,9 +37,10 @@ class Bot(TelegramBOT):
                  limit_time_execution: int = 15,
 
                  telegram_notification: bool = False,
-                 bot_token: str = '',
-                 bot_chat_id: str = '',
-                 testnet: bool = False
+                 telegram_bot_token: str = '',
+                 telegram_bot_chat_id: str = '',
+                 testnet: bool = False,
+                 geometric_size: bool = False
                  ):
 
         # BOT INFORMATION
@@ -56,9 +56,8 @@ class Bot(TelegramBOT):
         self.geometric_size = geometric_size
         self.historical_window = historical_window
         self.max_pos = max_pos
-        # Leverage is automatically set to max
-        self.leverage = int(self.max_pos * self.position_size)
-        self.max_sl_percentage = 1 / self.leverage - 0.02
+        self.leverage = leverage
+        self.max_sl_percentage = 1 / leverage - 0.02
         self.bankroll = bankroll
         self.max_down = max_down
 
@@ -85,8 +84,8 @@ class Bot(TelegramBOT):
         self.telegram_notification = telegram_notification
         if self.telegram_notification:
             TelegramBOT.__init__(self,
-                                 bot_token=bot_token,
-                                 bot_chatID=bot_chat_id)
+                                 bot_token=telegram_bot_token,
+                                 bot_chatID=telegram_bot_chat_id)
 
         # BOT STATE
         self.unrealizedPNL = 0
@@ -170,8 +169,8 @@ class Bot(TelegramBOT):
             # 7 - todo : create the position data in nova labs backend
             self.position_opened[_pair_] = _info_
 
-            # 9 - todo : send Telegram notification
-            # self.telegram_enter_position(_info_=_info_)
+            if self.telegram_notification:
+                self.telegram_enter_position(entry_info=_info_)
 
     def _compute_profit(self,
                         pair: str):
@@ -228,8 +227,8 @@ class Bot(TelegramBOT):
 
         self.delete_position_in_local(pair=pair)
 
-        # todo: send telegram notification
-        # self.telegram_realized_pnl()
+        if self.telegram_notification:
+            self.telegram_realized_pnl(pnl=self.realizedPNL)
 
         # todo: add exited position to local trades history
 
@@ -288,14 +287,14 @@ class Bot(TelegramBOT):
             # Compute total fees, profits and get trade_id
             self._compute_profit(pair=_pair_)
 
-            # 8 - update bot state (PnL; current_positions_amt; etc) + delete position
-            self.update_local_state(pair=_pair_)
-
             # 7 - todo : create the position data in nova labs backend
             self._push_backend()
 
-            # 9 - todo: send telegram notification
-            # self.telegram_exit_position()
+            if self.telegram_notification:
+                self.telegram_exit_position(exit_info=_exit_info)
+
+            # 8 - update bot state (PnL; current_positions_amt; etc) + delete position
+            self.update_local_state(pair=_pair_)
 
     def verify_positions(self):
         """
@@ -345,13 +344,13 @@ class Bot(TelegramBOT):
 
                 self._compute_profit(pair=_pair)
 
-                self.update_local_state(pair=_pair)
-
                 # todo: push data in nova labs backend
                 self._push_backend()
 
-                # todo: send telegram notification
-                # self.telegram_sl_triggered()
+                if self.telegram_notification:
+                    self.telegram_sl_triggered(pair=_pair)
+
+                self.update_local_state(pair=_pair)
 
                 continue
 
@@ -372,13 +371,13 @@ class Bot(TelegramBOT):
 
                     self._compute_profit(pair=_pair)
 
-                    self.update_local_state(pair=_pair)
-
                     # todo: push data in nova labs backend
                     self._push_backend()
 
-                    # todo: send telegram notification
-                    # self.telegram_tp_fully_filled()
+                    if self.telegram_notification:
+                        self.telegram_tp_fully_filled(pair=_pair)
+
+                    self.update_local_state(pair=_pair)
 
                 else:
 
@@ -390,8 +389,9 @@ class Bot(TelegramBOT):
                     # todo: push data in nova labs backend
                     self._push_backend()
 
-                    # todo: send telegram notification
-                    # self.telegram_tp_partially_filled()
+                    if self.telegram_notification:
+                        self.telegram_tp_partially_filled(pair=_pair,
+                                                          tp_info=data['tp'])
 
         print('All Positions under BOT management updated')
 
@@ -516,8 +516,9 @@ class Bot(TelegramBOT):
 
         print(f'Nova L@bs {self.bot_name} starting')
 
-        # todo: send telegram notification
-        # self.telegram_bot_starting()
+        if self.telegram_notification:
+            self.telegram_bot_starting(bot_name=self.bot_name,
+                                       exchange=self.exchange)
 
         # start account
         self.set_up_account()
@@ -563,15 +564,12 @@ class Bot(TelegramBOT):
                     # exit all current positions
                     self.security_close_all_positions()
 
-                    # todo: send telegram notification
-                    # self.telegram_bot_crashed()
-
-                    # self.telegram_bot_stopped()
+                    if self.telegram_notification:
+                        self.telegram_bot_crashed(exchange=self.exchange,
+                                                  bot_name=self.bot_name,
+                                                  error=str(e))
 
                     return str(e)
-
-                # todo: send telegram notification
-                # self.telegram_bot_crashed()
 
                 last_crashed_time = datetime.utcnow()
                 time.sleep(60)
