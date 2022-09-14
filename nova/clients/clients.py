@@ -40,6 +40,6 @@ def clients(
     elif exchange == 'gate':
         return Cryptocom(key=key, secret=secret, testnet=testnet)
     elif exchange == 'bybit':
-        return Bybit(key=key, secret=secret, _testnet=testnet)
+        return Bybit(key=key, secret=secret, testnet=testnet)
 
 
