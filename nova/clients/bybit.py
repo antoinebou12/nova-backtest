@@ -128,15 +128,14 @@ class Bybit:
 
             if tradable:
                 pairs_info[pair['name']] = {}
-                pairs_info[pair['name']]['pair'] = pair['name']
                 pairs_info[pair['name']]['quote_asset'] = pair['quote_currency']
                 pairs_info[pair['name']]['pricePrecision'] = pair['price_scale']
                 pairs_info[pair['name']]['max_market_trading_qty'] = pair['lot_size_filter']['max_trading_qty']
-                pairs_info[pair['name']]['qtyPrecision'] = str(pair['lot_size_filter']['qty_step'])[::-1].find('.')
+                pairs_info[pair['name']]['quantityPrecision'] = str(pair['lot_size_filter']['qty_step'])[::-1].find('.')
 
         return pairs_info
 
-    def _get_earliest_valid_timestamp(self,
+    def _get_earliest_timestamp(self,
                                       pair: str,
                                       interval: str) -> int:
         """
@@ -181,7 +180,6 @@ class Bybit:
 
     def _format_data(self,
                      klines: list,
-                     timeframe: int,
                      historical: bool = True) -> pd.DataFrame:
         """
         Args:
@@ -190,11 +188,8 @@ class Bybit:
         Returns:
             standardized pandas dataframe
         """
-        # Remove the last row bc it's not finished yet
-        if historical:
-            interval_seconds = klines[1]['start_at'] - klines[0]['start_at']
-            if self.get_server_time() < 1000 * (klines[-1]['start_at'] + interval_seconds):
-                del klines[-1]
+
+        interval_ms = 1000 * (klines[1]['start_at'] - klines[0]['start_at'])
 
         df = pd.DataFrame(klines)[DATA_FORMATING['bybit']['columns']]
 
@@ -206,7 +201,7 @@ class Bybit:
         if historical:
             df['next_open'] = df['open'].shift(-1)
 
-        df['close_time'] = df['open_time'] + timeframe - 1
+        df['close_time'] = df['open_time'] + interval_ms - 1
 
         return df.dropna()
 
@@ -236,7 +231,7 @@ class Bybit:
 
         # establish first available start timestamp
         if start_ts is not None:
-            first_valid_ts = self._get_earliest_valid_timestamp(
+            first_valid_ts = self._get_earliest_timestamp(
                 pair=pair,
                 interval=interval
             )
@@ -271,8 +266,7 @@ class Bybit:
             if end_ts and start_ts >= end_ts:
                 break
 
-        df = self._format_data(klines=klines,
-                               timeframe=timeframe)
+        df = self._format_data(klines=klines)
 
         return df
 
@@ -436,18 +430,18 @@ class Bybit:
             return None
 
     def get_sl_order(self,
-                  pair: str):
+                     pair: str):
 
         params = {"symbol": pair}
 
         response = self._send_request(
-            end_point="/private/linear/stop-order/list",
+            end_point="/private/linear/stop-order/search",
             request_type="GET",
             params=params,
             signed=True
         )
 
-        return response.json()['result']['data'][0]
+        return response.json()['result'][0]
 
     def cancel_order(self,
                      pair: str,
@@ -895,10 +889,10 @@ class Bybit:
 
         sl_price = round(sl_price, self.pairs_info[pair]['pricePrecision'])
         tp_price = round(tp_price, self.pairs_info[pair]['pricePrecision'])
-        qty = round(qty, self.pairs_info[pair]['qtyPrecision'])
+        qty = round(qty, self.pairs_info[pair]['quantityPrecision'])
 
         after_looping_limit = self._looping_limit_orders(pair=pair, side=side, position_size=qty, sl_price=sl_price,
-                                                         duration=20, reduce_only=False)
+                                                         duration=120, reduce_only=False)
 
         residual_size = after_looping_limit['residual_size']
         all_orders = after_looping_limit['all_limit_orders']
@@ -999,7 +993,7 @@ class Bybit:
             raise ValueError(f'type_pos = {type_pos}')
 
         after_looping_limit = self._looping_limit_orders(pair=pair, side=side, position_size=position_size,
-                                                         duration=20, reduce_only=True)
+                                                         duration=120, reduce_only=True)
 
         residual_size = after_looping_limit['residual_size']
         all_orders = after_looping_limit['all_limit_orders']
@@ -1133,7 +1127,6 @@ class Bybit:
             data = await response.json()
 
             df = self._format_data(data['result'],
-                                   timeframe=interval_to_milliseconds(interval=interval),
                                    historical=False)
 
             df = df[df['close_time'] < s_time]
