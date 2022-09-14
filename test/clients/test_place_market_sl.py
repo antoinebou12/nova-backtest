@@ -2,7 +2,7 @@ from nova.clients.clients import clients
 from decouple import config
 
 
-def asserts_enter_market_order(exchange: str, pair: str, side: str, quantity: float):
+def asserts_place_market_sl(exchange: str, pair: str, side: str, quantity: float):
 
     client = clients(
         exchange=exchange,
@@ -31,19 +31,37 @@ def asserts_enter_market_order(exchange: str, pair: str, side: str, quantity: fl
         quantity=quantity
     )
 
-    assert market_order['type'] == 'MARKET'
-    assert market_order['status'] == 'FILLED'
-    assert market_order['pair'] == pair
-    assert not market_order['reduce_only']
-    assert market_order['side'] == side
-    assert market_order['original_quantity'] == quantity
-    assert market_order['executed_quantity'] == quantity
+    exit_side = 'SELL' if side == 'BUY' else 'BUY'
 
-    print(f"Test enter_market_order for {exchange.upper()} successful")
+    if exit_side == 'SELL':
+        sl_price = market_order['executed_price'] * 0.9
+    else:
+        sl_price = market_order['executed_price'] * 1.1
+
+    sl_data = client.place_market_sl(
+        pair=pair,
+        side=exit_side,
+        quantity=quantity,
+        sl_prc=sl_price
+    )
+
+    nb_decimals = len(str(sl_data['stop_price']).split(".")[1])
+
+    assert sl_data['type'] == 'STOP_MARKET'
+    assert sl_data['status'] == 'NEW'
+    assert sl_data['pair'] == pair
+    assert sl_data['reduce_only']
+    assert sl_data['side'] == exit_side
+    assert sl_data['original_quantity'] == quantity
+    assert sl_data['executed_quantity'] == 0
+    assert sl_data['stop_price'] == round(sl_price, nb_decimals)
+
+    print(sl_data)
+
+    print(f"Test place_market_sl for {exchange.upper()} successful")
 
 
-def test_enter_market_order():
-
+def test_place_maket_sl():
     all_tests = [
         {
             'exchange': 'binance',
@@ -54,8 +72,7 @@ def test_enter_market_order():
     ]
 
     for _test in all_tests:
-
-        asserts_enter_market_order(
+        asserts_place_market_sl(
             exchange=_test['exchange'],
             pair=_test['pair'],
             side=_test['side'],
@@ -63,7 +80,4 @@ def test_enter_market_order():
         )
 
 
-test_enter_market_order()
-
-
-
+test_place_maket_sl()

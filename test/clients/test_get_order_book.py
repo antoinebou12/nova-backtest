@@ -2,7 +2,7 @@ from nova.clients.clients import clients
 from decouple import config
 
 
-def test_get_order_book(exchange: str, pair: str):
+def asserts_get_order_book(exchange: str, pair: str):
 
     client = clients(
         exchange=exchange,
@@ -15,9 +15,35 @@ def test_get_order_book(exchange: str, pair: str):
         pair=pair,
     )
 
-    print(data)
+    for key, values in data.items():
+        assert len(values) == 20
+        assert key in ['bids', 'asks']
+        assert isinstance(values, list)
+
+        for _value in values:
+
+            assert isinstance(_value['price'], float)
+            assert isinstance(_value['size'], float)
+
+    print(f"Test get_order for {exchange.upper()} successful")
 
 
-test_get_order_book('binance', 'BTCUSDT')
+def test_get_order_book():
+    all_tests = [
+        {
+            'exchange': 'binance',
+            'pair': 'BTCUSDT'
+        }
+    ]
+
+    for _test in all_tests:
+
+        asserts_get_order_book(
+            exchange=_test['exchange'],
+            pair=_test['pair']
+        )
+
+
+test_get_order_book()
 
 

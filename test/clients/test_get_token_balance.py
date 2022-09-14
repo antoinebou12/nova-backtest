@@ -27,6 +27,10 @@ def test_get_token_balance():
         {
             'exchange': 'binance',
             'quote_asset': 'USDT'
+        },
+        {
+            'exchange': 'bybit',
+            'quote_asset': 'USDT'
         }
     ]
 

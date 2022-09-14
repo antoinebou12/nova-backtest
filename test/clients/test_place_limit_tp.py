@@ -2,7 +2,7 @@ from nova.clients.clients import clients
 from decouple import config
 
 
-def asserts_enter_market_order(exchange: str, pair: str, side: str, quantity: float):
+def asserts_place_limit_tp(exchange: str, pair: str, side: str, quantity: float):
 
     client = clients(
         exchange=exchange,
@@ -31,19 +31,35 @@ def asserts_enter_market_order(exchange: str, pair: str, side: str, quantity: fl
         quantity=quantity
     )
 
-    assert market_order['type'] == 'MARKET'
-    assert market_order['status'] == 'FILLED'
-    assert market_order['pair'] == pair
-    assert not market_order['reduce_only']
-    assert market_order['side'] == side
-    assert market_order['original_quantity'] == quantity
-    assert market_order['executed_quantity'] == quantity
+    exit_side = 'SELL' if side == 'BUY' else 'BUY'
 
-    print(f"Test enter_market_order for {exchange.upper()} successful")
+    if exit_side == 'SELL':
+        tp_price = market_order['executed_price'] * 1.1
+    else:
+        tp_price = market_order['executed_price'] * 0.9
+
+    tp_data = client.place_limit_tp(
+        pair=pair,
+        side=exit_side,
+        quantity=quantity,
+        tp_prc=tp_price
+    )
+
+    nb_decimals = len(str(tp_data['stop_price']).split(".")[1])
+
+    assert tp_data['type'] == 'TAKE_PROFIT'
+    assert tp_data['status'] == 'NEW'
+    assert tp_data['pair'] == pair
+    assert tp_data['reduce_only']
+    assert tp_data['side'] == exit_side
+    assert tp_data['original_quantity'] == quantity
+    assert tp_data['executed_quantity'] == 0
+    assert tp_data['stop_price'] == round(tp_price, nb_decimals)
+
+    print(f"Test place_limit_tp for {exchange.upper()} successful")
 
 
-def test_enter_market_order():
-
+def test_place_limit_tp():
     all_tests = [
         {
             'exchange': 'binance',
@@ -54,8 +70,7 @@ def test_enter_market_order():
     ]
 
     for _test in all_tests:
-
-        asserts_enter_market_order(
+        asserts_place_limit_tp(
             exchange=_test['exchange'],
             pair=_test['pair'],
             side=_test['side'],
@@ -63,7 +78,4 @@ def test_enter_market_order():
         )
 
 
-test_enter_market_order()
-
-
-
+test_place_limit_tp()
