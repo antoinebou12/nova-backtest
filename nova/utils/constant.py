@@ -54,8 +54,8 @@ ORDER_STD = {
                                'Active': 'ACTIVE'},
               'order_type': {'Limit': 'LIMIT',
                              'Market': 'MARKET'},
-              'rename_keys': {'qty': 'originalQty',
-                              'cum_exec_qty': 'executedQty',
+              'rename_keys': {'qty': 'originalQuantity',
+                              'cum_exec_qty': 'executedQuantity',
                               'cum_exec_fee': 'exit_fees'}}
 
 }
