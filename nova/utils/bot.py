@@ -291,7 +291,8 @@ class Bot(TelegramBOT):
             self._push_backend()
 
             if self.telegram_notification:
-                self.telegram_exit_position(exit_info=_exit_info)
+                self.telegram_exit_position(pair=_pair_,
+                                            pnl=self.position_opened[_pair_]['realized_pnl'])
 
             # 8 - update bot state (PnL; current_positions_amt; etc) + delete position
             self.update_local_state(pair=_pair_)
@@ -348,7 +349,8 @@ class Bot(TelegramBOT):
                 self._push_backend()
 
                 if self.telegram_notification:
-                    self.telegram_sl_triggered(pair=_pair)
+                    self.telegram_sl_triggered(pair=_pair,
+                                               pnl=self.position_opened[_pair]['realized_pnl'])
 
                 self.update_local_state(pair=_pair)
 
@@ -375,7 +377,8 @@ class Bot(TelegramBOT):
                     self._push_backend()
 
                     if self.telegram_notification:
-                        self.telegram_tp_fully_filled(pair=_pair)
+                        self.telegram_tp_fully_filled(pair=_pair,
+                                                      pnl=self.position_opened[_pair]['realized_pnl'])
 
                     self.update_local_state(pair=_pair)
 
