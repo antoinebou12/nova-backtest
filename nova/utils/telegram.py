@@ -40,23 +40,29 @@ class TelegramBOT:
         self.telegram_bot_send_text(bot_message=bot_message)
 
     def telegram_exit_position(self,
-                               exit_info: dict):
+                               pair: str,
+                               pnl: float):
 
-        bot_message = f"Exit {exit_info['pair']} position \U0001F645"
+        bot_message = f"Exit {pair} position \U0001F645" \
+                      f"\nProfit = {pnl} $"
 
         self.telegram_bot_send_text(bot_message=bot_message)
 
     def telegram_sl_triggered(self,
-                              pair: str):
+                              pair: str,
+                              pnl: float):
 
-        bot_message = f"Stop loss price reached on {pair} \U0001F4C9"
+        bot_message = f"Stop loss price reached on {pair} \U0001F4C9" \
+                      f"\nProfit = {pnl} $"
 
         self.telegram_bot_send_text(bot_message=bot_message)
 
     def telegram_tp_fully_filled(self,
-                                 pair):
+                                 pair: str,
+                                 pnl: float):
 
-        bot_message = f"{pair} take profit limit order totally filled  \U0001F911"
+        bot_message = f"{pair} take profit limit order totally filled  \U0001F911" \
+                      f"\nProfit = {pnl} $"
 
         self.telegram_bot_send_text(bot_message=bot_message)
 
