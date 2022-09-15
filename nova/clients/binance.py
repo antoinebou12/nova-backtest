@@ -9,6 +9,7 @@ import hashlib
 import time
 import hmac
 from multiprocessing import Process, Manager
+from typing import Union
 
 
 class Binance:
@@ -241,7 +242,7 @@ class Binance:
             None
         """
         accounts = self.get_account_info()
-        positions_info = self.get_position_info()
+        positions_info = self.get_actual_positions(pairs=list_pairs)
         position_mode = self.get_position_mode()
 
         for info in positions_info:
@@ -350,19 +351,6 @@ class Binance:
         )
         print(f"{pair} leverage is now set to : x{data['leverage']} with max notional to {data['maxNotionalValue']}")
 
-    def get_position_info(self, pair: str = None):
-        _params = {}
-        if pair:
-            _params['symbol'] = pair
-
-        # get a standardized return
-        return self._send_request(
-            end_point=f"/fapi/v2/positionRisk",
-            request_type="GET",
-            params=_params,
-            signed=True
-        )
-
     def get_account_info(self):
         return self._send_request(
             end_point=f"/fapi/v2/account",
@@ -469,19 +457,31 @@ class Binance:
                 all_data.update(info)
             return all_data
 
-    def get_actual_positions(self, list_pair: list) -> dict:
+    def get_actual_positions(self, pairs: Union[list, str]) -> dict:
         """
         Args:
-            list_pair: list of pair that we want to run analysis on
+            pairs: list of pair that we want to run analysis on
         Returns:
             a dictionary containing all the current OPEN positions
         """
-        all_pos = self.get_position_info()
+
+        _params = {}
+
+        if isinstance(pairs, str):
+            _params['symbol'] = pairs
+
+        all_pos = self._send_request(
+                end_point=f"/fapi/v2/positionRisk",
+                request_type="GET",
+                params=_params,
+                signed=True
+        )
 
         position = {}
+
         for pos in all_pos:
 
-            if (pos['symbol'] in list_pair) and (float(pos['positionAmt']) != 0):
+            if (pos['symbol'] in pairs) and (float(pos['positionAmt']) != 0):
                 position[pos['symbol']] = {}
                 position[pos['symbol']]['position_size'] = abs(float(pos['positionAmt']))
                 position[pos['symbol']]['entry_price'] = float(pos['entryPrice'])
@@ -635,7 +635,7 @@ class Binance:
                 quantity: quantity should respect the minimum precision
 
             Returns:
-                standardized output containing time, pair, order_id, quantity, price, side, is_position_closing
+                standardized output
         """
         
         _params = {
@@ -658,7 +658,16 @@ class Binance:
         )
 
     def exit_market_order(self, pair: str, side: str, quantity: float):
+        """
 
+        Args:
+            pair: pair id that we want to create the order for
+            side: could be 'BUY' or 'SELL'
+            quantity: quantity should respect the minimum precision
+
+        Returns:
+                standardized output
+        """
         _params = {
             "symbol": pair,
             "side": side,
@@ -756,40 +765,37 @@ class Binance:
             This function returns True if the limit order has been posted, False else.
         """
 
-        last_active_order = None
         t_start = time.time()
 
         # Keep trying to get order status during 30s
-        while time.time() - t_start < 30:
+        while time.time() - t_start < 5:
 
-            time.sleep(5)
+            time.sleep(1)
 
-            last_active_order = self.get_order(
+            order_data = self.get_order(
                 pair=pair,
                 order_id=order_id
             )
 
-            if last_active_order:
-                break
+            if order_data['status'] != ['EXPIRED', 'CANCELED']:
+                return True, order_data
 
-        if not last_active_order:
-            return False
+        return False, None
 
-        return last_active_order['status'] != 'CANCELLED'
-
-    def _limit_order_best_price(self,
-                                pair: str,
-                                side: str,
-                                qty: float,
-                                reduce_only: bool = False
-                                ):
+    def place_limit_order_best_price(
+            self,
+            pair: str,
+            side: str,
+            quantity: float,
+            reduce_only: bool = False
+    ):
 
         """
 
         Args:
-            pair:
+            pair: pair
             side:
-            qty:
+            quantity:
             reduce_only:
 
         Returns:
@@ -797,14 +803,14 @@ class Binance:
         """
         ob = self.get_order_book(pair=pair)
         _type = 'bids' if side == 'BUY' else 'asks'
-        price = float(ob[_type][0]['price'])
+        best_price = float(ob[_type][0]['price'])
 
         _params = {
             "symbol": pair,
             "side": side,
-            "quantity": float(round(qty, self.pairs_info[pair]['quantityPrecision'])),
+            "quantity": float(round(quantity, self.pairs_info[pair]['quantityPrecision'])),
             "type": "LIMIT",
-            "price": float(round(price, self.pairs_info[pair]['pricePrecision'])),
+            "price": float(round(best_price, self.pairs_info[pair]['pricePrecision'])),
             "timeInForce": "GTX",
             "reduceOnly": "true" if reduce_only else "false"
         }
@@ -816,23 +822,18 @@ class Binance:
             signed=True
         )
 
-        if not response:
-            return False, ''
-
-        limit_order_posted = self._verify_limit_order_posted(
+        return self._verify_limit_order_posted(
             order_id=response['orderId'],
             pair=pair
         )
-
-        return limit_order_posted, response
 
     def _looping_limit_orders(
             self,
             pair: str,
             side: str,
-            position_size: float,
-            duration: int,
-            reduce_only: bool
+            quantity: float,
+            reduce_only: bool,
+            duration: int
     ):
         """
         This function will try to enter in position by sending only limit orders to be sure to pay limit orders fees.
@@ -840,98 +841,97 @@ class Binance:
         Args:
             pair:
             side:
-            position_size:
-            duration: number of seconds we keep trying to enter in position with limit orders
+            quantity:
             reduce_only: True if we are exiting a position
+            duration: number of seconds we keep trying to enter in position with limit orders
 
         Returns:
             Residual size to fill the based qty
         """
 
-        residual_size = position_size
-
+        residual_size = quantity
         t_start = time.time()
-
         all_limit_orders = []
 
         # Try to enter with limit order during 2 min
         while (residual_size != 0) and (time.time() - t_start < duration):
 
-            posted, order = self._limit_order_best_price(
+            posted, data = self.place_limit_order_best_price(
                 pair=pair,
                 side=side,
-                qty=residual_size,
+                quantity=residual_size,
                 reduce_only=reduce_only
             )
 
             if posted:
 
-                all_limit_orders.append(order)
+                all_limit_orders.append(data)
 
-                new_price = order['price']
-                order_status = order['status']
+                _price = data['price']
+                _status = data['status']
 
                 # If the best order book price stays the same, do not cancel current order
-                while (new_price == order['price']) and (time.time() - t_start < 120) and (order_status != 'FILLED'):
+                while (_price == data['price']) and (time.time() - t_start < 120) and (_status != 'FILLED'):
+
                     time.sleep(10)
 
                     ob = self.get_order_book(pair=pair)
                     _type = 'bids' if side == 'BUY' else 'asks'
+                    _price = float(ob[_type][0]['price'])
 
-                    new_price = float(ob[_type][0]['price'])
+                    _status = self.get_order(
+                        pair=pair,
+                        order_id=data['order_id']
+                    )['status']
 
-                    order_status = self.get_order(pair=pair, order_id=order['orderId'])
-
-                # Cancel order
+                # cancel order
                 self.cancel_order(
                     pair=pair,
-                    order_id=order['orderId']
+                    order_id=data['order_id']
                 )
 
                 # Get current position size
-                pos_info = self.get_position_info(pair=pair)
+                pos_info = self.get_actual_positions(pairs=pair)
 
                 if reduce_only:
-                    residual_size = pos_info[0]['size']
+                    residual_size = pos_info[0]['position_size']
                 else:
-                    residual_size = position_size - pos_info[0]['size']
+                    residual_size = quantity - pos_info[0]['position_size']
 
-        return {'residual_size': residual_size, 'all_limit_orders': all_limit_orders}
+        return residual_size, all_limit_orders
     
     def _enter_limit_then_market(self,
                                  pair,
                                  side,
-                                 qty,
+                                 quantity,
                                  sl_price,
                                  tp_price,
                                  return_dict):
         """
         Optimized way to enter in position. The method tries to enter with limit orders during 2 minutes.
-        If after 2min we still did not entered with the desired amount, a market order is sent.
+        If after 2min we still did not enter with the desired amount, a market order is sent.
 
         Args:
             pair:
             side:
             sl_price:
-            qty:
+            quantity:
 
         Returns:
             Size of the current position
         """
 
-        after_looping_limit = self._looping_limit_orders(
+        residual_size, all_orders = self._looping_limit_orders(
             pair=pair,
             side=side,
-            position_size=qty,
+            quantity=quantity,
             duration=120,
             reduce_only=False
         )
 
-        residual_size = after_looping_limit['residual_size']
-        all_orders = after_looping_limit['all_limit_orders']
-
         # If there is residual, enter with market order
         if residual_size != 0:
+
             market_order = self.enter_market_order(
                 pair=pair,
                 side=side,
@@ -941,20 +941,20 @@ class Binance:
             all_orders.append(market_order)
 
         # Get current position info
-        pos_info = self.get_position_info(pair=pair)
+        pos_info = self.get_actual_positions(pairs=pair)
 
         exit_side = 'SELL' if side == 'BUY' else 'BUY'
 
         # Place take profit limit order
         self.place_limit_tp(pair=pair,
                             side=exit_side,
-                            position_size=pos_info[0]['size'],
+                            quantity=pos_info[pair]['size'],
                             tp_prc=tp_price
                             )
 
         self.place_market_sl(pair=pair,
                              side=exit_side,
-                             position_size=pos_info[0]['size'],
+                             quantity=pos_info[pair]['size'],
                              sl_prc=sl_price
                              )
 
@@ -986,7 +986,7 @@ class Binance:
 
         tp_info = self.get_order_trades(pair=pair, order_id=tp_id)
         sl_info = self.get_order_trades(pair=pair, order_id=sl_id)
-        position_info = self.get_position_info(pair=pair)
+        position_info = self.get_actual_positions(pairs=pair)
         return {
             'tp': tp_info,
             'sl': sl_info,
