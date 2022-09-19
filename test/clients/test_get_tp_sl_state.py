@@ -47,7 +47,7 @@ def assert_get_tp_sl_state(exchange: str,
         pair=pair,
         side=exit_side,
         quantity=quantity,
-        tp_price=tp_price
+        tp_prc=tp_price
     )
 
     sl_order = client.place_market_sl(
@@ -57,7 +57,7 @@ def assert_get_tp_sl_state(exchange: str,
         sl_prc=sl_price
     )
 
-    time.sleep(20)
+    time.sleep(2)
 
     _update = client.get_tp_sl_state(
         pair=pair,
@@ -87,3 +87,6 @@ def test_get_tp_sl_state():
             side=_test['side'],
             quantity=_test['quantity'],
         )
+
+
+test_get_tp_sl_state()

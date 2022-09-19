@@ -900,8 +900,13 @@ class Binance:
                 # Get current position size
                 pos_info = self.get_actual_positions(pairs=pair)
 
-                print('### POST_INFO')
+                print('### POSITION')
+
                 print(pos_info)
+
+                if pos_info == {}:
+                    residual_size = 0
+                    break
 
                 if reduce_only:
                     residual_size = pos_info[pair]['position_size']
@@ -1067,8 +1072,9 @@ class Binance:
 
         final_data = {
             'pair': all_orders[0]['pair'],
-            'executed_quantity': 0,
+            'current_position_size': 0,
             'last_exit_time': all_orders[-1]['time'],
+            'exit_fees': 0,
         }
 
         _price_information = []
@@ -1078,7 +1084,7 @@ class Binance:
             _trades = self.get_order_trades(pair=order['pair'], order_id=order['order_id'])
             if _trades['executed_quantity'] > 0:
                 final_data['exit_fees'] += _trades['tx_fee_in_quote_asset']
-                final_data['executed_quantity'] += _trades['executed_quantity']
+                final_data['current_position_size'] += _trades['executed_quantity']
                 _price_information.append({'price': _trades['price'], 'qty': _trades['executed_quantity']})
 
         for _info in _price_information:
@@ -1149,7 +1155,7 @@ class Binance:
         return {
             'tp': tp_info,
             'sl': sl_info,
-            'current_quantity': position_info['positionAmt']
+            'current_quantity': position_info[pair]['position_size']
         }
 
     def get_last_price(self, pair: str) -> dict:
