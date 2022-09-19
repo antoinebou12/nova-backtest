@@ -12,7 +12,7 @@ def asserts_place_limit_tp(exchange: str, pair: str, side: str, quantity: float)
     )
 
     positions = client.get_actual_positions(
-        list_pair=[pair]
+        pairs=pair
     )
 
     if len(positions) != 0:

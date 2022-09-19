@@ -1,4 +1,4 @@
-from nova.utils.helpers import interval_to_milliseconds
+from nova.utils.helpers import interval_to_milliseconds, prepare_args
 from nova.utils.constant import DATA_FORMATING
 from requests import Request, Session
 from urllib.parse import urlencode
@@ -600,7 +600,7 @@ class Binance:
         )
 
         results['quote_asset'] = None
-        results['tx_fee_in_based_asset'] = 0
+        results['tx_fee_in_quote_asset'] = 0
         results['tx_fee_in_other_asset'] = {}
         results['nb_of_trades'] = 0
         results['is_buyer'] = None
@@ -617,12 +617,12 @@ class Binance:
                     else:
                         results['tx_fee_in_other_asset'][trade['commissionAsset']] += float(trade['commission'])
                 else:
-                    results['tx_fee_in_based_asset'] += float(trade['commission'])
+                    results['tx_fee_in_quote_asset'] += float(trade['commission'])
                 results['nb_of_trades'] += 1
 
         for key, value in results['tx_fee_in_other_asset'].items():
             price_info = self.get_pair_price(f'{key}{results["quote_asset"]}')
-            results['tx_fee_in_based_asset'] += float(price_info['price']) * value
+            results['tx_fee_in_quote_asset'] += float(price_info['price']) * value
 
         return results
 
@@ -716,6 +716,8 @@ class Binance:
             signed=True
         )
 
+        print(data)
+
         return self._format_order(data)
 
     def place_market_sl(self, pair: str, side: str, quantity: float, sl_prc: float):
@@ -747,9 +749,9 @@ class Binance:
 
         return self._format_order(data)
 
-    def _verify_limit_order_posted(self,
-                                   pair: str,
-                                   order_id: str):
+    def _verify_limit_posted(self,
+                             pair: str,
+                             order_id: str):
         """
         When posting a limit order (with time_in_force='PostOnly') the order can be immediately canceled if its
         price is too high for buy orders and to low for a sell orders. Sometimes the first order book changes too
@@ -814,6 +816,9 @@ class Binance:
             "timeInForce": "GTX",
             "reduceOnly": "true" if reduce_only else "false"
         }
+        print(reduce_only)
+        print('### PARAMS')
+        print(_params)
 
         response = self._send_request(
             end_point=f"/fapi/v1/order",
@@ -822,7 +827,9 @@ class Binance:
             signed=True
         )
 
-        return self._verify_limit_order_posted(
+        print(response)
+
+        return self._verify_limit_posted(
             order_id=response['orderId'],
             pair=pair
         )
@@ -893,16 +900,19 @@ class Binance:
                 # Get current position size
                 pos_info = self.get_actual_positions(pairs=pair)
 
+                print('### POST_INFO')
+                print(pos_info)
+
                 if reduce_only:
-                    residual_size = pos_info[0]['position_size']
+                    residual_size = pos_info[pair]['position_size']
                 else:
-                    residual_size = quantity - pos_info[0]['position_size']
+                    residual_size = quantity - pos_info[pair]['position_size']
 
         return residual_size, all_limit_orders
     
     def _enter_limit_then_market(self,
                                  pair,
-                                 side,
+                                 type_pos,
                                  quantity,
                                  sl_price,
                                  tp_price,
@@ -913,13 +923,15 @@ class Binance:
 
         Args:
             pair:
-            side:
+            type_pos:
             sl_price:
             quantity:
 
         Returns:
             Size of the current position
         """
+
+        side = 'BUY' if type_pos == 'LONG' else 'SELL'
 
         residual_size, all_orders = self._looping_limit_orders(
             pair=pair,
@@ -946,25 +958,163 @@ class Binance:
         exit_side = 'SELL' if side == 'BUY' else 'BUY'
 
         # Place take profit limit order
-        self.place_limit_tp(pair=pair,
-                            side=exit_side,
-                            quantity=pos_info[pair]['size'],
-                            tp_prc=tp_price
-                            )
+        tp_data = self.place_limit_tp(
+            pair=pair,
+            side=exit_side,
+            quantity=pos_info[pair]['position_size'],
+            tp_prc=tp_price
+        )
 
-        self.place_market_sl(pair=pair,
-                             side=exit_side,
-                             quantity=pos_info[pair]['size'],
-                             sl_prc=sl_price
-                             )
+        sl_data = self.place_market_sl(
+            pair=pair,
+            side=exit_side,
+            quantity=pos_info[pair]['position_size'],
+            sl_prc=sl_price
+        )
 
-        return_dict[pair] = all_orders
+        return_dict[pair] = self._format_enter_limit_info(
+            all_orders=all_orders,
+            tp_order=tp_data,
+            sl_order=sl_data
+        )
 
-    def enter_limit_then_market(self, pair: str, side: str, qty: float, price: float, tp_price, sl_price: float):
-        pass
+        return return_dict
 
-    def exit_limit_then_market(self, pair: str, side: str, position_size: float):
-        pass
+    def _format_enter_limit_info(self, all_orders: list, tp_order: dict, sl_order: dict):
+
+        final_data = {
+            'pair': all_orders[0]['pair'],
+            'position_type': 'LONG' if all_orders[0]['side'] == 'BUY' else 'SHORT',
+            'original_position_size': all_orders[0]['original_quantity'],
+            'current_position_size': 0,
+            'entry_time': all_orders[-1]['time'],
+            'tp_id': tp_order['order_id'],
+            'tp_price': tp_order['stop_price'],
+            'sl_id': sl_order['order_id'],
+            'sl_price': sl_order['stop_price'],
+            'trade_status': 'ACTIVE',
+            'quantity_exited': 0,
+            'exit_fees': 0,
+            'last_exit_time': 0,
+            'exit_price': 0,
+            'entry_fees': 0
+        }
+
+        time.sleep(1)
+
+        _price_information = []
+        _avg_price = 0
+
+        for order in all_orders:
+            _trades = self.get_order_trades(pair=order['pair'], order_id=order['order_id'])
+            if _trades['executed_quantity'] > 0:
+                final_data['entry_fees'] += _trades['tx_fee_in_quote_asset']
+                final_data['current_position_size'] += _trades['executed_quantity']
+                _price_information.append({'price': _trades['price'], 'qty': _trades['executed_quantity']})
+
+        for _info in _price_information:
+            _avg_price += _info['price'] * (_info['qty'] / final_data['current_position_size'])
+
+        final_data['entry_price'] = round(_avg_price, self.pairs_info[final_data['pair']]['pricePrecision'])
+
+        return final_data
+
+    def enter_limit_then_market(self, orders: list):
+
+        manager = Manager()
+        return_dict = manager.dict()
+
+        running_tasks = [
+            Process(target=self._enter_limit_then_market, args=prepare_args(order, return_dict)) for order in orders
+        ]
+
+        for running_task in running_tasks:
+            running_task.start()
+
+        for running_task in running_tasks:
+            running_task.join()
+
+        return dict(return_dict)
+
+    def _exit_limit_then_market(self, pair: str, type_pos: str, quantity: float, return_dict):
+
+        side = 'SELL' if type_pos == 'LONG' else 'BUY'
+
+        residual_size, all_orders = self._looping_limit_orders(
+            pair=pair,
+            side=side,
+            quantity=quantity,
+            duration=120,
+            reduce_only=True
+        )
+
+        # If there is residual, exit with market order
+        if residual_size != 0:
+            market_order = self.exit_market_order(
+                pair=pair,
+                side=side,
+                quantity=residual_size
+            )
+
+            if market_order:
+                all_orders.append(market_order)
+
+        return_dict[pair] = self._format_exit_limit_info(
+            all_orders=all_orders
+        )
+
+    def _format_exit_limit_info(self, all_orders: list):
+
+        final_data = {
+            'pair': all_orders[0]['pair'],
+            'executed_quantity': 0,
+            'last_exit_time': all_orders[-1]['time'],
+        }
+
+        _price_information = []
+        _avg_price = 0
+
+        for order in all_orders:
+            _trades = self.get_order_trades(pair=order['pair'], order_id=order['order_id'])
+            if _trades['executed_quantity'] > 0:
+                final_data['exit_fees'] += _trades['tx_fee_in_quote_asset']
+                final_data['executed_quantity'] += _trades['executed_quantity']
+                _price_information.append({'price': _trades['price'], 'qty': _trades['executed_quantity']})
+
+        for _info in _price_information:
+            _avg_price += _info['price'] * (_info['qty'] / final_data['current_position_size'])
+
+        final_data['exit_price'] = round(_avg_price, self.pairs_info[final_data['pair']]['pricePrecision'])
+
+        return final_data
+
+    def exit_limit_then_market(self,
+                               orders: list) -> dict:
+
+        """
+        Parallelize the execution of _exit_limit_then_market.
+        Args:
+            orders: list of dict. Each element represents the params of an order.
+            [{'pair': 'BTCUSDT', 'type_pos': 'LONG', 'position_size': 0.1},
+             {'pair': 'ETHUSDT', 'type_pos': 'SHORT', 'position_size': 1}]
+        Returns:
+            list of positions info after executing all exit orders.
+        """
+
+        manager = Manager()
+        return_dict = manager.dict()
+
+        running_tasks = [
+            Process(target=self._exit_limit_then_market, args=prepare_args(order, return_dict)) for order in orders
+        ]
+
+        for running_task in running_tasks:
+            running_task.start()
+
+        for running_task in running_tasks:
+            running_task.join()
+
+        return dict(return_dict)
 
     def cancel_order(self, pair: str, order_id: str):
         return self._send_request(
@@ -983,7 +1133,16 @@ class Binance:
         )
 
     def get_tp_sl_state(self, pair: str, tp_id: str, sl_id: str):
+        """
 
+        Args:
+            pair:
+            tp_id:
+            sl_id:
+
+        Returns:
+
+        """
         tp_info = self.get_order_trades(pair=pair, order_id=tp_id)
         sl_info = self.get_order_trades(pair=pair, order_id=sl_id)
         position_info = self.get_actual_positions(pairs=pair)
@@ -992,3 +1151,23 @@ class Binance:
             'sl': sl_info,
             'current_quantity': position_info['positionAmt']
         }
+
+    def get_last_price(self, pair: str) -> dict:
+        """
+        Args:
+            pair: pair desired
+        Returns:
+            a dictionary containing the pair_id, latest_price, price_timestamp in timestamp
+        """
+        data = self._send_request(
+            end_point=f"/fapi/v1/ticker/price",
+            request_type="GET",
+            params={"symbol": pair}
+        )
+
+        return {
+            'pair': data['symbol'],
+            'timestamp': data['time'],
+            'latest_price': float(data['price'])
+        }
+
