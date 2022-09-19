@@ -1178,7 +1178,7 @@ class Bybit:
                 df = self.get_historical_data(pair=pair,
                                               start_ts=start_time,
                                               interval=interval,
-                                              end_ts=int(1000 * time.time()))
+                                              end_ts=int(1000 * time.time())).drop(['next_open'], axis=1)
 
                 df = df[df['close_time'] < last_update]
 
