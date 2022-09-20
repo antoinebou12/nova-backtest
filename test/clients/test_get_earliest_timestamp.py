@@ -1,5 +1,6 @@
 from nova.clients.clients import clients
 from decouple import config
+import time
 
 
 def assert_get_earliest_timestamp(exchange: str, pair: str, interval: str):
@@ -16,6 +17,7 @@ def assert_get_earliest_timestamp(exchange: str, pair: str, interval: str):
     )
 
     assert len(str(data)) == 13
+    assert data < int(time.time() * 1000)
 
     print(f"Test _get_earliest_timestamp for {exchange.upper()} successful")
 

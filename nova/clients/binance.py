@@ -626,18 +626,20 @@ class Binance:
 
         return results
 
-    def enter_market_order(self, pair: str, side: str, quantity: float):
+    def enter_market_order(self, pair: str, type_pos: str, quantity: float):
 
         """
             Args:
                 pair: pair id that we want to create the order for
-                side: could be 'BUY' or 'SELL'
+                type_pos: could be 'LONG' or 'SHORT'
                 quantity: quantity should respect the minimum precision
 
             Returns:
                 standardized output
         """
-        
+
+        side = 'BUY' if type_pos == 'LONG' else 'SELL'
+
         _params = {
             "symbol": pair,
             "side": side,
@@ -657,17 +659,19 @@ class Binance:
             order_id=response['orderId']
         )
 
-    def exit_market_order(self, pair: str, side: str, quantity: float):
+    def exit_market_order(self, pair: str, type_pos: str, quantity: float):
         """
 
         Args:
             pair: pair id that we want to create the order for
-            side: could be 'BUY' or 'SELL'
+            type_pos: could be 'BUY' or 'SELL'
             quantity: quantity should respect the minimum precision
 
         Returns:
                 standardized output
         """
+        side = 'SELL' if type_pos == 'LONG' else 'BUY'
+
         _params = {
             "symbol": pair,
             "side": side,
@@ -816,9 +820,6 @@ class Binance:
             "timeInForce": "GTX",
             "reduceOnly": "true" if reduce_only else "false"
         }
-        print(reduce_only)
-        print('### PARAMS')
-        print(_params)
 
         response = self._send_request(
             end_point=f"/fapi/v1/order",
@@ -900,10 +901,6 @@ class Binance:
                 # Get current position size
                 pos_info = self.get_actual_positions(pairs=pair)
 
-                print('### POSITION')
-
-                print(pos_info)
-
                 if pos_info == {}:
                     residual_size = 0
                     break
@@ -951,7 +948,7 @@ class Binance:
 
             market_order = self.enter_market_order(
                 pair=pair,
-                side=side,
+                type_pos=type_pos,
                 quantity=residual_size
             )
 
@@ -977,13 +974,15 @@ class Binance:
             sl_prc=sl_price
         )
 
-        return_dict[pair] = self._format_enter_limit_info(
+        data = self._format_enter_limit_info(
             all_orders=all_orders,
             tp_order=tp_data,
             sl_order=sl_data
         )
 
-        return return_dict
+        return_dict[pair] = data
+
+        return data
 
     def _format_enter_limit_info(self, all_orders: list, tp_order: dict, sl_order: dict):
 
@@ -1057,16 +1056,20 @@ class Binance:
         if residual_size != 0:
             market_order = self.exit_market_order(
                 pair=pair,
-                side=side,
+                type_pos=type_pos,
                 quantity=residual_size
             )
 
             if market_order:
                 all_orders.append(market_order)
 
-        return_dict[pair] = self._format_exit_limit_info(
+        data = self._format_exit_limit_info(
             all_orders=all_orders
         )
+
+        return_dict[pair] = data
+
+        return data
 
     def _format_exit_limit_info(self, all_orders: list):
 

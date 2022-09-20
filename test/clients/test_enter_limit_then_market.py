@@ -3,7 +3,10 @@ from decouple import config
 import time
 
 
-def asserts_enter_limit_then_market(exchange: str, entry_args: list):
+def asserts_enter_limit_then_market(exchange: str,
+                                    pair: str,
+                                    type_pos: str,
+                                    quantity: float):
 
     client = clients(
         exchange=exchange,
@@ -12,25 +15,20 @@ def asserts_enter_limit_then_market(exchange: str, entry_args: list):
         testnet=True
     )
 
-    for args in entry_args:
+    upper = client.get_last_price(pair=pair)['latest_price'] * 1.1
+    lower = client.get_last_price(pair=pair)['latest_price'] * 0.9
 
-        upper = client.get_last_price(pair=args['pair'])['latest_price'] * 1.1
-        lower = client.get_last_price(pair=args['pair'])['latest_price'] * 0.9
+    sl_price = lower if type_pos == 'LONG' else upper
+    tp_price = upper if type_pos == 'LONG' else lower
 
-        args['sl_price'] = lower if args['side'] == 'BUY' else upper
-        args['tp_price'] = upper if args['side'] == 'BUY' else lower
-        args['pos_type'] = 'LONG' if args['side'] == 'BUY' else 'SHORT'
-
-        entry_orders = client._enter_limit_then_market(
-            pair=args['pair'],
-            type_pos=args['pos_type'],
-            quantity=args['quantity'],
-            sl_price=args['sl_price'],
-            tp_price=args['tp_price'],
-            return_dict={}
-        )
-
-        time.sleep(20)
+    entry_orders = client._enter_limit_then_market(
+        pair=pair,
+        type_pos=type_pos,
+        quantity=quantity,
+        sl_price=sl_price,
+        tp_price=tp_price,
+        return_dict={}
+    )
 
 
 def test_enter_limit_then_market():
@@ -38,18 +36,9 @@ def test_enter_limit_then_market():
     all_tests = [
         {
             'exchange': 'binance',
-            'entry_args': [
-                {
-                    'pair': 'BTCUSDT',
-                    'side': 'BUY',
-                    'quantity': 0.01,
-                },
-                # {
-                #     'pair': 'ETHUSDT',
-                #     'side': 'SELL',
-                #     'quantity': 0.1,
-                # }
-            ]
+            'pair': 'BTCUSDT',
+            'type_pos': 'LONG',
+            'quantity': 0.01,
         }
     ]
 
@@ -57,7 +46,10 @@ def test_enter_limit_then_market():
 
         asserts_enter_limit_then_market(
             exchange=_test['exchange'],
-            entry_args=_test['entry_args']
+            pair=_test['pair'],
+            type_pos=_test['side'],
+            quantity=_test['quantity'],
+
         )
 
 
