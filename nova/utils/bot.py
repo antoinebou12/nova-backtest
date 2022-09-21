@@ -17,7 +17,7 @@ class Bot(TelegramBOT):
                  exchange: str,
                  key: str,
                  secret: str,
-                 # nova_api_key: str,
+                 nova_api_key: str,
                  bot_id: str,
 
                  bot_name: str,
@@ -66,12 +66,12 @@ class Bot(TelegramBOT):
         # self.nova = NovaAPI(api_secret=nova_api_key)
 
         # Get the correct
-        if type(list_pair).__name__ == 'str':
+        if isinstance(list_pair, str):
             if list_pair != 'All pairs':
                 raise Exception("Please enter valid list_pair")
             # else:
             # self.list_pair = self.nova.trading_pairs()
-        elif type(list_pair).__name__ == 'list':
+        elif isinstance(list_pair, list):
             # raw_list = self.nova.trading_pairs()
             # assert list_pair in raw_list
             self.list_pair = list_pair

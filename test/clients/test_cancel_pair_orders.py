@@ -2,7 +2,7 @@ from nova.clients.clients import clients
 from decouple import config
 
 
-def test_cancel_pair_order(exchange: str, pair: str, side: str, quantity: float):
+def asserts_cancel_pair_order(exchange: str, pair: str, type_pos: str, quantity: float):
 
     client = clients(
         exchange=exchange,
@@ -10,34 +10,25 @@ def test_cancel_pair_order(exchange: str, pair: str, side: str, quantity: float)
         secret=config(f"{exchange}APISecret"),
     )
 
-    data = client.open_close_market_order(
+    data = client.enter_market_order(
         pair=pair,
-        side=side,
+        type_pos=type_pos,
         quantity=quantity
     )
 
-    tp_data = client.tp_sl_limit_order(
-        pair=pair,
-        side='SELL',
-        quantity=quantity,
-        price=data['price']*1.1,
-        tp_sl='tp',
-    )
+    print(data)
 
-    sl_data = client.tp_sl_limit_order(
-        pair=pair,
-        side='SELL',
-        quantity=quantity,
-        price=data['price'] * 0.9,
-        tp_sl='sl',
-    )
 
-    cancel_all_data = client.cancel_pair_orders(
-        pair=pair,
-    )
+def test_cancel_pair_order():
 
-    print(cancel_all_data)
-
+    all_Tests = [
+        {
+            'exchange': 'binance',
+            'pair': 'BTCUSDT',
+            'type_pos': 'LONG',
+            'quantity': ''
+        }
+    ]
 
 _pair = "BTCUSDT"
 _side = "BUY"

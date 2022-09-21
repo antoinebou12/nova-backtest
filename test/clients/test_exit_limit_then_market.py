@@ -3,7 +3,11 @@ from decouple import config
 import time
 
 
-def asserts_exit_limit_then_market(exchange: str, entry_args: list):
+def asserts_exit_limit_then_market(exchange: str,
+                                   pair: str,
+                                   type_pos: str,
+                                   quantity: float
+                                   ):
 
     client = clients(
         exchange=exchange,
@@ -12,30 +16,34 @@ def asserts_exit_limit_then_market(exchange: str, entry_args: list):
         testnet=True
     )
 
-    client.change_position_mode(
-        dual_position="false"
+    # entering in position
+    client.enter_market_order(
+        pair=pair,
+        type_pos=type_pos,
+        quantity=quantity,
     )
 
-    for args in entry_args:
+    time.sleep(1)
 
-        args['pos_type'] = 'LONG' if args['side'] == 'BUY' else 'SHORT'
+    # exiting the position
+    exit_orders = client._exit_limit_then_market(
+        pair=pair,
+        type_pos=type_pos,
+        quantity=quantity,
+        return_dict={}
+    )
 
-        order = client.enter_market_order(
-            pair=args['pair'],
-            side=args['side'],
-            quantity=args['quantity'],
-        )
+    time.sleep(1)
 
-        time.sleep(1)
+    keys_expected = ['pair', 'current_position_size', 'last_exit_time', 'exit_fees', 'exit_price']
 
-        exit_orders = client._exit_limit_then_market(
-            pair=args['pair'],
-            type_pos=args['pos_type'],
-            quantity=args['quantity'],
-            return_dict={}
-        )
+    for var in keys_expected:
 
-        print(exit_orders)
+        assert var in list(exit_orders.keys())
+
+    assert exit_orders['last_exit_time'] < int(time.time() * 1000)
+    assert exit_orders['exit_fees'] > 0
+    assert exit_orders['exit_price'] > 0
 
 
 def test_exit_limit_then_market():
@@ -43,18 +51,9 @@ def test_exit_limit_then_market():
     all_tests = [
         {
             'exchange': 'binance',
-            'entry_args': [
-                {
-                    'pair': 'BTCUSDT',
-                    'side': 'BUY',
-                    'quantity': 0.01,
-                },
-                # {
-                #     'pair': 'ETHUSDT',
-                #     'side': 'SELL',
-                #     'quantity': 0.1,
-                # }
-            ]
+            'pair': 'BTCUSDT',
+            'type_pos': 'LONG',
+            'quantity': 0.01,
         }
     ]
 
@@ -62,7 +61,10 @@ def test_exit_limit_then_market():
 
         asserts_exit_limit_then_market(
             exchange=_test['exchange'],
-            entry_args=_test['entry_args']
+            pair=_test['pair'],
+            type_pos=_test['type_pos'],
+            quantity=_test['quantity']
+
         )
 
 

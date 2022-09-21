@@ -720,8 +720,6 @@ class Binance:
             signed=True
         )
 
-        print(data)
-
         return self._format_order(data)
 
     def place_market_sl(self, pair: str, side: str, quantity: float, sl_prc: float):
@@ -828,8 +826,6 @@ class Binance:
             signed=True
         )
 
-        print(response)
-
         return self._verify_limit_posted(
             order_id=response['orderId'],
             pair=pair
@@ -901,11 +897,9 @@ class Binance:
                 # Get current position size
                 pos_info = self.get_actual_positions(pairs=pair)
 
-                if pos_info == {}:
-                    residual_size = 0
-                    break
-
-                if reduce_only:
+                if pair not in list(pos_info.keys()):
+                    residual_size = quantity
+                elif pair in list(pos_info.keys()) and reduce_only:
                     residual_size = pos_info[pair]['position_size']
                 else:
                     residual_size = quantity - pos_info[pair]['position_size']
