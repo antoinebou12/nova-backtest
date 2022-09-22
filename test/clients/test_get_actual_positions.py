@@ -16,7 +16,7 @@ def asserts_get_actual_positions(
 
     # Check the current positions
     positions = client.get_actual_positions(
-        list_pair=list(info.keys())
+        pairs=list(info.keys())
     )
 
     if len(positions) != 0:
@@ -25,12 +25,12 @@ def asserts_get_actual_positions(
 
             client.exit_market_order(
                 pair=_pair,
-                side=_info['exit_side'],
+                type_pos=_info['type_pos'],
                 quantity=_info['position_size']
             )
 
     positions = client.get_actual_positions(
-        list_pair=list(info.keys())
+        pairs=list(info.keys())
     )
 
     nb_pos = 0
@@ -39,33 +39,28 @@ def asserts_get_actual_positions(
 
     for pair, value in info.items():
 
-        print(f'Buy {pair} for {value["quantity"]} in position size')
-
-        _side = 'BUY' if value["quantity"] > 0 else 'SELL'
-        _type = 'LONG' if value["quantity"] > 0 else 'SHORT'
+        print(f'{value["type_pos"]} {pair} for {value["quantity"]} in position size')
 
         client.enter_market_order(
             pair=pair,
-            side=_side,
-            quantity=abs(value["quantity"])
+            type_pos=value['type_pos'],
+            quantity=value["quantity"]
         )
 
         nb_pos += 1
 
-        positions_ = client.get_actual_positions(list_pair=info.keys())
+        positions_ = client.get_actual_positions(pairs=info.keys())
 
         assert len(positions_.keys()) == nb_pos
-        assert positions_[pair]['position_size'] == abs(value["quantity"])
-        assert positions_[pair]['type'] == _type
+        assert positions_[pair]['position_size'] == value["quantity"]
+        assert positions_[pair]['type'] == value['type_pos']
 
         assert isinstance(positions_[pair]['entry_price'], float)
         assert isinstance(positions_[pair]['unrealized_pnl'], float)
 
     new_positions = client.get_actual_positions(
-        list_pair=list(info.keys())
+        pairs=list(info.keys())
     )
-
-    print(new_positions)
 
     assert len(new_positions.keys()) == len(list(info.keys()))
 
@@ -73,12 +68,12 @@ def asserts_get_actual_positions(
 
         client.exit_market_order(
                 pair=pair,
-                side=_info['exit_side'],
+                type_pos=_info['type'],
                 quantity=_info['position_size']
             )
 
     new_positions = client.get_actual_positions(
-        list_pair=list(info.keys())
+        pairs=list(info.keys())
     )
 
     assert len(new_positions) == 0
@@ -92,8 +87,8 @@ def test_get_actual_positions():
         {
             'exchange': 'binance',
             'info': {
-                'BTCUSDT': {'quantity': 0.01},
-                'ETHUSDT': {'quantity': -0.1}
+                'BTCUSDT': {'type_pos': 'LONG', 'quantity': 0.01},
+                'ETHUSDT': {'type_pos': 'SHORT', 'quantity': 0.1}
             }
         }
     ]

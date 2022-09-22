@@ -15,6 +15,20 @@ def asserts_enter_limit_then_market(exchange: str,
         testnet=True
     )
 
+    positions = client.get_actual_positions(
+        pairs=pair
+    )
+
+    if len(positions) != 0:
+
+        for _pair, _info in positions.items():
+
+            client.exit_market_order(
+                pair=_pair,
+                type_pos=_info['type_pos'],
+                quantity=_info['position_size']
+            )
+
     upper = client.get_last_price(pair=pair)['latest_price'] * 1.1
     lower = client.get_last_price(pair=pair)['latest_price'] * 0.9
 
@@ -52,6 +66,20 @@ def asserts_enter_limit_then_market(exchange: str,
     assert entry_orders['exit_price'] == 0
     assert entry_orders['entry_fees'] > 0
     assert entry_orders['entry_price'] > 0
+
+    for var in ['tp_id', 'sl_id']:
+        client.cancel_order(
+            pair=pair,
+            order_id=entry_orders[var]
+        )
+
+    client.exit_market_order(
+        pair=pair,
+        type_pos=type_pos,
+        quantity=quantity
+    )
+
+    print(f"Test enter_limit_then_market for {exchange.upper()} successful")
 
 
 def test_enter_limit_then_market():

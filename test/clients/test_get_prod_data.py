@@ -80,16 +80,16 @@ def asserts_get_prod_data(
 def test_get_prod_data():
 
     all_tests = [
-        # {
-        #     'exchange': 'binance',
-        #     'list_pair': ['BTCUSDT', 'ETHUSDT', 'ADAUSDT'],
-        #     'nb_candles': 300,
-        # },
         {
-            'exchange': 'bybit',
+            'exchange': 'binance',
             'list_pair': ['BTCUSDT', 'ETHUSDT', 'ADAUSDT'],
             'nb_candles': 300,
-        }
+        },
+        # {
+        #     'exchange': 'bybit',
+        #     'list_pair': ['BTCUSDT', 'ETHUSDT', 'ADAUSDT'],
+        #     'nb_candles': 300,
+        # }
     ]
 
     for _test in all_tests:

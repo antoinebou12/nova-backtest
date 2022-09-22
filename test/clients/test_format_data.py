@@ -63,13 +63,13 @@ def test_format_data():
             'start_time': 1631210861000,
             'end_time': 1662746861000
         },
-        {
-            'exchange': 'bybit',
-            'pair': 'BTCUSDT',
-            'interval': '1d',
-            'start_time': 1631210861000,
-            'end_time': 1662746861000
-        }
+        # {
+        #     'exchange': 'bybit',
+        #     'pair': 'BTCUSDT',
+        #     'interval': '1d',
+        #     'start_time': 1631210861000,
+        #     'end_time': 1662746861000
+        # }
     ]
 
     for _test in all_tests:

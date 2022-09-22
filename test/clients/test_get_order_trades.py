@@ -3,7 +3,7 @@ from decouple import config
 import time
 
 
-def asserts_get_order_trades(exchange: str, pair: str, side: str, quantity: float):
+def asserts_get_order_trades(exchange: str, pair: str, type_pos: str, quantity: float):
 
     client = clients(
         exchange=exchange,
@@ -13,7 +13,7 @@ def asserts_get_order_trades(exchange: str, pair: str, side: str, quantity: floa
     )
 
     positions = client.get_actual_positions(
-        list_pair=[pair]
+        pairs=pair
     )
 
     if len(positions) != 0:
@@ -22,13 +22,13 @@ def asserts_get_order_trades(exchange: str, pair: str, side: str, quantity: floa
 
             client.exit_market_order(
                 pair=_pair,
-                side=_info['exit_side'],
+                type_pos=_info['type_pos'],
                 quantity=_info['position_size']
             )
 
     market_order = client.enter_market_order(
         pair=pair,
-        side=side,
+        type_pos=type_pos,
         quantity=quantity
     )
 
@@ -39,11 +39,11 @@ def asserts_get_order_trades(exchange: str, pair: str, side: str, quantity: floa
         order_id=market_order['order_id']
     )
 
-    for var in ['quote_asset', 'tx_fee_in_based_asset', 'tx_fee_in_other_asset', 'nb_of_trades', 'is_buyer']:
+    for var in ['quote_asset', 'tx_fee_in_quote_asset', 'tx_fee_in_other_asset', 'nb_of_trades', 'is_buyer']:
         assert var in list(ot_data.keys())
 
     assert ot_data['quote_asset'] == 'USDT'
-    assert ot_data['tx_fee_in_based_asset'] > 0
+    assert ot_data['tx_fee_in_quote_asset'] > 0
     assert ot_data['nb_of_trades'] > 0
     assert ot_data['is_buyer']
 
@@ -55,7 +55,7 @@ def test_get_order_trades():
         {
             'exchange': 'binance',
             'pair': 'BTCUSDT',
-            'side': 'BUY',
+            'type_pos': 'LONG',
             'quantity': 0.01
         }
     ]
@@ -64,7 +64,7 @@ def test_get_order_trades():
         asserts_get_order_trades(
             exchange=_test['exchange'],
             pair=_test['pair'],
-            side=_test['side'],
+            type_pos=_test['type_pos'],
             quantity=_test['quantity']
         )
 

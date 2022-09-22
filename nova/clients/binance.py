@@ -486,7 +486,7 @@ class Binance:
                 position[pos['symbol']]['position_size'] = abs(float(pos['positionAmt']))
                 position[pos['symbol']]['entry_price'] = float(pos['entryPrice'])
                 position[pos['symbol']]['unrealized_pnl'] = float(pos['unRealizedProfit'])
-                position[pos['symbol']]['type'] = 'LONG' if float(pos['positionAmt']) > 0 else 'SHORT'
+                position[pos['symbol']]['type_pos'] = 'LONG' if float(pos['positionAmt']) > 0 else 'SHORT'
                 position[pos['symbol']]['exit_side'] = 'SELL' if float(pos['positionAmt']) > 0 else 'BUY'
 
         return position
@@ -692,13 +692,13 @@ class Binance:
             order_id=response['orderId']
         )
 
-    def place_limit_tp(self, pair: str, side: str, quantity: float, tp_prc: float):
+    def place_limit_tp(self, pair: str, side: str, quantity: float, tp_price: float):
         """
         Args:
             pair: pair id that we want to create the order for
             side: could be 'BUY' or 'SELL'
             quantity: for binance  quantity is not needed since the tp order "closes" the "opened" position
-            tp_prc: price of the tp or sl
+            tp_price: price of the tp or sl
         Returns:
             Standardized output
         """
@@ -708,8 +708,8 @@ class Binance:
             "side": side,
             "type": 'TAKE_PROFIT',
             "timeInForce": 'GTC',
-            "price": float(round(tp_prc,  self.pairs_info[pair]['pricePrecision'])),
-            "stopPrice": float(round(tp_prc,  self.pairs_info[pair]['pricePrecision'])),
+            "price": float(round(tp_price,  self.pairs_info[pair]['pricePrecision'])),
+            "stopPrice": float(round(tp_price,  self.pairs_info[pair]['pricePrecision'])),
             "quantity": float(round(quantity, self.pairs_info[pair]['quantityPrecision']))
         }
 
@@ -722,13 +722,13 @@ class Binance:
 
         return self._format_order(data)
 
-    def place_market_sl(self, pair: str, side: str, quantity: float, sl_prc: float):
+    def place_market_sl(self, pair: str, side: str, quantity: float, sl_price: float):
         """
         Args:
             pair: pair id that we want to create the order for
             side: could be 'BUY' or 'SELL'
             quantity: for binance  quantity is not needed since the tp order "closes" the "opened" position
-            sl_prc: price of the tp or sl
+            sl_price: price of the tp or sl
         Returns:
             Standardized output
         """
@@ -737,7 +737,7 @@ class Binance:
             "side": side,
             "type": 'STOP_MARKET',
             "timeInForce": 'GTC',
-            "stopPrice": float(round(sl_prc, self.pairs_info[pair]['pricePrecision'])),
+            "stopPrice": float(round(sl_price, self.pairs_info[pair]['pricePrecision'])),
             "quantity": float(round(quantity, self.pairs_info[pair]['quantityPrecision'])),
             "reduceOnly": "true"
         }
@@ -826,10 +826,13 @@ class Binance:
             signed=True
         )
 
-        return self._verify_limit_posted(
-            order_id=response['orderId'],
-            pair=pair
-        )
+        if 'orderId' in list(response.keys()):
+            return self._verify_limit_posted(
+                order_id=response['orderId'],
+                pair=pair
+            )
+        else:
+            return False, None
 
     def _looping_limit_orders(
             self,
@@ -894,15 +897,17 @@ class Binance:
                     order_id=data['order_id']
                 )
 
-                # Get current position size
-                pos_info = self.get_actual_positions(pairs=pair)
+            # Get current position size
+            pos_info = self.get_actual_positions(pairs=pair)
 
-                if pair not in list(pos_info.keys()):
-                    residual_size = quantity
-                elif pair in list(pos_info.keys()) and reduce_only:
-                    residual_size = pos_info[pair]['position_size']
-                else:
-                    residual_size = quantity - pos_info[pair]['position_size']
+            if pair not in list(pos_info.keys()) and not reduce_only:
+                residual_size = quantity
+            elif pair not in list(pos_info.keys()) and reduce_only:
+                residual_size = 0
+            elif pair in list(pos_info.keys()) and reduce_only:
+                residual_size = pos_info[pair]['position_size']
+            else:
+                residual_size = quantity - pos_info[pair]['position_size']
 
         return residual_size, all_limit_orders
     
@@ -958,14 +963,14 @@ class Binance:
             pair=pair,
             side=exit_side,
             quantity=pos_info[pair]['position_size'],
-            tp_prc=tp_price
+            tp_price=tp_price
         )
 
         sl_data = self.place_market_sl(
             pair=pair,
             side=exit_side,
             quantity=pos_info[pair]['position_size'],
-            sl_prc=sl_price
+            sl_price=sl_price
         )
 
         data = self._format_enter_limit_info(
@@ -1120,20 +1125,17 @@ class Binance:
         return dict(return_dict)
 
     def cancel_order(self, pair: str, order_id: str):
-        return self._send_request(
+        data = self._send_request(
             end_point=f"/fapi/v1/order",
             request_type="DELETE",
             params={"symbol": pair, "orderId": order_id},
             signed=True
         )
 
-    def cancel_pair_orders(self, pair: str):
-        return self._send_request(
-            end_point=f"/fapi/v1/allOpenOrders",
-            request_type="DELETE",
-            params={"symbol": pair},
-            signed=True
-        )
+        if 'code' not in list(data.keys()):
+            return self._format_order(data)
+        else:
+            return None
 
     def get_tp_sl_state(self, pair: str, tp_id: str, sl_id: str):
         """

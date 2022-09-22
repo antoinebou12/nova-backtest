@@ -28,6 +28,8 @@ def asserts_looping_limit_order(
     assert residual >= 0
     assert isinstance(all_orders, list)
 
+    print(f"Test _looping_limit_order for {exchange.upper()} successful")
+
 
 def test_looping_limit_order():
     all_tests = [

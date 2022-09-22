@@ -30,11 +30,11 @@ def test_get_earliest_timestamp():
             'pair': 'BTCUSDT',
             'interval': '1d'
         },
-        {
-            'exchange': 'bybit',
-            'pair': 'BTCUSDT',
-            'interval': '1d'
-        }
+        # {
+        #     'exchange': 'bybit',
+        #     'pair': 'BTCUSDT',
+        #     'interval': '1d'
+        # }
     ]
 
     for _test in all_test:

@@ -9,7 +9,7 @@ def asserts_get_last_price(
 ):
     start_time = int(time.time() * 1000)
 
-    time.sleep(1)
+    time.sleep(3)
 
     client = clients(
         exchange=exchange,
@@ -27,7 +27,7 @@ def asserts_get_last_price(
     assert data['timestamp'] >= start_time
     assert data['latest_price'] > 0
 
-    print(data)
+    print(f"Test get_last_price for {exchange.upper()} successful")
 
 
 def test_get_last_price():

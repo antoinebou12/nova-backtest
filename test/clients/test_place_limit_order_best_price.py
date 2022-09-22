@@ -27,6 +27,8 @@ def asserts_place_limit_order_best_price(
     assert is_posted
     assert data is not None
 
+    print(f"Test place_limit_order_best_price for {exchange.upper()} successful")
+
 
 def test_place_limit_order_best_price():
     all_tests = [

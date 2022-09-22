@@ -2,7 +2,7 @@ from nova.clients.clients import clients
 from decouple import config
 
 
-def asserts_exit_market_order(exchange: str, pair: str, exit_side: str, quantity: float):
+def asserts_exit_market_order(exchange: str, pair: str, type_pos: str, quantity: float):
 
     client = clients(
         exchange=exchange,
@@ -12,7 +12,7 @@ def asserts_exit_market_order(exchange: str, pair: str, exit_side: str, quantity
     )
 
     positions = client.get_actual_positions(
-        list_pair=[pair]
+        pairs=pair
     )
 
     if len(positions) != 0:
@@ -21,27 +21,21 @@ def asserts_exit_market_order(exchange: str, pair: str, exit_side: str, quantity
 
             client.exit_market_order(
                 pair=_pair,
-                side=_info['exit_side'],
+                type_pos=_info['type'],
                 quantity=_info['position_size']
             )
 
-    entry_side = 'SELL' if exit_side == 'BUY' else 'BUY'
-
-    market_enter = client.enter_market_order(
+    client.enter_market_order(
         pair=pair,
-        side=entry_side,
+        type_pos=type_pos,
         quantity=quantity
     )
 
-    assert market_enter['type'] == 'MARKET'
-    assert market_enter['status'] == 'FILLED'
-    assert market_enter['original_quantity'] == quantity
-    assert market_enter['executed_quantity'] == quantity
-    assert market_enter['side'] == entry_side
+    exit_side = 'SELL' if type_pos == 'LONG' else 'BUY'
 
     market_exit = client.exit_market_order(
         pair=pair,
-        side=exit_side,
+        type_pos=type_pos,
         quantity=quantity
     )
 
@@ -62,7 +56,7 @@ def test_exit_market_order():
         {
             'exchange': 'binance',
             'pair': 'BTCUSDT',
-            'exit_side': 'BUY',
+            'type_pos': 'LONG',
             'quantity': 0.01
         }
     ]
@@ -72,7 +66,7 @@ def test_exit_market_order():
         asserts_exit_market_order(
             exchange=_test['exchange'],
             pair=_test['pair'],
-            exit_side=_test['exit_side'],
+            type_pos=_test['type_pos'],
             quantity=_test['quantity']
         )
 

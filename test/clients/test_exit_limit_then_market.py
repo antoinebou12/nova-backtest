@@ -16,6 +16,20 @@ def asserts_exit_limit_then_market(exchange: str,
         testnet=True
     )
 
+    positions = client.get_actual_positions(
+        pairs=pair
+    )
+
+    if len(positions) != 0:
+
+        for _pair, _info in positions.items():
+
+            client.exit_market_order(
+                pair=_pair,
+                type_pos=_info['type'],
+                quantity=_info['position_size']
+            )
+
     # entering in position
     client.enter_market_order(
         pair=pair,
@@ -44,6 +58,8 @@ def asserts_exit_limit_then_market(exchange: str,
     assert exit_orders['last_exit_time'] < int(time.time() * 1000)
     assert exit_orders['exit_fees'] > 0
     assert exit_orders['exit_price'] > 0
+
+    print(f"Test exit_limit_then_market for {exchange.upper()} successful")
 
 
 def test_exit_limit_then_market():

@@ -2,7 +2,7 @@ from nova.clients.clients import clients
 from decouple import config
 
 
-def asserts_place_limit_tp(exchange: str, pair: str, side: str, quantity: float):
+def asserts_place_limit_tp(exchange: str, pair: str, type_pos: str, quantity: float):
 
     client = clients(
         exchange=exchange,
@@ -21,17 +21,17 @@ def asserts_place_limit_tp(exchange: str, pair: str, side: str, quantity: float)
 
             client.exit_market_order(
                 pair=_pair,
-                side=_info['exit_side'],
+                type_pos=_info['type_pos'],
                 quantity=_info['position_size']
             )
 
     market_order = client.enter_market_order(
         pair=pair,
-        side=side,
+        type_pos=type_pos,
         quantity=quantity
     )
 
-    exit_side = 'SELL' if side == 'BUY' else 'BUY'
+    exit_side = 'SELL' if type_pos == 'LONG' else 'BUY'
 
     if exit_side == 'SELL':
         tp_price = market_order['executed_price'] * 1.1
@@ -42,7 +42,7 @@ def asserts_place_limit_tp(exchange: str, pair: str, side: str, quantity: float)
         pair=pair,
         side=exit_side,
         quantity=quantity,
-        tp_prc=tp_price
+        tp_price=tp_price
     )
 
     nb_decimals = len(str(tp_data['stop_price']).split(".")[1])
@@ -64,7 +64,7 @@ def test_place_limit_tp():
         {
             'exchange': 'binance',
             'pair': 'BTCUSDT',
-            'side': 'BUY',
+            'type_pos': 'LONG',
             'quantity': 0.01
         }
     ]
@@ -73,7 +73,7 @@ def test_place_limit_tp():
         asserts_place_limit_tp(
             exchange=_test['exchange'],
             pair=_test['pair'],
-            side=_test['side'],
+            type_pos=_test['type_pos'],
             quantity=_test['quantity']
         )
 

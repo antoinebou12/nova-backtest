@@ -2,7 +2,7 @@ from nova.clients.clients import clients
 from decouple import config
 
 
-def asserts_enter_market_order(exchange: str, pair: str, side: str, quantity: float):
+def asserts_enter_market_order(exchange: str, pair: str, type_pos: str, quantity: float):
 
     client = clients(
         exchange=exchange,
@@ -12,7 +12,7 @@ def asserts_enter_market_order(exchange: str, pair: str, side: str, quantity: fl
     )
 
     positions = client.get_actual_positions(
-        list_pair=[pair]
+        pairs=pair
     )
 
     if len(positions) != 0:
@@ -21,15 +21,17 @@ def asserts_enter_market_order(exchange: str, pair: str, side: str, quantity: fl
 
             client.exit_market_order(
                 pair=_pair,
-                side=_info['exit_side'],
+                type_pos=_info['type_pos'],
                 quantity=_info['position_size']
             )
 
     market_order = client.enter_market_order(
         pair=pair,
-        side=side,
+        type_pos=type_pos,
         quantity=quantity
     )
+
+    side = 'BUY' if type_pos == 'LONG' else 'SELL'
 
     assert market_order['type'] == 'MARKET'
     assert market_order['status'] == 'FILLED'
@@ -38,6 +40,12 @@ def asserts_enter_market_order(exchange: str, pair: str, side: str, quantity: fl
     assert market_order['side'] == side
     assert market_order['original_quantity'] == quantity
     assert market_order['executed_quantity'] == quantity
+
+    client.exit_market_order(
+        pair=pair,
+        type_pos=type_pos,
+        quantity=quantity
+    )
 
     print(f"Test enter_market_order for {exchange.upper()} successful")
 
@@ -48,7 +56,7 @@ def test_enter_market_order():
         {
             'exchange': 'binance',
             'pair': 'BTCUSDT',
-            'side': 'BUY',
+            'type_pos': 'LONG',
             'quantity': 0.01
         }
     ]
@@ -58,7 +66,7 @@ def test_enter_market_order():
         asserts_enter_market_order(
             exchange=_test['exchange'],
             pair=_test['pair'],
-            side=_test['side'],
+            type_pos=_test['type_pos'],
             quantity=_test['quantity']
         )
 

@@ -1,39 +1,72 @@
 from nova.clients.clients import clients
 from decouple import config
+import time
 
 
-def test_cancel_order(exchange: str, pair: str, side: str, quantity: float):
+def asserts_cancel_order(exchange: str, pair: str, type_pos: str, quantity: float):
 
     client = clients(
         exchange=exchange,
-        key=config(f"{exchange}APIKey"),
-        secret=config(f"{exchange}APISecret"),
+        key=config(f"{exchange}TestAPIKey"),
+        secret=config(f"{exchange}TestAPISecret"),
+        testnet=True
     )
 
-    data = client.open_close_market_order(
+    client.enter_market_order(
         pair=pair,
-        side=side,
+        type_pos=type_pos,
         quantity=quantity
     )
 
-    tp_data = client.tp_sl_limit_order(
+    exit_side = 'SELL' if type_pos == 'LONG' else 'BUY'
+
+    upper = client.get_last_price(pair=pair)['latest_price'] * 1.1
+    lower = client.get_last_price(pair=pair)['latest_price'] * 0.9
+
+    tp_price = upper if type_pos == 'LONG' else lower
+
+    tp_order = client.place_limit_tp(
         pair=pair,
-        side='SELL',
+        side=exit_side,
         quantity=quantity,
-        price=data['price']*1.1,
-        tp_sl='tp',
+        tp_price=tp_price
     )
 
-    cancel_data = client.cancel_order(
+    time.sleep(1)
+
+    tp = client.get_order(pair=pair, order_id=tp_order['order_id'])
+
+    assert tp['status'] == 'NEW'
+
+    cancel = client.cancel_order(
         pair=pair,
-        order_id=tp_data['order_id']
+        order_id=tp_order['order_id']
     )
 
-    print(cancel_data)
+    assert isinstance(cancel, dict)
+    assert cancel['status'] == 'CANCELED'
+
+    print(f"Test cancel_order for {exchange.upper()} successful")
 
 
-_pair = "BTCUSDT"
-_side = "BUY"
-_quantity = 0.001
+def test_cancel_order():
 
-test_cancel_order('binance', _pair, _side, _quantity)
+    all_tests = [
+        {
+            'exchange': 'binance',
+            'pair': 'BTCUSDT',
+            'type_pos': 'LONG',
+            'quantity': 0.01
+        }
+    ]
+
+    for _test in all_tests:
+        asserts_cancel_order(
+            exchange=_test['exchange'],
+            pair=_test['pair'],
+            type_pos=_test['type_pos'],
+            quantity=_test['quantity']
+        )
+
+
+test_cancel_order()

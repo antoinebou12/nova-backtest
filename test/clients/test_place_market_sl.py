@@ -2,7 +2,7 @@ from nova.clients.clients import clients
 from decouple import config
 
 
-def asserts_place_market_sl(exchange: str, pair: str, side: str, quantity: float):
+def asserts_place_market_sl(exchange: str, pair: str, type_pos: str, quantity: float):
 
     client = clients(
         exchange=exchange,
@@ -12,7 +12,7 @@ def asserts_place_market_sl(exchange: str, pair: str, side: str, quantity: float
     )
 
     positions = client.get_actual_positions(
-        list_pair=[pair]
+        pairs=pair
     )
 
     if len(positions) != 0:
@@ -21,17 +21,17 @@ def asserts_place_market_sl(exchange: str, pair: str, side: str, quantity: float
 
             client.exit_market_order(
                 pair=_pair,
-                side=_info['exit_side'],
+                type_pos=_info['type_pos'],
                 quantity=_info['position_size']
             )
 
     market_order = client.enter_market_order(
         pair=pair,
-        side=side,
+        type_pos=type_pos,
         quantity=quantity
     )
 
-    exit_side = 'SELL' if side == 'BUY' else 'BUY'
+    exit_side = 'SELL' if type_pos == 'LONG' else 'BUY'
 
     if exit_side == 'SELL':
         sl_price = market_order['executed_price'] * 0.9
@@ -42,7 +42,7 @@ def asserts_place_market_sl(exchange: str, pair: str, side: str, quantity: float
         pair=pair,
         side=exit_side,
         quantity=quantity,
-        sl_prc=sl_price
+        sl_price=sl_price
     )
 
     nb_decimals = len(str(sl_data['stop_price']).split(".")[1])
@@ -56,17 +56,15 @@ def asserts_place_market_sl(exchange: str, pair: str, side: str, quantity: float
     assert sl_data['executed_quantity'] == 0
     assert sl_data['stop_price'] == round(sl_price, nb_decimals)
 
-    print(sl_data)
-
     print(f"Test place_market_sl for {exchange.upper()} successful")
 
 
-def test_place_maket_sl():
+def test_place_market_sl():
     all_tests = [
         {
             'exchange': 'binance',
             'pair': 'BTCUSDT',
-            'side': 'BUY',
+            'type_pos': 'LONG',
             'quantity': 0.01
         }
     ]
@@ -75,9 +73,9 @@ def test_place_maket_sl():
         asserts_place_market_sl(
             exchange=_test['exchange'],
             pair=_test['pair'],
-            side=_test['side'],
+            type_pos=_test['type_pos'],
             quantity=_test['quantity']
         )
 
 
-test_place_maket_sl()
+test_place_market_sl()

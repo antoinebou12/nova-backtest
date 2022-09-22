@@ -3,7 +3,7 @@ from decouple import config
 import time
 
 
-def asserts_get_order(exchange: str, pair: str, side: str, quantity: float):
+def asserts_get_order(exchange: str, pair: str, type_pos: str, quantity: float):
 
     client = clients(
         exchange=exchange,
@@ -13,7 +13,7 @@ def asserts_get_order(exchange: str, pair: str, side: str, quantity: float):
     )
 
     positions = client.get_actual_positions(
-        list_pair=[pair]
+        pairs=pair
     )
 
     if len(positions) != 0:
@@ -22,17 +22,17 @@ def asserts_get_order(exchange: str, pair: str, side: str, quantity: float):
 
             client.exit_market_order(
                 pair=_pair,
-                side=_info['exit_side'],
+                type_pos=_info['type_pos'],
                 quantity=_info['position_size']
             )
 
     market_order = client.enter_market_order(
         pair=pair,
-        side=side,
+        type_pos=type_pos,
         quantity=quantity
     )
 
-    time.sleep(2)
+    time.sleep(1)
 
     order_data = client.get_order(
         pair=pair,
@@ -41,6 +41,8 @@ def asserts_get_order(exchange: str, pair: str, side: str, quantity: float):
 
     std_output = ['time', 'order_id', 'pair', 'status', 'type', 'time_in_force', 'reduce_only', 'side',
                   'price', 'original_quantity', 'executed_quantity', 'executed_price']
+
+    side = 'BUY' if type_pos == 'LONG' else 'SELL'
 
     assert set(std_output).issubset(list(order_data.keys()))
     assert order_data['type'] == 'MARKET'
@@ -51,6 +53,12 @@ def asserts_get_order(exchange: str, pair: str, side: str, quantity: float):
     assert order_data['original_quantity'] == quantity
     assert order_data['executed_quantity'] == quantity
 
+    client.exit_market_order(
+        pair=pair,
+        type_pos=type_pos,
+        quantity=quantity
+    )
+
     print(f"Test get_order for {exchange.upper()} successful")
 
 
@@ -59,7 +67,7 @@ def test_get_order():
         {
             'exchange': 'binance',
             'pair': 'BTCUSDT',
-            'side': 'BUY',
+            'type_pos': 'LONG',
             'quantity': 0.01
         }
     ]
@@ -68,7 +76,7 @@ def test_get_order():
         asserts_get_order(
             exchange=_test['exchange'],
             pair=_test['pair'],
-            side=_test['side'],
+            type_pos=_test['type_pos'],
             quantity=_test['quantity']
         )
 
