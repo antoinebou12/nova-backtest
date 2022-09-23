@@ -39,6 +39,7 @@ class Bot(TelegramBOT):
                  telegram_notification: bool = False,
                  telegram_bot_token: str = '',
                  telegram_bot_chat_id: str = '',
+                 passphrase: str = '',
                  testnet: bool = False,
                  geometric_size: bool = False
                  ):
@@ -78,7 +79,7 @@ class Bot(TelegramBOT):
 
         # EXCHANGE CLIENT
         self.exchange = exchange
-        self.client = clients(exchange=exchange, key=key, secret=secret, testnet=testnet)
+        self.client = clients(exchange=exchange, key=key, secret=secret, passphrase=passphrase, testnet=testnet)
 
         # TELEGRAM NOTIFICATION
         self.telegram_notification = telegram_notification
@@ -475,44 +476,6 @@ class Bot(TelegramBOT):
 
                 self.list_pair.remove(pair)
 
-    def get_historical_data(self):
-
-        print(f'Fetching historical data', "\U000023F3", end="\r")
-        t0 = time.time()
-        self.prod_data = asyncio.run(self.client.get_prod_data(
-            list_pair=self.list_pair,
-            interval=self.candle,
-            nb_candles=self.historical_window,
-            current_state=None
-        ))
-        print(f'Historical data downloaded (in {round(time.time() - t0, 2)}s)', "\U00002705")
-
-    def update_historical_data(self):
-
-        print("Updating historical data", "\U000023F3", end="\r")
-
-        t0 = time.time()
-        # 4 - Update dataframes
-        self.prod_data = asyncio.run(self.client.get_prod_data(
-            list_pair=self.list_pair,
-            interval=self.candle,
-            nb_candles=self.historical_window,
-            current_state=self.prod_data
-        ))
-
-        print(f"Historical data updated (in {round(time.time() - t0, 2)}s)", "\U00002705")
-
-    def set_up_account(self):
-
-        print(f'Setting up account', "\U000023F3", end="\r")
-        self.client.setup_account(bankroll=self.bankroll,
-                                  quote_asset=self.quote_asset,
-                                  leverage=self.leverage,
-                                  max_down=self.max_down,
-                                  list_pairs=self.list_pair
-                                  )
-        print(f'Account set', "\U00002705")
-
     def production_run(self):
 
         last_crashed_time = datetime.utcnow()
@@ -524,10 +487,25 @@ class Bot(TelegramBOT):
                                        exchange=self.exchange)
 
         # start account
-        self.set_up_account()
+        print(f'Setting up account', "\U000023F3", end="\r")
+        self.client.setup_account(bankroll=self.bankroll,
+                                  quote_asset=self.quote_asset,
+                                  leverage=self.leverage,
+                                  max_down=self.max_down,
+                                  list_pairs=self.list_pair
+                                  )
+        print(f'Account set', "\U00002705")
 
         # get historical price (and volume) evolution
-        self.get_historical_data()
+        print(f'Fetching historical data', "\U000023F3", end="\r")
+        t0 = time.time()
+        self.prod_data = asyncio.run(self.client.get_prod_data(
+            list_pair=self.list_pair,
+            interval=self.candle,
+            nb_candles=self.historical_window,
+            current_state=None
+        ))
+        print(f'Historical data downloaded (in {round(time.time() - t0, 2)}s)', "\U00002705")
 
         # Begin the infinite loop
         while True:
@@ -545,7 +523,18 @@ class Bot(TelegramBOT):
                     self.update_available_trading_pairs()
 
                     # update historical data
-                    self.update_historical_data()
+                    print("Updating historical data", "\U000023F3", end="\r")
+
+                    t0 = time.time()
+                    # 4 - Update dataframes
+                    self.prod_data = asyncio.run(self.client.get_prod_data(
+                        list_pair=self.list_pair,
+                        interval=self.candle,
+                        nb_candles=self.historical_window,
+                        current_state=self.prod_data
+                    ))
+
+                    print(f"Historical data updated (in {round(time.time() - t0, 2)}s)", "\U00002705")
 
                     if len(self.position_opened) > 0:
                         # verify positions (reach tp or sl)

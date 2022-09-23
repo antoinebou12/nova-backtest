@@ -1,4 +1,4 @@
-from strategy_test import Test
+from nova.utils.strategy import Test
 from decouple import config
 
 

@@ -1,8 +1,6 @@
 from datetime import datetime
-from strategy_test import Test
+from nova.utils.strategy import Test
 from decouple import config
-import os
-import pandas as pd
 
 
 def test_create_entry_prices_times() -> None:
