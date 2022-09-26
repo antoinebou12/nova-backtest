@@ -1,5 +1,6 @@
 from decouple import config
 from nova.utils.strategy import RandomStrategy
+import asyncio
 
 
 def asserts_entering_positions(
@@ -25,6 +26,21 @@ def asserts_entering_positions(
         telegram_bot_token='',
         telegram_bot_chat_id=''
     )
+
+    bot.client.setup_account(
+        bankroll=bot.bankroll,
+        quote_asset=bot.quote_asset,
+        leverage=bot.leverage,
+        max_down=bot.max_down,
+        list_pairs=bot.list_pair
+    )
+
+    bot.prod_data = asyncio.run(bot.client.get_prod_data(
+        list_pair=bot.list_pair,
+        interval=bot.candle,
+        nb_candles=bot.historical_window,
+        current_state=None
+    ))
 
     bot.entering_positions()
 

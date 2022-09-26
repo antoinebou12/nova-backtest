@@ -459,14 +459,18 @@ class Bybit:
 
     def get_last_price(self, pair):
 
-        response = self._send_request(
+        data = self._send_request(
             end_point=f"/public/linear/recent-trading-records",
             request_type="GET",
             params={"symbol": pair,
                     "limit": 1},
         )
 
-        return response.json()['result'][0]['price']
+        return {
+            'pair': data.json()['result'][0]['symbol'],
+            'timestamp': data.json()['result'][0]['trade_time_ms'],
+            'latest_price': float(data.json()['result'][0]['price'])
+        }
 
     def _verify_limit_order_posted(self,
                                    pair: str,

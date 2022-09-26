@@ -102,18 +102,5 @@ def compute_time_difference(
         return (end_time_s - start_time_s) / (3600 * 24)
 
 
-def prepare_args(args: dict,
-                 return_dict: dict) -> tuple:
-    """
-
-    Args:
-        args:
-        return_dict:
-
-    Returns:
-
-    """
-    return tuple(args.values()) + (return_dict,)
-
 
 

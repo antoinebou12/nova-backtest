@@ -1,4 +1,4 @@
-from nova.utils.helpers import interval_to_milliseconds, prepare_args
+from nova.utils.helpers import interval_to_milliseconds
 from nova.utils.constant import DATA_FORMATING
 from requests import Request, Session
 from urllib.parse import urlencode
@@ -8,7 +8,7 @@ import asyncio
 import hashlib
 import time
 import hmac
-from multiprocessing import Process, Manager
+from multiprocessing import Process, Manager, Pool
 from typing import Union
 
 
@@ -805,6 +805,8 @@ class Binance:
         Returns:
 
         """
+
+
         ob = self.get_order_book(pair=pair)
         _type = 'bids' if side == 'BUY' else 'asks'
         best_price = float(ob[_type][0]['price'])
@@ -825,6 +827,8 @@ class Binance:
             params=_params,
             signed=True
         )
+
+        print('inside inside inside inside')
 
         if 'orderId' in list(response.keys()):
             return self._verify_limit_posted(
@@ -917,7 +921,7 @@ class Binance:
                                  quantity,
                                  sl_price,
                                  tp_price,
-                                 return_dict):
+                                 ):
         """
         Optimized way to enter in position. The method tries to enter with limit orders during 2 minutes.
         If after 2min we still did not enter with the desired amount, a market order is sent.
@@ -979,8 +983,6 @@ class Binance:
             sl_order=sl_data
         )
 
-        return_dict[pair] = data
-
         return data
 
     def _format_enter_limit_info(self, all_orders: list, tp_order: dict, sl_order: dict):
@@ -1024,20 +1026,22 @@ class Binance:
 
     def enter_limit_then_market(self, orders: list):
 
-        manager = Manager()
-        return_dict = manager.dict()
+        processes = []
+        all_arguments = []
+        for order in orders:
+            arguments = tuple(order.values())
+            all_arguments.append(arguments)
+        #     p = Process(target=self._enter_limit_then_market, args=arguments)
+        #     p.start()
+        #     processes.append(p)
+        #
+        # for process in processes:
+        #     process.join()
 
-        running_tasks = [
-            Process(target=self._enter_limit_then_market, args=prepare_args(order, return_dict)) for order in orders
-        ]
+        with Pool(4) as pool:
+            results = pool.starmap(func=self._enter_limit_then_market, iterable=all_arguments)
 
-        for running_task in running_tasks:
-            running_task.start()
-
-        for running_task in running_tasks:
-            running_task.join()
-
-        return dict(return_dict)
+        print(results)
 
     def _exit_limit_then_market(self, pair: str, type_pos: str, quantity: float, return_dict):
 

@@ -136,7 +136,7 @@ class Bot(TelegramBOT):
 
         remaining_position = int(self.max_pos - len(self.position_opened.keys()))
 
-        actual_pos = self.client.get_actual_positions(list_pair=self.list_pair)
+        actual_pos = self.client.get_actual_positions(pairs=self.list_pair)
 
         for pair in self.list_pair:
 
@@ -154,8 +154,8 @@ class Bot(TelegramBOT):
 
                 _action['type_pos'] = 'LONG' if entry_signal['action'] == 1 else 'SHORT'
 
-                actual_price = self.client.get_last_price(pair=pair)
-                _action['qty'] = (self.bankroll * self.position_size) / actual_price
+                actual_price = self.client.get_last_price(pair=pair)['latest_price']
+                _action['quantity'] = (self.bankroll * self.position_size) / actual_price
                 _action['sl_price'] = entry_signal['sl_price']
                 _action['tp_price'] = entry_signal['tp_price']
 
@@ -463,17 +463,15 @@ class Bot(TelegramBOT):
 
         Returns:
         """
-        return None
+        total_pnl = (self.bankroll + self.realizedPNL + self.unrealizedPNL) / self.bankroll
+        max_down = True if total_pnl <= 1 - self.max_down else False
+        return max_down
 
     def update_available_trading_pairs(self):
-
         pairs_info = self.client.get_pairs_info()
-
         for pair in self.list_pair:
-
             if pair not in pairs_info.keys():
                 print(f'{pair} not available for trading -> removing from list pairs')
-
                 self.list_pair.remove(pair)
 
     def production_run(self):
@@ -483,29 +481,32 @@ class Bot(TelegramBOT):
         print(f'Nova L@bs {self.bot_name} starting')
 
         if self.telegram_notification:
-            self.telegram_bot_starting(bot_name=self.bot_name,
-                                       exchange=self.exchange)
+            self.telegram_bot_starting(
+                bot_name=self.bot_name,
+                exchange=self.exchange
+            )
+            print(f'Telegram Messages', "\U00002705")
 
         # start account
         print(f'Setting up account', "\U000023F3", end="\r")
-        self.client.setup_account(bankroll=self.bankroll,
-                                  quote_asset=self.quote_asset,
-                                  leverage=self.leverage,
-                                  max_down=self.max_down,
-                                  list_pairs=self.list_pair
-                                  )
+        self.client.setup_account(
+            bankroll=self.bankroll,
+            quote_asset=self.quote_asset,
+            leverage=self.leverage,
+            max_down=self.max_down,
+            list_pairs=self.list_pair
+        )
         print(f'Account set', "\U00002705")
 
         # get historical price (and volume) evolution
         print(f'Fetching historical data', "\U000023F3", end="\r")
-        t0 = time.time()
         self.prod_data = asyncio.run(self.client.get_prod_data(
             list_pair=self.list_pair,
             interval=self.candle,
             nb_candles=self.historical_window,
             current_state=None
         ))
-        print(f'Historical data downloaded (in {round(time.time() - t0, 2)}s)', "\U00002705")
+        print(f'Historical data downloaded', "\U00002705")
 
         # Begin the infinite loop
         while True:
@@ -517,24 +518,22 @@ class Bot(TelegramBOT):
 
                     print(f'------- time : {datetime.utcnow()} -------\nNew candle opens')
 
-                    # todo: check if we reached max down
-                    self.security_max_down()
+                    #
+                    if self.security_max_down():
+                        self.security_close_all_positions()
+                        break
 
                     self.update_available_trading_pairs()
 
                     # update historical data
-                    print("Updating historical data", "\U000023F3", end="\r")
-
-                    t0 = time.time()
-                    # 4 - Update dataframes
+                    print("Fetching Latest Data", "\U000023F3", end="\r")
                     self.prod_data = asyncio.run(self.client.get_prod_data(
                         list_pair=self.list_pair,
                         interval=self.candle,
                         nb_candles=self.historical_window,
                         current_state=self.prod_data
                     ))
-
-                    print(f"Historical data updated (in {round(time.time() - t0, 2)}s)", "\U00002705")
+                    print(f"Data Updated", "\U00002705")
 
                     if len(self.position_opened) > 0:
                         # verify positions (reach tp or sl)

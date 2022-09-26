@@ -26,7 +26,7 @@ def asserts_entering_positions(
         telegram_bot_chat_id=''
     )
 
-    bot.exiting_positions()
+    bot.production_run()
 
 
 def test_entering_positions():

@@ -41,7 +41,6 @@ def asserts_enter_limit_then_market(exchange: str,
         quantity=quantity,
         sl_price=sl_price,
         tp_price=tp_price,
-        return_dict={}
     )
 
     keys_expected = ['pair', 'position_type', 'original_position_size', 'current_position_size', 'entry_time', 'tp_id',
