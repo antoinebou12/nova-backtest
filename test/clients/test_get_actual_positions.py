@@ -53,7 +53,7 @@ def asserts_get_actual_positions(
 
         assert len(positions_.keys()) == nb_pos
         assert positions_[pair]['position_size'] == value["quantity"]
-        assert positions_[pair]['type'] == value['type_pos']
+        assert positions_[pair]['type_pos'] == value['type_pos']
 
         assert isinstance(positions_[pair]['entry_price'], float)
         assert isinstance(positions_[pair]['unrealized_pnl'], float)
@@ -68,7 +68,7 @@ def asserts_get_actual_positions(
 
         client.exit_market_order(
                 pair=pair,
-                type_pos=_info['type'],
+                type_pos=_info['type_pos'],
                 quantity=_info['position_size']
             )
 

@@ -7,15 +7,15 @@ def assert_get_token_balance(
         quote_asset: str
 ):
 
+    # Test does not work with Testnet
     client = clients(
         exchange=exchange,
-        key=config(f"{exchange}TestAPIKey"),
-        secret=config(f"{exchange}TestAPISecret"),
-        testnet=True
+        key=config(f"{exchange}APIKey"),
+        secret=config(f"{exchange}APISecret"),
+        testnet=False
     )
 
     balances = client.get_token_balance(quote_asset=quote_asset)
-
     assert isinstance(balances, float)
     assert balances >= 0
 
@@ -28,10 +28,10 @@ def test_get_token_balance():
             'exchange': 'binance',
             'quote_asset': 'USDT'
         },
-        {
-            'exchange': 'bybit',
-            'quote_asset': 'USDT'
-        }
+        # {
+        #     'exchange': 'bybit',
+        #     'quote_asset': 'USDT'
+        # }
     ]
 
     for _test in all_tests:

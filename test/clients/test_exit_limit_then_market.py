@@ -26,7 +26,7 @@ def asserts_exit_limit_then_market(exchange: str,
 
             client.exit_market_order(
                 pair=_pair,
-                type_pos=_info['type'],
+                type_pos=_info['type_pos'],
                 quantity=_info['position_size']
             )
 
@@ -44,8 +44,9 @@ def asserts_exit_limit_then_market(exchange: str,
         pair=pair,
         type_pos=type_pos,
         quantity=quantity,
-        return_dict={}
     )
+
+    print(exit_orders)
 
     time.sleep(1)
 

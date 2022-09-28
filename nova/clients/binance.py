@@ -365,13 +365,6 @@ class Binance:
             params={"symbol": pair}
         )
 
-    def get_balance(self) -> dict:
-        return self._send_request(
-            end_point=f"/fapi/v2/balance",
-            request_type="GET",
-            signed=True
-        )
-
     async def get_prod_candles(
             self,
             session,
@@ -499,7 +492,13 @@ class Binance:
         Returns:
             Available based_asset amount.
         """
-        balances = self.get_balance()
+
+        balances = self._send_request(
+            end_point=f"/fapi/v2/balance",
+            request_type="GET",
+            signed=True
+        )
+
         for balance in balances:
             if balance['asset'] == quote_asset:
                 return float(balance['availableBalance'])
@@ -806,7 +805,6 @@ class Binance:
 
         """
 
-
         ob = self.get_order_book(pair=pair)
         _type = 'bids' if side == 'BUY' else 'asks'
         best_price = float(ob[_type][0]['price'])
@@ -827,8 +825,6 @@ class Binance:
             params=_params,
             signed=True
         )
-
-        print('inside inside inside inside')
 
         if 'orderId' in list(response.keys()):
             return self._verify_limit_posted(
@@ -977,13 +973,11 @@ class Binance:
             sl_price=sl_price
         )
 
-        data = self._format_enter_limit_info(
+        return self._format_enter_limit_info(
             all_orders=all_orders,
             tp_order=tp_data,
             sl_order=sl_data
         )
-
-        return data
 
     def _format_enter_limit_info(self, all_orders: list, tp_order: dict, sl_order: dict):
 
@@ -1005,8 +999,6 @@ class Binance:
             'entry_fees': 0
         }
 
-        time.sleep(1)
-
         _price_information = []
         _avg_price = 0
 
@@ -1026,24 +1018,22 @@ class Binance:
 
     def enter_limit_then_market(self, orders: list):
 
-        processes = []
+        final = {}
         all_arguments = []
+
         for order in orders:
             arguments = tuple(order.values())
             all_arguments.append(arguments)
-        #     p = Process(target=self._enter_limit_then_market, args=arguments)
-        #     p.start()
-        #     processes.append(p)
-        #
-        # for process in processes:
-        #     process.join()
 
-        with Pool(4) as pool:
+        with Pool() as pool:
             results = pool.starmap(func=self._enter_limit_then_market, iterable=all_arguments)
 
-        print(results)
+        for _information in results:
+            final[_information['pair']] = _information
 
-    def _exit_limit_then_market(self, pair: str, type_pos: str, quantity: float, return_dict):
+        return final
+
+    def _exit_limit_then_market(self, pair: str, type_pos: str, quantity: float):
 
         side = 'SELL' if type_pos == 'LONG' else 'BUY'
 
@@ -1066,13 +1056,9 @@ class Binance:
             if market_order:
                 all_orders.append(market_order)
 
-        data = self._format_exit_limit_info(
+        return self._format_exit_limit_info(
             all_orders=all_orders
         )
-
-        return_dict[pair] = data
-
-        return data
 
     def _format_exit_limit_info(self, all_orders: list):
 
@@ -1113,20 +1099,20 @@ class Binance:
             list of positions info after executing all exit orders.
         """
 
-        manager = Manager()
-        return_dict = manager.dict()
+        final = {}
+        all_arguments = []
 
-        running_tasks = [
-            Process(target=self._exit_limit_then_market, args=prepare_args(order, return_dict)) for order in orders
-        ]
+        for order in orders:
+            arguments = tuple(order.values())
+            all_arguments.append(arguments)
 
-        for running_task in running_tasks:
-            running_task.start()
+        with Pool() as pool:
+            results = pool.starmap(func=self._exit_limit_then_market, iterable=all_arguments)
 
-        for running_task in running_tasks:
-            running_task.join()
+        for _information in results:
+            final[_information['pair']] = _information
 
-        return dict(return_dict)
+        return final
 
     def cancel_order(self, pair: str, order_id: str):
         data = self._send_request(
