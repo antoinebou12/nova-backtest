@@ -8,7 +8,7 @@ import asyncio
 import hashlib
 import time
 import hmac
-from multiprocessing import Process, Manager, Pool
+from multiprocessing import Pool
 from typing import Union
 
 
@@ -234,7 +234,7 @@ class Binance:
         Args:
             quote_asset:
             leverage:
-            list_pairs: todo:  execute setup only if asset in list
+            list_pairs:
             bankroll:
             max_down:
 
@@ -242,24 +242,31 @@ class Binance:
             None
         """
         accounts = self.get_account_info()
-        positions_info = self.get_actual_positions(pairs=list_pairs)
+        positions_info = self._send_request(
+                end_point=f"/fapi/v2/positionRisk",
+                request_type="GET",
+                signed=True
+        )
+        balance = self.get_token_balance(quote_asset=quote_asset)
         position_mode = self.get_position_mode()
 
         for info in positions_info:
 
-            # ISOLATE MARGIN TYPE -> ISOLATED
-            if info['marginType'] != 'isolated':
-                self.change_margin_type(
-                    pair=info['symbol'],
-                    margin_type="ISOLATED",
-                )
+            if info['symbol'] in list_pairs:
 
-            # SET LEVERAGE
-            if int(info['leverage']) != leverage:
-                self.change_leverage(
-                    pair=info['symbol'],
-                    leverage=leverage,
-                )
+                # ISOLATE MARGIN TYPE -> ISOLATED
+                if info['marginType'] != 'isolated':
+                    self.change_margin_type(
+                        pair=info['symbol'],
+                        margin_type="ISOLATED",
+                    )
+
+                # SET LEVERAGE
+                if int(info['leverage']) != leverage:
+                    self.change_leverage(
+                        pair=info['symbol'],
+                        leverage=leverage,
+                    )
 
         if position_mode['dualSidePosition']:
             self.change_position_mode(
@@ -270,8 +277,9 @@ class Binance:
 
             if x["asset"] == quote_asset:
                 # Assert_1: The account need to have the minimum bankroll
-                assert float(x['availableBalance']) >= bankroll * (1 + max_down), f"The account has only {round(balance, 2)} {quote_asset}. " \
-                                                             f"{round(bankroll * (1 + max_down), 2)} {quote_asset} is required"
+                assert float(x['availableBalance']) >= bankroll * (1 + max_down), \
+                    f"The account has only {round(balance, 2)} {quote_asset}. " \
+                    f"{round(bankroll * (1 + max_down), 2)} {quote_asset} is required"
 
                 # Assert_2: The account has margin available
                 assert x['marginAvailable']
@@ -937,8 +945,8 @@ class Binance:
         residual_size, all_orders = self._looping_limit_orders(
             pair=pair,
             side=side,
-            quantity=quantity,
-            duration=120,
+            quantity=float(round(quantity, self.pairs_info[pair]['quantityPrecision'])),
+            duration=60,
             reduce_only=False
         )
 

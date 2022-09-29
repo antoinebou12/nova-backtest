@@ -40,7 +40,7 @@ def asserts_integration_orders(exchange: str, orders: list):
     for _order_ in orders:
         assert _order_['pair'] in list(exit_orders.keys())
 
-    print(f"Test enter_limit_then_market for {exchange.upper()} successful")
+    print(f"Test integration_orders for {exchange.upper()} successful")
 
 def test_integration_orders():
 

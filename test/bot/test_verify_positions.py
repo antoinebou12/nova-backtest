@@ -1,12 +1,17 @@
 from decouple import config
 from nova.utils.strategy import RandomStrategy
+from nova.utils.helpers import is_opening_candle
+import asyncio
+from multiprocessing import set_start_method
+set_start_method('fork')
 
 
-def asserts_entering_positions(
+def asserts_verify_positions(
         exchange: str,
         quote_asset: str,
         list_pair: list
 ):
+
     bot = RandomStrategy(
         exchange=exchange,
         key=config(f"{exchange}TestAPIKey"),
@@ -26,10 +31,45 @@ def asserts_entering_positions(
         telegram_bot_chat_id=''
     )
 
-    bot.verify_positions()
+    bot.client.setup_account(
+        bankroll=bot.bankroll,
+        quote_asset=bot.quote_asset,
+        leverage=bot.leverage,
+        max_down=bot.max_down,
+        list_pairs=bot.list_pair
+    )
+
+    bot.prod_data = asyncio.run(bot.client.get_prod_data(
+        list_pair=bot.list_pair,
+        interval=bot.candle,
+        nb_candles=bot.historical_window,
+        current_state=None
+    ))
+
+    done = False
+
+    print('Starting the Loop')
+
+    while not done:
+
+        if is_opening_candle(interval=bot.candle):
+
+            print('Inside Position')
+
+            if len(bot.position_opened) > 0:
+
+                bot.verify_positions()
+
+                print('Verify Setup Done')
+
+                done = True
+
+            bot.entering_positions()
+
+    print(f"Test verify_positions for {exchange.upper()} successful")
 
 
-def test_entering_positions():
+def test_verify_positions():
     all_tests = [
         {
             'exchange': 'binance',
@@ -39,11 +79,12 @@ def test_entering_positions():
     ]
 
     for _test in all_tests:
-        asserts_entering_positions(
+
+        asserts_verify_positions(
                 exchange=_test['exchange'],
                 quote_asset=_test['quote_asset'],
                 list_pair=_test['list_pair']
         )
 
 
-test_entering_positions()
+test_verify_positions()

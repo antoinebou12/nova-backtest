@@ -1,6 +1,8 @@
 from decouple import config
 from nova.utils.strategy import RandomStrategy
 import asyncio
+from multiprocessing import set_start_method
+set_start_method('fork')
 
 
 def asserts_entering_positions(
@@ -43,6 +45,8 @@ def asserts_entering_positions(
     ))
 
     bot.entering_positions()
+
+    print(f"Test positions_enter for {exchange.upper()} successful")
 
 
 def test_entering_positions():

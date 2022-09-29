@@ -104,4 +104,4 @@ class RandomStrategy(Bot):
     def exit_signals_prod(self,
                           pair: str,
                           type_pos: str):
-        return random.random() > 0.95
+        return random.random() > 0.60

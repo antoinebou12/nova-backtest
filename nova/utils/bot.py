@@ -252,7 +252,7 @@ class Bot(TelegramBOT):
         all_exits = []
 
         # Add a security by getting all real actual positions and call exit function only if we are still in position
-        current_positions = self.client.get_actual_positions(list_pair=self.list_pair)
+        current_positions = self.client.get_actual_positions(pairs=self.list_pair)
 
         for _pair, _info in self.position_opened.items():
             entry_time_date = datetime.fromtimestamp(_info['entry_time'] // 1000)
@@ -261,8 +261,12 @@ class Bot(TelegramBOT):
             diff = date - entry_time_date + timedelta(minutes=3)
             diff_in_hours = diff.total_seconds() / 3600
 
-            exit_signal = self.exit_signals_prod(pair=_pair,
-                                                 type_pos=self.position_opened[_pair]['type_pos'])
+            exit_signal = self.exit_signals_prod(
+                pair=_pair,
+                type_pos=self.position_opened[_pair]['position_type']
+            )
+
+            print(f'exit_signal is {exit_signal}')
 
             in_position = _pair in current_positions.keys()
 
@@ -270,7 +274,7 @@ class Bot(TelegramBOT):
                 # exit_type = 'EXIT_SIGNAL' if exit_signal == 1 else 'MAX_HOLDING'
                 print(f'Exiting {_pair} position')
                 all_exits.append({'pair': _pair,
-                                  'type_pos': _info['type_pos'],
+                                  'type_pos': _info['position_type'],
                                   'position_size': _info['current_pos_size'],
                                   })
 
@@ -316,25 +320,8 @@ class Bot(TelegramBOT):
                 sl_id=_info['sl_id']
             )
 
-            # tp_manually_canceled = (data['tp']['order_status'] == 'CANCELED') and (data['current_quantity'] != 0)
-            # sl_manually_canceled = (data['sl']['order_status'] == 'CANCELED') and (data['current_quantity'] != 0)
-            # position_size_manually_changed = (data['current_quantity'] != _info['original_pos_size']) and \
-            #                                  (data['tp']['executedQuantity'] == 0) and \
-            #                                  (data['sl']['order_status'] != 'FILLED')
-            #
-            # # 1 Verify if still opened and not Cancelled
-            # if tp_manually_canceled or sl_manually_canceled or position_size_manually_changed:
-            #     print(f"{_pair} Position or Orders have been manually changed -> delete pos from bot's management")
-            #
-            #     # todo: delete the position data in nova labs backend
-            #     self._push_backend()
-            #
-            #     self.delete_position_in_local(pair=_pair)
-            #
-            #     continue
-
             # 2 Verify if sl has been executed (ALL SL ARE MARKET)
-            if data['sl']['order_status'] == 'FILLED':
+            if data['sl']['status'] == 'FILLED':
                 # Cancel TP order
                 self.client.cancel_order(pair=_pair, order_id=data['tp']['order_id'])
 
@@ -358,7 +345,7 @@ class Bot(TelegramBOT):
                 continue
 
             # 3 Verify if tp has been executed
-            if data['tp']['order_status'] in ['FILLED', 'PARTIALLY_FILLED']:
+            if data['tp']['status'] in ['FILLED', 'PARTIALLY_FILLED']:
 
                 remaining_quantity = data['tp']['originalQuantity'] - data['tp']['executedQuantity']
 
@@ -518,8 +505,8 @@ class Bot(TelegramBOT):
 
                     print(f'------- time : {datetime.utcnow()} -------\nNew candle opens')
 
-                    #
                     if self.security_max_down():
+                        print('Security Maximum Loss Triggered')
                         self.security_close_all_positions()
                         break
 
