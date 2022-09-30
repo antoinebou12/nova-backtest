@@ -25,16 +25,16 @@ def assert_get_earliest_timestamp(exchange: str, pair: str, interval: str):
 def test_get_earliest_timestamp():
 
     all_test = [
-        {
-            'exchange': 'binance',
-            'pair': 'BTCUSDT',
-            'interval': '1d'
-        },
         # {
-        #     'exchange': 'bybit',
+        #     'exchange': 'binance',
         #     'pair': 'BTCUSDT',
         #     'interval': '1d'
-        # }
+        # },
+        {
+            'exchange': 'bybit',
+            'pair': 'BTCUSDT',
+            'interval': '1d'
+        }
     ]
 
     for _test in all_test:

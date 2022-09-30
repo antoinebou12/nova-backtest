@@ -85,7 +85,7 @@ def test_get_actual_positions():
 
     all_tests = [
         {
-            'exchange': 'binance',
+            'exchange': 'bybit',
             'info': {
                 'BTCUSDT': {'type_pos': 'LONG', 'quantity': 0.01},
                 'ETHUSDT': {'type_pos': 'SHORT', 'quantity': 0.1}

@@ -13,6 +13,7 @@ import aiohttp
 from multiprocessing import Process, Manager
 from datetime import datetime, timezone
 import uuid
+from typing import Union
 
 
 class Bybit:
@@ -699,34 +700,32 @@ class Bybit:
         assert balance >= bankroll * (1 + max_down), f"The account has only {round(balance, 2)} {quote_asset}. " \
                                                      f"{round(bankroll * (1 + max_down), 2)} {quote_asset} is required"
 
-    def _get_position_info(self,
-                           pair: str = None):
+    def get_actual_positions(self,
+                             pairs: Union[list, str]) -> dict:
 
-        params = {}
-        if pair:
-            params = {'symbol': pair}
+        _params = {}
+        if isinstance(pairs, str):
+            _params['symbol'] = pairs
 
         response = self._send_request(
             end_point=f"/private/linear/position/list",
             request_type="GET",
-            params=params,
+            params=_params,
             signed=True
         )
 
-        return response.json()['result']
-
-    def get_actual_positions(self,
-                             list_pair: list):
-
-        pos_inf = self._get_position_info()
+        pos_inf = response.json()['result']
 
         positions = {}
 
-        for pos in pos_inf:
-            pair = pos['data']['symbol']
-            amt = pos['data']['size']
-            if (pair in list_pair) and (amt != 0):
-                positions[pair] = pos['data']
+        if len(pos_inf) > 1:
+            for pos in pos_inf:
+                pair = pos['data']['symbol']
+                amt = pos['data']['size']
+                if (pair in pairs) and (amt != 0):
+                    positions[pair] = pos['data']
+        elif pos_inf[0]['size'] !=0:
+            positions = pos_inf[0]
 
         return positions
 
@@ -765,7 +764,7 @@ class Bybit:
         return {
             'tp': tp_order,
             'sl': sl_order,
-            'current_quantity': self._get_position_info(pair=pair)[0]['size']
+            'current_quantity': self.get_actual_positions(pairs=pair)['size']
         }
 
     def _looping_limit_orders(self,
@@ -825,12 +824,12 @@ class Bybit:
                                   order_id=order['order_id'])
 
                 # Get current position size
-                pos_info = self._get_position_info(pair=pair)
+                pos_info = self.get_actual_positions(pairs=pair)
 
                 if reduce_only:
-                    residual_size = pos_info[0]['size']
+                    residual_size = pos_info['size']
                 else:
-                    residual_size = position_size - pos_info[0]['size']
+                    residual_size = position_size - pos_info['size']
 
         return {'residual_size': residual_size, 'all_limit_orders': all_limit_orders}
 
@@ -866,10 +865,9 @@ class Bybit:
     def _enter_limit_then_market(self,
                                  pair,
                                  type_pos,
-                                 qty,
+                                 quantity,
                                  sl_price,
-                                 tp_price,
-                                 return_dict):
+                                 tp_price):
         """
         Optimized way to enter in position. The method tries to enter with limit orders during 2 minutes.
         If after 2min we still did not entered with the desired amount, a market order is sent.
@@ -878,7 +876,7 @@ class Bybit:
             pair:
             type_pos:
             sl_price:
-            qty:
+            quantity:
 
         Returns:
             Size of the current position
@@ -893,9 +891,9 @@ class Bybit:
 
         sl_price = round(sl_price, self.pairs_info[pair]['pricePrecision'])
         tp_price = round(tp_price, self.pairs_info[pair]['pricePrecision'])
-        qty = round(qty, self.pairs_info[pair]['quantityPrecision'])
+        quantity = round(quantity, self.pairs_info[pair]['quantityPrecision'])
 
-        after_looping_limit = self._looping_limit_orders(pair=pair, side=side, position_size=qty, sl_price=sl_price,
+        after_looping_limit = self._looping_limit_orders(pair=pair, side=side, position_size=quantity, sl_price=sl_price,
                                                          duration=120, reduce_only=False)
 
         residual_size = after_looping_limit['residual_size']
@@ -905,28 +903,28 @@ class Bybit:
         if residual_size != 0:
             market_order = self.enter_market(pair=pair,
                                              side=side,
-                                             qty=residual_size,
+                                             quantity=residual_size,
                                              sl_price=sl_price)
 
             if market_order:
                 all_orders.append(market_order)
 
         # Get current position info
-        pos_info = self._get_position_info(pair=pair)
+        pos_info = self.get_actual_positions(pairs=pair)
 
         tp_side = 'Sell' if side == 'Buy' else 'Buy'
 
         # Place take profit limit order
         tp_order = self.place_limit_tp(pair=pair,
                                        side=tp_side,
-                                       position_size=pos_info[0]['size'],
+                                       position_size=pos_info['size'],
                                        tp_price=round(tp_price, self.pairs_info[pair]['pricePrecision']))
 
         sl_order = self.get_sl_order(pair=pair)
 
         all_filled_orders = self._get_all_filled_orders(orders=all_orders)
 
-        return_dict[pair] = self._get_entries_info_from_orders(all_filled_orders=all_filled_orders,
+        return self._get_entries_info_from_orders(all_filled_orders=all_filled_orders,
                                                                tp_order=tp_order,
                                                                sl_order=sl_order)
 
@@ -945,14 +943,14 @@ class Bybit:
 
         pair = tp_order['symbol']
         entry_info = {'pair': pair,
-                      'type_pos': 'LONG' if tp_order['side'] == 'Sell' else 'SHORT'}
+                      'position_type': 'LONG' if tp_order['side'] == 'Sell' else 'SHORT'}
 
         pos_size = sum([order['cum_exec_qty'] for order in all_filled_orders])
         entry_price = sum([order['cum_exec_value'] for order in all_filled_orders]) / pos_size
         fees_paid = sum([order['cum_exec_fee'] for order in all_filled_orders])
 
-        entry_info['current_pos_size'] = pos_size
-        entry_info['original_pos_size'] = pos_size
+        entry_info['current_position_size'] = pos_size
+        entry_info['original_position_size'] = pos_size
         entry_info['entry_price'] = round(entry_price, self.pairs_info[pair]['pricePrecision'])
         entry_info['entry_fees'] = fees_paid
 
@@ -968,7 +966,7 @@ class Bybit:
         entry_info['trade_status'] = 'ACTIVE'
 
         # Initialize exit info
-        entry_info['qty_exited'] = 0
+        entry_info['quantity_exited'] = 0
         entry_info['exit_fees'] = 0
         entry_info['last_exit_time'] = 0
         entry_info['exit_price'] = 0
@@ -978,8 +976,7 @@ class Bybit:
     def _exit_limit_then_market(self,
                                 pair,
                                 type_pos,
-                                position_size,
-                                return_dict):
+                                position_size):
         """
         Optimized way to exit position. The method tries to exit with limit orders during 2 minutes.
         If after 2min we still did not exit totally, a market order is sent.
@@ -1050,32 +1047,23 @@ class Bybit:
 
         return args
 
-    def enter_limit_then_market(self,
-                                orders: list) -> dict:
-        """
-        Parallelize the execution of _enter_limit_then_market.
-        Args:
-            orders: list of dict. Each element represents the params of an order.
-            [{'pair': 'BTCUSDT', 'type_pos': 'LONG', 'qty': 0.1, 'sl_price': 18000, 'tp_price': 20000},
-             {'pair': 'ETHUSDT', 'type_pos': 'SHORT', 'qty': 1, 'sl_price': 1200, 'tp_price': 2000}]
-        Returns:
-            list of positions info after executing all enter orders.
-        """
+    def enter_limit_then_market(self, orders: list):
 
-        manager = Manager()
-        return_dict = manager.dict()
+        final = {}
+        all_arguments = []
 
-        running_tasks = [Process(target=self._enter_limit_then_market, args=self.prepare_args(order, return_dict)) for
-                         order in
-                         orders]
+        for order in orders:
+            arguments = tuple(order.values())
+            all_arguments.append(arguments)
 
-        for running_task in running_tasks:
-            running_task.start()
+        with Pool() as pool:
+            results = pool.starmap(func=self._enter_limit_then_market, iterable=all_arguments)
 
-        for running_task in running_tasks:
-            running_task.join()
+        for _information in results:
+            final[_information['pair']] = _information
 
-        return dict(return_dict)
+        return final
+
 
     def exit_limit_then_market(self,
                                orders: list) -> dict:
@@ -1090,20 +1078,20 @@ class Bybit:
             list of positions info after executing all exit orders.
         """
 
-        manager = Manager()
-        return_dict = manager.dict()
+        final = {}
+        all_arguments = []
 
-        running_tasks = [Process(target=self._exit_limit_then_market, args=self.prepare_args(order, return_dict)) for
-                         order in
-                         orders]
+        for order in orders:
+            arguments = tuple(order.values())
+            all_arguments.append(arguments)
 
-        for running_task in running_tasks:
-            running_task.start()
+        with Pool() as pool:
+            results = pool.starmap(func=self._exit_limit_then_market, iterable=all_arguments)
 
-        for running_task in running_tasks:
-            running_task.join()
+        for _information in results:
+            final[_information['pair']] = _information
 
-        return dict(return_dict)
+        return final
 
     async def get_prod_candles(self, session, pair, interval, window, current_pair_state: dict = None):
 
@@ -1213,3 +1201,13 @@ class Bybit:
             for info in all_info:
                 all_data.update(info)
             return all_data
+
+# from decouple import config
+# exchange='bybit'
+# self = Bybit( key=config(f"{exchange}TestAPIKey"),
+#         secret=config(f"{exchange}TestAPISecret"),
+#         testnet=True)
+#
+# list_pos = self.get_actual_positions(pairs=['BTCUSDT'])
+# pos = self.get_actual_positions(pairs='BTCUSDT')
+#

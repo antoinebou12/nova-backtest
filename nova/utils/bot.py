@@ -277,6 +277,12 @@ class Bot(TelegramBOT):
         )
 
         for _pair_, _exit_info in completed_exits.items():
+            # Cancel TP and SL orders
+            self.client.cancel_order(pair=_pair_,
+                                     order_id=self.position_opened[_pair_]['tp_id'])
+            self.client.cancel_order(pair=_pair_,
+                                     order_id=self.position_opened[_pair_]['sl_id'])
+
             # Add new exit information to local bot positions data
             self.add_exit_info(pair=_pair_,
                                exit_info=_exit_info,
@@ -378,34 +384,6 @@ class Bot(TelegramBOT):
                                                           tp_info=data['tp'])
 
         print('All Positions under BOT management updated')
-
-    def update_tp_sl(
-            self,
-            pair: str,
-            order_id: str,
-            order_type: str,
-            exit_side: str,
-            stop_price: float,
-            quantity: float
-    ):
-
-        print(f"Update Order: {pair}")
-
-        # Cancel old Take profit order
-        self.client.cancel_order(
-            pair=pair,
-            order_id=order_id
-        )
-
-        # Create new Take profit order
-        tp_open = self.client.sl_market_order(
-            pair=pair,
-            side=exit_side,
-            stop_price=stop_price,
-            quantity=quantity
-        )
-
-        self.position_opened[pair][f'{order_type}_id'] = tp_open['order_id']
 
     def _push_backend(self):
         """
