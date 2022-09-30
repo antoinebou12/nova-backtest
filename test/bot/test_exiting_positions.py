@@ -62,6 +62,8 @@ def asserts_exiting_position(
 
                 print('Exiting Position Done')
 
+                done = True
+
             bot.entering_positions()
 
     print(f"Test verify_positions for {exchange.upper()} successful")

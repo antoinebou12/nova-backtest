@@ -189,9 +189,10 @@ class Bot(TelegramBOT):
         # Get total fees paid
         trade_info['cum_exec_fees'] = trade_info['exit_fees'] + trade_info['entry_fees']
 
-        side = 1 if trade_info['type_pos'] == 'LONG' else -1
+        side = 1 if trade_info['position_type'] == 'LONG' else -1
+
         non_realized_pnl = side * (trade_info['exit_price'] - trade_info['entry_price']) \
-                           * trade_info['original_pos_size']
+                           * trade_info['original_position_size']
 
         trade_info['realized_pnl'] = round(non_realized_pnl - trade_info['cum_exec_fees'], 2)
 
@@ -202,31 +203,28 @@ class Bot(TelegramBOT):
                       exit_info: dict,
                       exit_type: str):
 
-        trade_info = self.position_opened[pair]
-
-        trade_info['exit_fees'] += exit_info['exit_fees']
-        trade_info['qty_exited'] += exit_info['executedQuantity']
-        trade_info['current_pos_size'] = trade_info['original_pos_size'] - trade_info['qty_exited']
-        trade_info['last_exit_time'] = exit_info['last_exit_time']
+        self.position_opened[pair]['exit_fees'] += exit_info['exit_fees']
+        self.position_opened[pair]['quantity_exited'] += exit_info['executed_quantity']
+        self.position_opened[pair]['current_pos_size'] = self.position_opened[pair]['original_position_size'] - \
+                                                         self.position_opened[pair]['quantity_exited']
+        self.position_opened[pair]['last_exit_time'] = exit_info['last_exit_time']
 
         if exit_type == 'TP':
-            trade_info['exit_price'] = (exit_info['exit_price'] * exit_info['executedQuantity']) \
-                                       / trade_info['original_pos_size']
+            self.position_opened[pair]['exit_price'] = (exit_info['exit_price'] * exit_info['executed_quantity']) \
+                                       / self.position_opened[pair]['original_position_size']
         else:
-            trade_info['exit_price'] += (exit_info['exit_price'] * exit_info['executedQuantity']) \
-                                        / trade_info['original_pos_size']
+            self.position_opened[pair]['exit_price'] += (exit_info['exit_price'] * exit_info['executed_quantity']) \
+                                        / self.position_opened[pair]['original_position_size']
 
-        if trade_info['current_pos_size'] == 0:
-            trade_info['trade_status'] = 'CLOSED'
-
-        self.position_opened[pair] = trade_info
+        if self.position_opened[pair]['current_position_size'] == 0:
+            self.position_opened[pair]['trade_status'] = 'CLOSED'
 
     def update_local_state(self,
                            pair: str):
 
         self.realizedPNL += self.position_opened[pair]['realized_pnl']
 
-        self.delete_position_in_local(pair=pair)
+        del self.position_opened[pair]
 
         if self.telegram_notification:
             self.telegram_realized_pnl(pnl=self.realizedPNL)
@@ -234,11 +232,6 @@ class Bot(TelegramBOT):
         # todo: add exited position to local trades history
 
         print(f'Current pnl = {round(self.realizedPNL, 2)} $')
-
-    def delete_position_in_local(self,
-                                 pair: str):
-
-        del self.position_opened[pair]
 
     def exiting_positions(self):
         """
@@ -275,7 +268,7 @@ class Bot(TelegramBOT):
                 print(f'Exiting {_pair} position')
                 all_exits.append({'pair': _pair,
                                   'type_pos': _info['position_type'],
-                                  'position_size': _info['current_pos_size'],
+                                  'quantity': _info['current_position_size'],
                                   })
 
         # Execute Exit Orders

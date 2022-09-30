@@ -1072,7 +1072,7 @@ class Binance:
 
         final_data = {
             'pair': all_orders[0]['pair'],
-            'current_position_size': 0,
+            'executed_quantity': 0,
             'last_exit_time': all_orders[-1]['time'],
             'exit_fees': 0,
         }
@@ -1084,11 +1084,11 @@ class Binance:
             _trades = self.get_order_trades(pair=order['pair'], order_id=order['order_id'])
             if _trades['executed_quantity'] > 0:
                 final_data['exit_fees'] += _trades['tx_fee_in_quote_asset']
-                final_data['current_position_size'] += _trades['executed_quantity']
+                final_data['executed_quantity'] += _trades['executed_quantity']
                 _price_information.append({'price': _trades['price'], 'qty': _trades['executed_quantity']})
 
         for _info in _price_information:
-            _avg_price += _info['price'] * (_info['qty'] / final_data['current_position_size'])
+            _avg_price += _info['price'] * (_info['qty'] / final_data['executed_quantity'])
 
         final_data['exit_price'] = round(_avg_price, self.pairs_info[final_data['pair']]['pricePrecision'])
 

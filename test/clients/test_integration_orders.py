@@ -42,6 +42,7 @@ def asserts_integration_orders(exchange: str, orders: list):
 
     print(f"Test integration_orders for {exchange.upper()} successful")
 
+
 def test_integration_orders():
 
     all_tests = [

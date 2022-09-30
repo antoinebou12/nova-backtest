@@ -29,7 +29,6 @@ def asserts_security_close_all_positions(
     # Create positions
 
 
-
 def test_security_close_all_positions():
     all_tests = [
         {

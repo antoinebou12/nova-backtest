@@ -50,7 +50,7 @@ def asserts_exit_limit_then_market(exchange: str,
 
     time.sleep(1)
 
-    keys_expected = ['pair', 'current_position_size', 'last_exit_time', 'exit_fees', 'exit_price']
+    keys_expected = ['pair', 'executed_quantity', 'last_exit_time', 'exit_fees', 'exit_price']
 
     for var in keys_expected:
 
