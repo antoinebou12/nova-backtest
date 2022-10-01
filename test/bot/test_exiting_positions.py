@@ -28,7 +28,8 @@ def asserts_exiting_position(
         max_down=0.3,
         telegram_notification=False,
         telegram_bot_token='',
-        telegram_bot_chat_id=''
+        telegram_bot_chat_id='',
+        exit_prob=1,
     )
 
     bot.client.setup_account(
@@ -54,17 +55,17 @@ def asserts_exiting_position(
 
         if is_opening_candle(interval=bot.candle):
 
-            print('Inside Position')
+            bot.entering_positions()
 
-            if len(bot.position_opened) > 0:
+            current_nb_position = len(bot.position_opened)
+
+            if current_nb_position > 0:
 
                 bot.exiting_positions()
 
-                print('Exiting Position Done')
+                assert len(bot.position_opened) == 0
 
                 done = True
-
-            bot.entering_positions()
 
     print(f"Test verify_positions for {exchange.upper()} successful")
 
@@ -88,3 +89,4 @@ def test_exiting_position():
 
 
 test_exiting_position()
+

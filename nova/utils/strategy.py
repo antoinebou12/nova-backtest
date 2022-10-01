@@ -28,6 +28,10 @@ class RandomStrategy(Bot):
                  telegram_bot_token: str = None,
                  telegram_bot_chat_id: str = None,
                  bot_id: str = "RANDOM_BOT_1",
+                 entry_l_prob: float = 0.5,
+                 entry_s_prob: float = 0.5,
+                 exit_prob: float = 0.5,
+                 tp_sl_delta: float = 0.08
                  ):
 
         Bot.__init__(self,
@@ -55,12 +59,14 @@ class RandomStrategy(Bot):
                      telegram_bot_token=telegram_bot_token,
                      telegram_bot_chat_id=telegram_bot_chat_id,
 
-                     testnet=True
+                     testnet=True,
                      )
 
         # all optimized hyperparameters or set to stone
-        self.entry_long_prob = 1 / 2
-        self.entry_short_prob = 1 / 2
+        self.entry_long_prob = entry_l_prob
+        self.entry_short_prob = entry_s_prob
+        self.exit_probability = exit_prob
+        self.tp_sl_delta = tp_sl_delta
 
     @staticmethod
     def build_indicators(df: pd.DataFrame) -> pd.DataFrame:
@@ -93,8 +99,8 @@ class RandomStrategy(Bot):
                                 np.where(df['entry_short'] < self.entry_short_prob, -1, 0))
 
         action = int(df['action'].values[-1])
-        take_profit_price = df['close'].values[-1] * (1 + action * 0.003)
-        stop_loss_price = df['close'].values[-1] * (1 - action * 0.003)
+        take_profit_price = df['close'].values[-1] * (1 + action * self.tp_sl_delta)
+        stop_loss_price = df['close'].values[-1] * (1 - action * self.tp_sl_delta)
 
         del df
 
@@ -104,4 +110,4 @@ class RandomStrategy(Bot):
     def exit_signals_prod(self,
                           pair: str,
                           type_pos: str):
-        return random.random() > 0.60
+        return random.random() > 1 - self.exit_probability

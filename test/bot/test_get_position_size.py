@@ -26,7 +26,12 @@ def asserts_get_position_size(exchange: str,
     )
 
     size_amount_1 = bot.get_position_size()
-    assert size_amount_1 == 50
+
+    # position size should be equal to leverage / max_pos
+
+    estimated = bot.leverage / bot.max_pos * bot.bankroll
+    assert size_amount_1 == estimated
+    print(f"Test get_position_size for {exchange.upper()} successful")
 
 
 def test_get_position_size():
