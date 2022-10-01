@@ -53,7 +53,7 @@ def test_cancel_order():
 
     all_tests = [
         {
-            'exchange': 'binance',
+            'exchange': 'bybit',
             'pair': 'BTCUSDT',
             'type_pos': 'LONG',
             'quantity': 0.01

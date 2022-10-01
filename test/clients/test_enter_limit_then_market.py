@@ -85,7 +85,7 @@ def test_enter_limit_then_market():
 
     all_tests = [
         {
-            'exchange': 'binance',
+            'exchange': 'bybit',
             'pair': 'BTCUSDT',
             'type_pos': 'LONG',
             'quantity': 0.01,
