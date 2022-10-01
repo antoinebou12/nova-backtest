@@ -254,6 +254,18 @@ class Bot(TelegramBOT):
         )
 
         for _pair_, _exit_info in completed_exits.items():
+
+            # Cancel TP and SL orders
+            self.client.cancel_order(
+                pair=_pair_,
+                order_id=self.position_opened[_pair_]['tp_id']
+            )
+
+            self.client.cancel_order(
+                pair=_pair_,
+                order_id=self.position_opened[_pair_]['sl_id']
+            )
+
             # Add new exit information to local bot positions data
             self.add_exit_info(
                 pair=_pair_,
