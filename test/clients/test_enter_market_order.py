@@ -41,11 +41,11 @@ def asserts_enter_market_order(exchange: str, pair: str, type_pos: str, quantity
     assert market_order['original_quantity'] == quantity
     assert market_order['executed_quantity'] == quantity
 
-    client.exit_market_order(
-        pair=pair,
-        type_pos=type_pos,
-        quantity=quantity
-    )
+    # client.exit_market_order(
+    #     pair=pair,
+    #     type_pos=type_pos,
+    #     quantity=quantity
+    # )
 
     print(f"Test enter_market_order for {exchange.upper()} successful")
 
@@ -53,8 +53,14 @@ def asserts_enter_market_order(exchange: str, pair: str, type_pos: str, quantity
 def test_enter_market_order():
 
     all_tests = [
+        # {
+        #     'exchange': 'binance',
+        #     'pair': 'BTCUSDT',
+        #     'type_pos': 'LONG',
+        #     'quantity': 0.01
+        # },
         {
-            'exchange': 'binance',
+            'exchange': 'bybit',
             'pair': 'BTCUSDT',
             'type_pos': 'LONG',
             'quantity': 0.01

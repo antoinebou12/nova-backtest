@@ -49,12 +49,12 @@ def assert_get_historical_data(exchange: str, pair: str, interval: str, start_ts
 def test_get_historical_data():
 
     all_tests = [
-        # {'exchange': 'binance',
-        #  'interval': '4h',
-        #  'pair': 'ETHUSDT',
-        #  'start_ts': int(datetime(2018, 1, 1).timestamp() * 1000),
-        #  'end_ts': int(datetime(2022, 4, 10).timestamp() * 1000)
-        #  },
+        {'exchange': 'binance',
+         'interval': '4h',
+         'pair': 'ETHUSDT',
+         'start_ts': int(datetime(2018, 1, 1).timestamp() * 1000),
+         'end_ts': int(datetime(2022, 4, 10).timestamp() * 1000)
+         },
         {'exchange': 'bybit',
          'interval': '4h',
          'pair': 'BTCUSDT',

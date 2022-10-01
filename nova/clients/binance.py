@@ -379,7 +379,8 @@ class Binance:
             pair: str,
             interval: str,
             window: int,
-            current_pair_state: dict = None):
+            current_pair_state: dict = None
+    ):
 
         url = "https://fapi.binance.com/fapi/v1/klines"
 
@@ -414,9 +415,11 @@ class Binance:
 
             else:
                 df_new = pd.concat([final_dict[pair]['data'], df])
-                df_new = df_new.drop_duplicates(subset=['open_time']).sort_values(by=['open_time'],
-                                                                                  ascending=True)
-                final_dict[pair]['t'] = s_time
+                df_new = df_new.drop_duplicates(subset=['open_time']).sort_values(
+                    by=['open_time'],
+                    ascending=True
+                )
+                final_dict[pair]['latest_update'] = s_time
                 final_dict[pair]['data'] = df_new.tail(window)
 
             return final_dict

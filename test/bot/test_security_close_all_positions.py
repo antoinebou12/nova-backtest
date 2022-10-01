@@ -1,5 +1,9 @@
 from decouple import config
 from nova.utils.strategy import RandomStrategy
+from nova.utils.helpers import is_opening_candle
+import asyncio
+from multiprocessing import set_start_method
+set_start_method('fork')
 
 
 def asserts_security_close_all_positions(
@@ -23,10 +27,44 @@ def asserts_security_close_all_positions(
         max_down=0.3,
         telegram_notification=False,
         telegram_bot_token='',
-        telegram_bot_chat_id=''
+        telegram_bot_chat_id='',
+        entry_l_prob=0.8,
+        entry_s_prob=0.8,
+
     )
 
-    # Create positions
+    bot.client.setup_account(
+        bankroll=bot.bankroll,
+        quote_asset=bot.quote_asset,
+        leverage=bot.leverage,
+        max_down=bot.max_down,
+        list_pairs=bot.list_pair
+    )
+
+    bot.prod_data = asyncio.run(bot.client.get_prod_data(
+        list_pair=bot.list_pair,
+        interval=bot.candle,
+        nb_candles=bot.historical_window,
+        current_state=None
+    ))
+
+    done = False
+
+    print('Starting the Loop')
+
+    while not done:
+
+        if is_opening_candle(interval=bot.candle):
+
+            bot.entering_positions()
+
+            bot.security_close_all_positions()
+
+            assert len(bot.position_opened) == 0
+
+            done = True
+
+    print(f"Test security_close_all_positions for {exchange.upper()} successful")
 
 
 def test_security_close_all_positions():

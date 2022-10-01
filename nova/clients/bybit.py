@@ -64,21 +64,18 @@ class Bybit:
         prepared.headers['Content-Type'] = "application/json"
         response = self._session.send(prepared)
 
-        return response
+        return response.json()
 
     def get_server_time(self) -> int:
         """
         Returns:
             the timestamp in milliseconds
         """
-        data = self._send_request(
+        ts = self._send_request(
             end_point=f"/public/time",
             request_type="GET"
-        )
-
-        ts = float(data.json()['time_now'])
-
-        return int(ts * 1000)
+        )['time_now']
+        return int(float(ts) * 1000)
 
     def _get_candles(self,
                      pair: str,
@@ -99,9 +96,11 @@ class Bybit:
             list of candles
         """
 
+        _interval = self._convert_interval(std_interval=interval)
+
         params = {
             'symbol': pair,
-            'interval': interval,
+            'interval': _interval,
             'from': start_time // 1000,
             'limit': limit
         }
@@ -110,7 +109,7 @@ class Bybit:
             request_type="GET",
             params=params
         )
-        return data.json()['result']
+        return data['result']
 
     def get_pairs_info(self) -> dict:
         """
@@ -120,7 +119,7 @@ class Bybit:
         data = self._send_request(
             end_point=f"/v2/public/symbols",
             request_type="GET"
-        ).json()['result']
+        )['result']
 
         pairs_info = {}
 
@@ -136,9 +135,7 @@ class Bybit:
 
         return pairs_info
 
-    def _get_earliest_timestamp(self,
-                                      pair: str,
-                                      interval: str) -> int:
+    def _get_earliest_timestamp(self, pair: str, interval: str) -> int:
         """
         Args:
             pair: Name of symbol pair -- BNBBTC
@@ -147,24 +144,21 @@ class Bybit:
         return:
             the earliest valid open timestamp
         """
-        # 946684800000 == Jan 1st 2020
 
         kline = self._get_candles(
             pair=pair,
             interval=interval,
-            start_time=946684800000,
+            start_time=1467900800000,
             limit=1
         )
 
-        return kline[0]['open_time']
+        return kline[0]['open_time'] * 1000
 
     @staticmethod
     def _convert_interval(std_interval) -> str:
         """
-
         Args:
             std_interval: Binance's interval format
-
         Returns:
             Bybit's interval format
         """
@@ -175,13 +169,11 @@ class Bybit:
         elif 'h' in std_interval:
             mul = int(std_interval[:-1])
             return str(60 * mul)
-
         else:
             return std_interval[-1].upper()
 
-    def _format_data(self,
-                     klines: list,
-                     historical: bool = True) -> pd.DataFrame:
+    @staticmethod
+    def _format_data(all_data: list, historical: bool = True) -> pd.DataFrame:
         """
         Args:
             all_data: output from _full_history
@@ -190,9 +182,8 @@ class Bybit:
             standardized pandas dataframe
         """
 
-        interval_ms = 1000 * (klines[1]['start_at'] - klines[0]['start_at'])
-
-        df = pd.DataFrame(klines)[DATA_FORMATING['bybit']['columns']]
+        interval_ms = 1000 * (all_data[1]['start_at'] - all_data[0]['start_at'])
+        df = pd.DataFrame(all_data)[DATA_FORMATING['bybit']['columns']]
 
         for var in DATA_FORMATING['bybit']['num_var']:
             df[var] = pd.to_numeric(df[var], downcast="float")
@@ -226,9 +217,6 @@ class Bybit:
 
         # convert interval to useful value in ms
         timeframe = interval_to_milliseconds(interval)
-
-        # Convert standardized interval to Bybit specific interval
-        interval = self._convert_interval(std_interval=interval)
 
         # establish first available start timestamp
         if start_ts is not None:
@@ -266,10 +254,8 @@ class Bybit:
             # exit loop if we reached end_ts before reaching <limit> klines
             if end_ts and start_ts >= end_ts:
                 break
-
-        df = self._format_data(klines=klines)
-
-        return df
+        df = self._format_data(all_data=klines)
+        return df[df['open_time'] <= end_ts]
 
     def update_historical(self, pair: str, interval: str, current_df: pd.DataFrame) -> pd.DataFrame:
         """
@@ -301,7 +287,7 @@ class Bybit:
             signed=True
         )
 
-        return data.json()['result']
+        return data['result']
 
     def get_token_balance(self, quote_asset: str):
         """
@@ -324,7 +310,7 @@ class Bybit:
             params={'symbol': pair}
         )
 
-        OB = data.json()['result']
+        OB = data['result']
 
         std_OB = {'buy': [], 'sell': []}
 
@@ -371,6 +357,30 @@ class Bybit:
         )
 
         return response.json()['result']
+
+    def enter_market_order(self, pair: str, type_pos: str, quantity: float):
+
+        side = 'BUY' if type_pos == 'LONG' else 'SELL'
+
+        params = {
+            "side": side,
+            "symbol": pair,
+            "qty": float(round(quantity, self.pairs_info[pair]['quantityPrecision'])),
+            "order_type": 'Market',
+            "reduce_only": False,
+            "time_in_force": "GoodTillCancel",
+            "recv_window": "5000",
+            "position_idx": 0
+        }
+
+        response = self._send_request(
+            end_point=f"/private/linear/order/create",
+            request_type="POST",
+            params=params,
+            signed=True
+        )['result']
+
+        print(response)
 
     def enter_market(self,
                      pair,
@@ -597,14 +607,12 @@ class Bybit:
                   "buy_leverage": leverage,
                   "sell_leverage": leverage}
 
-        response = self._send_request(
+        return self._send_request(
             end_point=f"/private/linear/position/switch-isolated",
             request_type="POST",
             params=params,
             signed=True
-        )
-
-        return response.json()['result']
+        )['result']
 
     def _set_leverage(self,
                       pair: str,
@@ -614,14 +622,12 @@ class Bybit:
                   "buy_leverage": leverage,
                   "sell_leverage": leverage}
 
-        response = self._send_request(
+        return self._send_request(
             end_point=f"/private/linear/position/set-leverage",
             request_type="POST",
             params=params,
             signed=True
-        )
-
-        return response.json()['result']
+        )['result']
 
     def _set_position_mode(self,
                            pair: str,
@@ -630,14 +636,26 @@ class Bybit:
         params = {"symbol": pair,
                   "mode": mode}
 
-        response = self._send_request(
+        return self._send_request(
             end_point=f"/private/linear/position/switch-mode",
             request_type="POST",
             params=params,
             signed=True
-        )
+        )['result']
 
-        return response.json()['result']
+    def _get_position_info(self,
+                           pair: str = None):
+
+        params = {}
+        if pair:
+            params = {'symbol': pair}
+
+        return self._send_request(
+            end_point=f"/private/linear/position/list",
+            request_type="GET",
+            params=params,
+            signed=True
+        )['result']
 
     def setup_account(self,
                       quote_asset: str,
@@ -659,7 +677,12 @@ class Bybit:
             None
         """
 
-        positions_info = self._get_position_info()
+        positions_info = self._send_request(
+            end_point=f"/private/linear/position/list",
+            request_type="GET",
+            params={},
+            signed=True
+        )['result']
 
         for info in positions_info:
 
@@ -700,21 +723,20 @@ class Bybit:
         assert balance >= bankroll * (1 + max_down), f"The account has only {round(balance, 2)} {quote_asset}. " \
                                                      f"{round(bankroll * (1 + max_down), 2)} {quote_asset} is required"
 
-    def get_actual_positions(self,
-                             pairs: Union[list, str]) -> dict:
+    def get_actual_positions(self, pairs: Union[list, str]) -> dict:
 
         _params = {}
         if isinstance(pairs, str):
             _params['symbol'] = pairs
 
-        response = self._send_request(
+        pos_inf = self._send_request(
             end_point=f"/private/linear/position/list",
             request_type="GET",
             params=_params,
             signed=True
-        )
+        )['result']
 
-        pos_inf = response.json()['result']
+        print(pos_inf)
 
         positions = {}
 
@@ -1093,7 +1115,14 @@ class Bybit:
 
         return final
 
-    async def get_prod_candles(self, session, pair, interval, window, current_pair_state: dict = None):
+    async def get_prod_candles(
+            self,
+            session,
+            pair,
+            interval,
+            window,
+            current_pair_state: dict = None
+    ):
 
         url = self.based_endpoint + '/public/linear/kline'
 
@@ -1101,7 +1130,7 @@ class Bybit:
         final_dict[pair] = {}
 
         if current_pair_state is not None:
-            start_time = int(current_pair_state[pair]['latest_candle_open_time'] / 1000)
+            start_time = int(current_pair_state[pair]['latest_update'] / 1000) - interval_to_milliseconds(interval)
         else:
             start_time = int(time.time() - (window + 1) * interval_to_milliseconds(interval=interval) / 1000)
 
@@ -1117,33 +1146,40 @@ class Bybit:
 
         async with session.get(url=url, params=params) as response:
             data = await response.json()
-
-            df = self._format_data(data['result'],
-                                   historical=False)
+            df = self._format_data(data['result'], historical=False)
 
             df = df[df['close_time'] < s_time]
 
-            latest_candle_open_time = df['open_time'].values[-1]
+            latest_update = df['open_time'].values[-1]
+
             for var in ['open_time', 'close_time']:
                 df[var] = pd.to_datetime(df[var], unit='ms')
 
             if current_pair_state is None:
-                final_dict[pair]['latest_candle_open_time'] = latest_candle_open_time
+                final_dict[pair]['latest_update'] = latest_update
                 final_dict[pair]['data'] = df
 
             else:
                 df_new = pd.concat([current_pair_state[pair]['data'], df])
-                df_new = df_new.drop_duplicates(subset=['open_time']).sort_values(by=['open_time'],
-                                                                                  ascending=True)
+                df_new = df_new.drop_duplicates(subset=['open_time']).sort_values(
+                    by=['open_time'],
+                    ascending=True
+                )
                 df_new = df_new.tail(window)
                 df_new = df_new.reset_index(drop=True)
 
-                final_dict[pair]['latest_candle_open_time'] = latest_candle_open_time
+                final_dict[pair]['latest_update'] = latest_update
                 final_dict[pair]['data'] = df_new
 
             return final_dict
 
-    async def get_prod_data(self, list_pair: list, interval: str, nb_candles: int, current_state: dict):
+    async def get_prod_data(
+            self,
+            list_pair: list,
+            interval: str,
+            nb_candles: int,
+            current_state: dict
+    ):
         """
         Note: This function is called once when the bot is instantiated.
         This function execute n API calls with n representing the number of pair in the list
@@ -1174,11 +1210,11 @@ class Bybit:
 
                 df = df[df['close_time'] < last_update]
 
-                latest_candle_open_time = df['open_time'].values[-1]
+                latest_update = df['open_time'].values[-1]
                 for var in ['open_time', 'close_time']:
                     df[var] = pd.to_datetime(df[var], unit='ms')
 
-                final_dict[pair]['latest_candle_open_time'] = latest_candle_open_time
+                final_dict[pair]['latest_update'] = latest_update
                 final_dict[pair]['data'] = df
 
             return final_dict
@@ -1202,12 +1238,3 @@ class Bybit:
                 all_data.update(info)
             return all_data
 
-# from decouple import config
-# exchange='bybit'
-# self = Bybit( key=config(f"{exchange}TestAPIKey"),
-#         secret=config(f"{exchange}TestAPISecret"),
-#         testnet=True)
-#
-# list_pos = self.get_actual_positions(pairs=['BTCUSDT'])
-# pos = self.get_actual_positions(pairs='BTCUSDT')
-#

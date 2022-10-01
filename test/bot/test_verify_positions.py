@@ -28,7 +28,8 @@ def asserts_verify_positions(
         max_down=0.3,
         telegram_notification=False,
         telegram_bot_token='',
-        telegram_bot_chat_id=''
+        telegram_bot_chat_id='',
+        exit_prob=1
     )
 
     bot.client.setup_account(
@@ -54,17 +55,15 @@ def asserts_verify_positions(
 
         if is_opening_candle(interval=bot.candle):
 
-            print('Inside Position')
+            bot.entering_positions()
 
             if len(bot.position_opened) > 0:
 
                 bot.verify_positions()
 
-                print('Verify Setup Done')
+                bot.exiting_positions()
 
                 done = True
-
-            bot.entering_positions()
 
     print(f"Test verify_positions for {exchange.upper()} successful")
 

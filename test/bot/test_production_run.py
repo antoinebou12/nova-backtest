@@ -2,7 +2,7 @@ from decouple import config
 from nova.utils.strategy import RandomStrategy
 
 
-def asserts_entering_positions(
+def asserts_production_run(
         exchange: str,
         quote_asset: str,
         list_pair: list
@@ -29,7 +29,7 @@ def asserts_entering_positions(
     bot.production_run()
 
 
-def test_entering_positions():
+def test_production_run():
     all_tests = [
         {
             'exchange': 'binance',
@@ -39,11 +39,11 @@ def test_entering_positions():
     ]
 
     for _test in all_tests:
-        asserts_entering_positions(
+        asserts_production_run(
                 exchange=_test['exchange'],
                 quote_asset=_test['quote_asset'],
                 list_pair=_test['list_pair']
         )
 
 
-test_entering_positions()
+test_production_run()
