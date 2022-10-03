@@ -40,7 +40,7 @@ def asserts_computed_profit(exchange: str,
     ))
     print(f'Historical data downloaded', "\U00002705")
     # Run bot during 10min
-    while time.time() - start < 60 * 2:
+    while time.time() - start < 60 * 5:
 
         if is_opening_candle(interval=bot.candle):
             print(f'------- time : {datetime.utcnow()} -------\nNew candle opens')
@@ -67,12 +67,13 @@ def asserts_computed_profit(exchange: str,
     bot.exiting_positions()
 
     expected_realized_pnl = bot.realizedPNL
-    realized_pnl = start_bk - bot.client.get_token_balance(quote_asset=bot.quote_asset)
+    realized_pnl = bot.client.get_token_balance(quote_asset=bot.quote_asset) - start_bk
 
-    print(expected_realized_pnl)
-    print(realized_pnl)
+    print(f"Expected PnL = {expected_realized_pnl}$")
+    print(f"Realized PnL = {realized_pnl}$")
 
-    assert abs(expected_realized_pnl) * (1 - 0.01) < abs(realized_pnl) < abs(expected_realized_pnl * (1 + 0.01)), 'wrong profit'
+    assert abs(expected_realized_pnl) * (1 - 0.01) < abs(realized_pnl) < abs(expected_realized_pnl * (1 + 0.01)), \
+        'wrong profit'
 
     print(f"Test computed profit for {exchange.upper()} successful")
 
@@ -81,7 +82,7 @@ def test_computed_profit():
 
     all_tests = [
         {
-            'exchange': 'bybit',
+            'exchange': 'binance',
             'list_pair': ['BTCUSDT', 'ETHUSDT'],
         }
     ]
