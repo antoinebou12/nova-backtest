@@ -357,14 +357,16 @@ class Bybit:
             "recv_window": "5000",
         }
 
-        data = self._send_request(
+        response = self._send_request(
             end_point=f"/private/linear/order/create",
             request_type="POST",
             params=params,
             signed=True
-        )['result']
+        )
 
-        return self._format_order(data=data)
+        print(response)
+
+        return self._format_order(data=response['result'])
 
     @staticmethod
     def _format_order(data: dict) -> dict:
@@ -490,6 +492,9 @@ class Bybit:
     def place_market_sl(self, pair: str, side: str, quantity: float, sl_price: float):
 
         _side = 'Buy' if side == 'BUY' else 'Sell'
+
+        print(f'sl _side : {_side}')
+        print(f'sl_price : {sl_price}')
 
         params = {
             "side": _side,
@@ -632,8 +637,6 @@ class Bybit:
             Residual size to fill the based qty
         """
 
-        _side = 'Buy' if side == 'BUY' else 'Sell'
-
         residual_size = quantity
         t_start = time.time()
         all_limit_orders = []
@@ -643,7 +646,7 @@ class Bybit:
 
             posted, order = self.place_limit_order_best_price(
                 pair=pair,
-                side=_side,
+                side=side,
                 quantity=residual_size,
                 reduce_only=reduce_only,
             )
@@ -944,13 +947,16 @@ class Bybit:
         # Get current position info
         pos_info = self.get_actual_positions(pairs=pair)
 
-        exit_side = 'SELL' if side == 'BUY' else 'BUY'
+        exit_side = 'SELL' if type_pos == 'LONG' else 'BUY'
 
+        print(f'exit_side : {exit_side}')
         # Place take profit limit order
-        tp_data = self.place_limit_tp(pair=pair,
-                                      side=exit_side,
-                                      quantity=pos_info[pair]['position_size'],
-                                      tp_price=round(tp_price, self.pairs_info[pair]['pricePrecision']))
+        tp_data = self.place_limit_tp(
+            pair=pair,
+            side=exit_side,
+            quantity=pos_info[pair]['position_size'],
+            tp_price=round(tp_price, self.pairs_info[pair]['pricePrecision'])
+        )
 
         sl_data = self.place_market_sl(
             pair=pair,
