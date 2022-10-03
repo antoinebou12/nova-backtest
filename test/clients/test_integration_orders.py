@@ -46,20 +46,20 @@ def asserts_integration_orders(exchange: str, orders: list):
 def test_integration_orders():
 
     all_tests = [
-        {
-            'exchange': 'binance',
-            'orders': [
-                {'pair': 'BTCUSDT', 'type_pos': 'LONG', 'quantity': 0.01},
-                {'pair': 'ETHUSDT', 'type_pos': 'SHORT', 'quantity': 0.1}
-            ]
-        },
         # {
-        #     'exchange': 'bybit',
+        #     'exchange': 'binance',
         #     'orders': [
         #         {'pair': 'BTCUSDT', 'type_pos': 'LONG', 'quantity': 0.01},
         #         {'pair': 'ETHUSDT', 'type_pos': 'SHORT', 'quantity': 0.1}
         #     ]
-        # }
+        # },
+        {
+            'exchange': 'bybit',
+            'orders': [
+                {'pair': 'BTCUSDT', 'type_pos': 'LONG', 'quantity': 0.1},
+                {'pair': 'ETHUSDT', 'type_pos': 'SHORT', 'quantity': 1}
+            ]
+        }
     ]
 
     for _test in all_tests:
