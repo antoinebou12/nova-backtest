@@ -65,6 +65,7 @@ def asserts_enter_limit_then_market(exchange: str,
     assert entry_orders['exit_price'] == 0
     assert entry_orders['entry_fees'] > 0
     assert entry_orders['entry_price'] > 0
+    assert entry_orders['position_type'] == type_pos
 
     for var in ['tp_id', 'sl_id']:
         client.cancel_order(
