@@ -150,7 +150,6 @@ class Bot(TelegramBOT):
 
             if entry_signal['action'] != 0:
 
-                print(f'Enter in position on {pair}')
                 _action = {'pair': pair}
                 _action['type_pos'] = 'LONG' if entry_signal['action'] == 1 else 'SHORT'
 
@@ -158,6 +157,7 @@ class Bot(TelegramBOT):
                 _action['quantity'] = (self.bankroll * self.position_size) / actual_price
                 _action['sl_price'] = entry_signal['sl_price']
                 _action['tp_price'] = entry_signal['tp_price']
+                print(f"Enter in position {_action['type_pos']} on {pair}")
 
                 all_entries.append(_action)
                 remaining_position -= 1
