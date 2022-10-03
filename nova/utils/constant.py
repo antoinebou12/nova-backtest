@@ -40,22 +40,3 @@ DATA_FORMATING = {
     }
 
 }
-
-ORDER_STD = {
-    'bybit': {'order_status': {'Filled': 'FILLED',
-                               'Cancelled': 'CANCELED',
-                               'PartiallyFilled': 'PARTIALLY_FILLED',
-                               'New': 'NEW',
-                               'Created': 'CREATED',
-                               'Rejected': 'REJECTED',
-                               'Untriggered': 'UNTRIGGERED',
-                               'Deactivated': 'DEACTIVATED',
-                               'Triggered': 'TRIGGERED',
-                               'Active': 'ACTIVE'},
-              'order_type': {'Limit': 'LIMIT',
-                             'Market': 'MARKET'},
-              'rename_keys': {'qty': 'originalQuantity',
-                              'cum_exec_qty': 'executedQuantity',
-                              'cum_exec_fee': 'exit_fees'}}
-
-}
