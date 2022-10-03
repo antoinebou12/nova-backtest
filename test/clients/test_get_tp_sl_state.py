@@ -98,6 +98,12 @@ def test_get_tp_sl_state():
             'pair': 'BTCUSDT',
             'type_pos': 'LONG',
             'quantity': 0.01
+        },
+        {
+            'exchange': 'bybit',
+            'pair': 'BTCUSDT',
+            'type_pos': 'LONG',
+            'quantity': 0.01
         }
     ]
 

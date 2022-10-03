@@ -370,10 +370,19 @@ class Bybit:
     def _format_order(data: dict) -> dict:
 
         date = datetime.strptime(data['updated_time'], '%Y-%m-%dT%H:%M:%SZ')
-        stop_price = 0 if 'trigger_price' not in data.keys() else data['trigger_price']
         order_name = 'order_id' if 'order_id' in data.keys() else 'stop_order_id'
-        executed_price = 'trigger_price' if 'trigger_price' in data.keys() else 'price'
-        executed_quantity = 0 if 'cum_exec_qty' not in data.keys() else data['cum_exec_qty']
+
+        stop_price = 0
+        if data['order_type'] == 'TAKE_PROFIT':
+            stop_price = float(data['price'])
+        if data['order_type'] == 'STOP_MARKET':
+            stop_price = float(data['trigger_price'])
+
+        executed_quantity = 0
+        if data['order_type'] == 'Market':
+            executed_quantity = data['qty']
+        elif 'cum_exec_qty' in data.keys() and data['order_type'] == 'Limit':
+            executed_quantity = data['cum_exec_qty']
 
         formatted = {
             'time': int(datetime.timestamp(date) * 1000),
@@ -388,7 +397,7 @@ class Bybit:
             'stop_price': float(stop_price),
             'original_quantity': float(data['qty']),
             'executed_quantity': float(executed_quantity),
-            'executed_price': float(data[executed_price])
+            'executed_price': float(data['price'])
         }
 
         return formatted
@@ -453,14 +462,16 @@ class Bybit:
             response of the API call
         """
 
+        _side = 'Buy' if side == 'BUY' else 'Sell'
+
         params = {
-            "side": side,
+            "side": _side,
             "symbol": pair,
-            "price": tp_price,
+            "price": float(round(tp_price, self.pairs_info[pair]['pricePrecision'])),
             "qty": float(round(quantity, self.pairs_info[pair]['quantityPrecision'])),
             "order_type": 'Limit',
             "time_in_force": 'PostOnly',
-            "close_on_trigger": False,
+            "close_on_trigger": True,
             "reduce_only": True,
             "recv_window": "5000",
         }
@@ -472,14 +483,16 @@ class Bybit:
             signed=True
         )
 
-        print(response)
+        response['result']['order_type'] = 'TAKE_PROFIT'
 
         return self._format_order(data=response['result'])
 
     def place_market_sl(self, pair: str, side: str, quantity: float, sl_price: float):
 
+        _side = 'Buy' if side == 'BUY' else 'Sell'
+
         params = {
-            "side": side,
+            "side": _side,
             "symbol": pair,
             "order_type": 'Market',
             "qty": float(round(quantity, self.pairs_info[pair]['quantityPrecision'])),
@@ -501,7 +514,7 @@ class Bybit:
             signed=True
         )
 
-        print(response)
+        response['result']['order_type'] = 'STOP_MARKET'
 
         return self._format_order(data=response['result'])
 
@@ -532,8 +545,10 @@ class Bybit:
         _type = 'bids' if side == 'BUY' else 'asks'
         best_price = float(ob[_type][0]['price'])
 
+        _side = 'Buy' if side == 'BUY' else 'Sell'
+
         params = {
-            "side": side,
+            "side": _side,
             "symbol": pair,
             "price": float(round(best_price, self.pairs_info[pair]['pricePrecision'])),
             "qty": float(round(quantity, self.pairs_info[pair]['quantityPrecision'])),
@@ -589,7 +604,7 @@ class Bybit:
                 order_id=order_id
             )
 
-            if order_data['status'] not in ['CANCELED', 'CREATED', 'REJECTED']:
+            if order_data['status'] == 'NEW':
                 return True, order_data
 
         return False, None
@@ -617,6 +632,8 @@ class Bybit:
             Residual size to fill the based qty
         """
 
+        _side = 'Buy' if side == 'BUY' else 'Sell'
+
         residual_size = quantity
         t_start = time.time()
         all_limit_orders = []
@@ -626,7 +643,7 @@ class Bybit:
 
             posted, order = self.place_limit_order_best_price(
                 pair=pair,
-                side=side,
+                side=_side,
                 quantity=residual_size,
                 reduce_only=reduce_only,
             )
@@ -635,18 +652,19 @@ class Bybit:
 
                 all_limit_orders.append(order)
 
-                new_price = order['price']
-                order_status = order['order_status']
+                _price = order['price']
+                _status = order['status']
 
                 # If the best order book price stays the same, do not cancel current order
-                while (new_price == order['price']) and (time.time() - t_start < duration) and (order_status != 'Filled'):
+                while (order['price'] == _price) and (time.time() - t_start < duration) and (_status != 'FILLED'):
+
                     time.sleep(10)
 
                     ob = self.get_order_book(pair=pair)
                     _type = 'bids' if side == 'BUY' else 'asks'
                     _price = float(ob[_type][0]['price'])
 
-                    order_status = self.get_order(
+                    _status = self.get_order(
                         pair=pair,
                         order_id=order['order_id']
                     )['status']
@@ -657,15 +675,19 @@ class Bybit:
                     order_id=order['order_id']
                 )
 
-                # Get current position size
-                pos_info = self.get_actual_positions(pairs=pair)
+            # Get current position size
+            pos_info = self.get_actual_positions(pairs=pair)
 
-                if reduce_only:
-                    residual_size = pos_info['position_size']
-                else:
-                    residual_size = quantity - pos_info['position_size']
+            if pair not in list(pos_info.keys()) and not reduce_only:
+                residual_size = quantity
+            elif pair not in list(pos_info.keys()) and reduce_only:
+                residual_size = 0
+            elif pair in list(pos_info.keys()) and reduce_only:
+                residual_size = pos_info[pair]['position_size']
+            else:
+                residual_size = quantity - pos_info[pair]['position_size']
 
-        return {'residual_size': residual_size, 'all_limit_orders': all_limit_orders}
+        return residual_size, all_limit_orders
 
     def _format_enter_limit_info(self, all_orders: list, tp_order: dict, sl_order: dict) -> dict:
 

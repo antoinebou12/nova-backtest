@@ -22,7 +22,7 @@ def asserts_looping_limit_order(
         side=side,
         quantity=quantity,
         reduce_only=reduce_only,
-        duration=120
+        duration=60
     )
 
     assert residual >= 0
@@ -33,8 +33,15 @@ def asserts_looping_limit_order(
 
 def test_looping_limit_order():
     all_tests = [
+        # {
+        #     'exchange': 'binance',
+        #     'pair': 'BTCUSDT',
+        #     'side': 'BUY',
+        #     'quantity': 0.01,
+        #     'reduce_only': False
+        # },
         {
-            'exchange': 'binance',
+            'exchange': 'bybit',
             'pair': 'BTCUSDT',
             'side': 'BUY',
             'quantity': 0.01,

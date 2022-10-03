@@ -45,16 +45,22 @@ def asserts_place_limit_tp(exchange: str, pair: str, type_pos: str, quantity: fl
         tp_price=tp_price
     )
 
-    nb_decimals = len(str(tp_data['stop_price']).split(".")[1])
-
     assert tp_data['type'] == 'TAKE_PROFIT'
-    assert tp_data['status'] == 'NEW'
+    assert tp_data['status'] in ['NEW', 'CREATED']
     assert tp_data['pair'] == pair
     assert tp_data['reduce_only']
     assert tp_data['side'] == exit_side
     assert tp_data['original_quantity'] == quantity
     assert tp_data['executed_quantity'] == 0
-    assert tp_data['stop_price'] == round(tp_price, nb_decimals)
+    assert tp_data['stop_price'] > 0
+
+    client.exit_market_order(
+        pair=pair,
+        type_pos=type_pos,
+        quantity=quantity
+    )
+
+
 
     print(f"Test place_limit_tp for {exchange.upper()} successful")
 
@@ -66,6 +72,12 @@ def test_place_limit_tp():
             'pair': 'BTCUSDT',
             'type_pos': 'LONG',
             'quantity': 0.01
+        },
+        {
+            'exchange': 'bybit',
+            'pair': 'BTCUSDT',
+            'type_pos': 'LONG',
+            'quantity': 0.1
         }
     ]
 

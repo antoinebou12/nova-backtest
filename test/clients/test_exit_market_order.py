@@ -40,7 +40,7 @@ def asserts_exit_market_order(exchange: str, pair: str, type_pos: str, quantity:
     )
 
     assert market_exit['type'] == 'MARKET'
-    assert market_exit['status'] == 'FILLED'
+    assert market_exit['status'] in ['FILLED', 'CREATED']
     assert market_exit['pair'] == pair
     assert market_exit['reduce_only']
     assert market_exit['side'] == exit_side
@@ -55,6 +55,12 @@ def test_exit_market_order():
     all_tests = [
         {
             'exchange': 'binance',
+            'pair': 'BTCUSDT',
+            'type_pos': 'LONG',
+            'quantity': 0.01
+        },
+        {
+            'exchange': 'bybit',
             'pair': 'BTCUSDT',
             'type_pos': 'LONG',
             'quantity': 0.01

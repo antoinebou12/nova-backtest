@@ -45,16 +45,14 @@ def asserts_place_market_sl(exchange: str, pair: str, type_pos: str, quantity: f
         sl_price=sl_price
     )
 
-    nb_decimals = len(str(sl_data['stop_price']).split(".")[1])
-
     assert sl_data['type'] == 'STOP_MARKET'
-    assert sl_data['status'] == 'NEW'
+    assert sl_data['status'] in ['NEW', 'UNTRIGGERED']
     assert sl_data['pair'] == pair
     assert sl_data['reduce_only']
     assert sl_data['side'] == exit_side
     assert sl_data['original_quantity'] == quantity
     assert sl_data['executed_quantity'] == 0
-    assert sl_data['stop_price'] == round(sl_price, nb_decimals)
+    assert sl_data['stop_price'] > 0
 
     print(f"Test place_market_sl for {exchange.upper()} successful")
 
@@ -63,6 +61,12 @@ def test_place_market_sl():
     all_tests = [
         {
             'exchange': 'binance',
+            'pair': 'BTCUSDT',
+            'type_pos': 'LONG',
+            'quantity': 0.01
+        },
+        {
+            'exchange': 'bybit',
             'pair': 'BTCUSDT',
             'type_pos': 'LONG',
             'quantity': 0.01

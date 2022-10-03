@@ -16,7 +16,6 @@ def asserts_get_order_book(exchange: str, pair: str):
     )
 
     for key, values in data.items():
-        assert len(values) == 20
         assert key in ['bids', 'asks']
         assert isinstance(values, list)
 
@@ -32,6 +31,10 @@ def test_get_order_book():
     all_tests = [
         {
             'exchange': 'binance',
+            'pair': 'BTCUSDT'
+        },
+        {
+            'exchange': 'bybit',
             'pair': 'BTCUSDT'
         }
     ]

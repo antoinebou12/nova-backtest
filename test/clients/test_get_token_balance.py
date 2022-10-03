@@ -1,6 +1,10 @@
 from nova.clients.clients import clients
 from decouple import config
 
+"""
+Must use real account key to test this function
+"""
+
 
 def assert_get_token_balance(
         exchange: str,

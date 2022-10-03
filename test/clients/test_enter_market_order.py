@@ -34,18 +34,18 @@ def asserts_enter_market_order(exchange: str, pair: str, type_pos: str, quantity
     side = 'BUY' if type_pos == 'LONG' else 'SELL'
 
     assert market_order['type'] == 'MARKET'
-    assert market_order['status'] == 'FILLED'
+    assert market_order['status'] in ['FILLED', 'CREATED']
     assert market_order['pair'] == pair
     assert not market_order['reduce_only']
     assert market_order['side'] == side
     assert market_order['original_quantity'] == quantity
     assert market_order['executed_quantity'] == quantity
 
-    # client.exit_market_order(
-    #     pair=pair,
-    #     type_pos=type_pos,
-    #     quantity=quantity
-    # )
+    client.exit_market_order(
+        pair=pair,
+        type_pos=type_pos,
+        quantity=quantity
+    )
 
     print(f"Test enter_market_order for {exchange.upper()} successful")
 
@@ -53,12 +53,12 @@ def asserts_enter_market_order(exchange: str, pair: str, type_pos: str, quantity
 def test_enter_market_order():
 
     all_tests = [
-        # {
-        #     'exchange': 'binance',
-        #     'pair': 'BTCUSDT',
-        #     'type_pos': 'LONG',
-        #     'quantity': 0.01
-        # },
+        {
+            'exchange': 'binance',
+            'pair': 'BTCUSDT',
+            'type_pos': 'LONG',
+            'quantity': 0.01
+        },
         {
             'exchange': 'bybit',
             'pair': 'BTCUSDT',

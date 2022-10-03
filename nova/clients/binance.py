@@ -889,7 +889,7 @@ class Binance:
                 _status = data['status']
 
                 # If the best order book price stays the same, do not cancel current order
-                while (_price == data['price']) and (time.time() - t_start < 120) and (_status != 'FILLED'):
+                while (_price == data['price']) and (time.time() - t_start < duration) and (_status != 'FILLED'):
 
                     time.sleep(10)
 
