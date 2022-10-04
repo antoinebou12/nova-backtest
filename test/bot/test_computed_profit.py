@@ -17,16 +17,32 @@ def asserts_computed_profit(exchange: str,
         nova_api_key=config("NovaAPISecret"),
         bot_id='ROBOT1',
         quote_asset='USDT',
-        candle='1m',
+        candle='5m',
         list_pair=list_pair,
-        bankroll=1000,
+        bankroll=10000,
         leverage=2,
         max_pos=6,
         max_down=0.3,
         telegram_notification=False,
         telegram_bot_token='',
-        telegram_bot_chat_id=''
+        telegram_bot_chat_id='',
+        exit_prob=0.3,
+        tp_sl_delta=0.003
     )
+
+    positions = bot.client.get_actual_positions(
+        pairs=list_pair
+    )
+
+    if len(positions) != 0:
+
+        for _pair, _info in positions.items():
+
+            bot.client.exit_market_order(
+                pair=_pair,
+                type_pos=_info['type_pos'],
+                quantity=_info['position_size']
+            )
 
     start_bk = bot.client.get_token_balance(quote_asset=bot.quote_asset)
 
@@ -39,8 +55,8 @@ def asserts_computed_profit(exchange: str,
         current_state=None
     ))
     print(f'Historical data downloaded', "\U00002705")
-    # Run bot during 10min
-    while time.time() - start < 60 * 5:
+    # Run bot during 20min
+    while time.time() - start < 60 * 20:
 
         if is_opening_candle(interval=bot.candle):
             print(f'------- time : {datetime.utcnow()} -------\nNew candle opens')
@@ -63,6 +79,8 @@ def asserts_computed_profit(exchange: str,
             # check entry signals and perform actions
             bot.entering_positions()
 
+    time.sleep(120)
+
     bot.exit_probability = 1
     bot.exiting_positions()
 
@@ -82,7 +100,7 @@ def test_computed_profit():
 
     all_tests = [
         {
-            'exchange': 'binance',
+            'exchange': 'bybit',
             'list_pair': ['BTCUSDT', 'ETHUSDT'],
         }
     ]
