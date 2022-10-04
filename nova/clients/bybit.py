@@ -331,6 +331,7 @@ class Bybit:
             "close_on_trigger": False,
             "reduce_only": False,
             "recv_window": "5000",
+            "position_idx": 0
         }
 
         data = self._send_request(
@@ -355,6 +356,7 @@ class Bybit:
             "close_on_trigger": False,
             "reduce_only": True,
             "recv_window": "5000",
+            "position_idx": 0
         }
 
         response = self._send_request(
@@ -363,8 +365,6 @@ class Bybit:
             params=params,
             signed=True
         )
-
-        print(response)
 
         return self._format_order(data=response['result'])
 
@@ -476,6 +476,7 @@ class Bybit:
             "close_on_trigger": True,
             "reduce_only": True,
             "recv_window": "5000",
+            "position_idx": 0
         }
 
         response = self._send_request(
@@ -489,12 +490,12 @@ class Bybit:
 
         return self._format_order(data=response['result'])
 
-    def place_market_sl(self, pair: str, side: str, quantity: float, sl_price: float):
+    def place_market_sl(self, pair: str, exit_side: str, quantity: float, sl_price: float):
 
-        _side = 'Buy' if side == 'BUY' else 'Sell'
+        _side = 'Buy' if exit_side == 'BUY' else 'Sell'
 
-        print(f'sl _side : {_side}')
-        print(f'sl_price : {sl_price}')
+        stop_px = float(round(sl_price, self.pairs_info[pair]['pricePrecision']))
+        base_price = stop_px * 0.9 if exit_side == 'BUY' else stop_px * 1.1
 
         params = {
             "side": _side,
@@ -502,14 +503,15 @@ class Bybit:
             "order_type": 'Market',
             "qty": float(round(quantity, self.pairs_info[pair]['quantityPrecision'])),
 
-            'base_price': float(round(sl_price, self.pairs_info[pair]['pricePrecision'])),
-            "stop_px":  float(round(sl_price, self.pairs_info[pair]['pricePrecision'])),
+            'base_price': float(round(base_price, self.pairs_info[pair]['pricePrecision'])),
+            "stop_px":  stop_px,
 
-            "trigger_by": "IndexPrice",
+            "trigger_by": "LastPrice",
             "time_in_force": 'GoodTillCancel',
             "close_on_trigger": True,
             "reduce_only": True,
             "recv_window": "5000",
+            "position_idx": 0
         }
 
         response = self._send_request(
@@ -562,6 +564,7 @@ class Bybit:
             "close_on_trigger": False,
             "reduce_only": reduce_only,
             "recv_window": "5000",
+            "position_idx": 0
         }
 
         response = self._send_request(
@@ -949,7 +952,6 @@ class Bybit:
 
         exit_side = 'SELL' if type_pos == 'LONG' else 'BUY'
 
-        print(f'exit_side : {exit_side}')
         # Place take profit limit order
         tp_data = self.place_limit_tp(
             pair=pair,
@@ -960,7 +962,7 @@ class Bybit:
 
         sl_data = self.place_market_sl(
             pair=pair,
-            side=exit_side,
+            exit_side=exit_side,
             quantity=pos_info[pair]['position_size'],
             sl_price=round(sl_price, self.pairs_info[pair]['pricePrecision'])
         )
@@ -1191,4 +1193,3 @@ class Bybit:
             for info in all_info:
                 all_data.update(info)
             return all_data
-
