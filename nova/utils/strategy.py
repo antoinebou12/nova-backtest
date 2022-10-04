@@ -31,7 +31,7 @@ class RandomStrategy(Bot):
                  entry_l_prob: float = 0.5,
                  entry_s_prob: float = 0.5,
                  exit_prob: float = 0.5,
-                 tp_sl_delta: float = 0.08
+                 tp_sl_delta: float = 0.005
                  ):
 
         Bot.__init__(self,
