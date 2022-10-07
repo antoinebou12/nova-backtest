@@ -3,6 +3,11 @@ from decouple import config
 import time
 
 
+exchange='binance'
+pair ='BTCUSDT'
+type_pos ='LONG'
+quantity= 0.01
+
 def asserts_exit_limit_then_market(exchange: str,
                                    pair: str,
                                    type_pos: str,

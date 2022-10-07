@@ -552,6 +552,9 @@ class Binance:
     @staticmethod
     def _format_order(data: dict):
 
+        _price = 0.0 if data['type'] in ["MARKET", "STOP_MARKET", "TAKE_PROFIT"] else data['price']
+        _stop_price = 0.0 if data['type'] in ["MARKET", "LIMIT"] else data['stopPrice']
+
         formatted = {
             'time': data['time'] if 'time' in list(data.keys()) else data['updateTime'],
             'order_id': data['orderId'],
@@ -561,8 +564,8 @@ class Binance:
             'time_in_force': data['timeInForce'],
             'reduce_only': data['reduceOnly'],
             'side': data['side'],
-            'price': float(data['price']),
-            'stop_price': float(data['stopPrice']),
+            'price': float(_price),
+            'stop_price': float(_stop_price),
             'original_quantity': float(data['origQty']),
             'executed_quantity': float(data['executedQty']),
             'executed_price': float(data['avgPrice'])
@@ -780,11 +783,8 @@ class Binance:
         """
 
         t_start = time.time()
-
-        # Keep trying to get order status during 30s
+        # try to request the order in the next 5 seconds
         while time.time() - t_start < 5:
-
-            time.sleep(1)
 
             order_data = self.get_order(
                 pair=pair,
@@ -793,6 +793,8 @@ class Binance:
 
             if order_data['status'] != ['EXPIRED', 'CANCELED']:
                 return True, order_data
+
+            time.sleep(1)
 
         return False, None
 
@@ -871,7 +873,7 @@ class Binance:
         t_start = time.time()
         all_limit_orders = []
 
-        # Try to enter with limit order during 2 min
+        # Try to enter with limit order during duration number of seconds
         while (residual_size != 0) and (time.time() - t_start < duration):
 
             posted, data = self.place_limit_order_best_price(
@@ -883,10 +885,9 @@ class Binance:
 
             if posted:
 
-                all_limit_orders.append(data)
-
                 _price = data['price']
                 _status = data['status']
+                _order_trade = {}
 
                 # If the best order book price stays the same, do not cancel current order
                 while (_price == data['price']) and (time.time() - t_start < duration) and (_status != 'FILLED'):
@@ -896,13 +897,14 @@ class Binance:
                     ob = self.get_order_book(pair=pair)
                     _type = 'bids' if side == 'BUY' else 'asks'
                     _price = float(ob[_type][0]['price'])
-
-                    _status = self.get_order(
+                    _order_trade = self.get_order_trades(
                         pair=pair,
                         order_id=data['order_id']
-                    )['status']
+                    )
+                    _status = _order_trade['status']
 
-                # cancel order
+                    all_limit_orders.append(_order_trade)
+
                 self.cancel_order(
                     pair=pair,
                     order_id=data['order_id']
@@ -956,11 +958,15 @@ class Binance:
         # If there is residual, enter with market order
         if residual_size != 0:
 
+            print('RESIDUAL HERE')
+
             market_order = self.enter_market_order(
                 pair=pair,
                 type_pos=type_pos,
                 quantity=residual_size
             )
+
+            print(market_order)
 
             all_orders.append(market_order)
 
@@ -995,7 +1001,7 @@ class Binance:
         final_data = {
             'pair': all_orders[0]['pair'],
             'position_type': 'LONG' if all_orders[0]['side'] == 'BUY' else 'SHORT',
-            'original_position_size': all_orders[0]['original_quantity'],
+            'original_position_size': 0,
             'current_position_size': 0,
             'entry_time': all_orders[-1]['time'],
             'tp_id': tp_order['order_id'],
@@ -1003,27 +1009,35 @@ class Binance:
             'sl_id': sl_order['order_id'],
             'sl_price': sl_order['stop_price'],
             'trade_status': 'ACTIVE',
-            'quantity_exited': 0,
-            'exit_fees': 0,
-            'last_exit_time': 0,
-            'exit_price': 0,
-            'entry_fees': 0
+            'entry_fees': 0,
         }
 
         _price_information = []
         _avg_price = 0
 
+
         for order in all_orders:
             _trades = self.get_order_trades(pair=order['pair'], order_id=order['order_id'])
+
             if _trades['executed_quantity'] > 0:
-                final_data['entry_fees'] += _trades['tx_fee_in_quote_asset']
-                final_data['current_position_size'] += _trades['executed_quantity']
-                _price_information.append({'price': _trades['price'], 'qty': _trades['executed_quantity']})
+                    final_data['entry_fees'] += _trades['tx_fee_in_quote_asset']
+                    final_data['original_position_size'] += _trades['executed_quantity']
+                    final_data['current_position_size'] += _trades['executed_quantity']
+                    _price_information.append({'price': _trades['executed_price'], 'qty': _trades['executed_quantity']})
 
         for _info in _price_information:
             _avg_price += _info['price'] * (_info['qty'] / final_data['current_position_size'])
 
         final_data['entry_price'] = round(_avg_price, self.pairs_info[final_data['pair']]['pricePrecision'])
+
+        # needed for TP partial Execution
+        final_data['last_tp_executed'] = 0
+        final_data['exit_time'] = 0
+        final_data['exit_fees'] = 0
+        final_data['exit_price'] = 0
+        final_data['quantity_exited'] = 0
+        final_data['total_fees'] = 0
+        final_data['realized_pnl'] = 0
 
         return final_data
 
@@ -1052,7 +1066,7 @@ class Binance:
             pair=pair,
             side=side,
             quantity=quantity,
-            duration=120,
+            duration=60,
             reduce_only=True
         )
 
@@ -1076,7 +1090,8 @@ class Binance:
         final_data = {
             'pair': all_orders[0]['pair'],
             'executed_quantity': 0,
-            'last_exit_time': all_orders[-1]['time'],
+            'time': all_orders[-1]['time'],
+            'trade_status': 'CLOSED',
             'exit_fees': 0,
         }
 
@@ -1151,11 +1166,9 @@ class Binance:
         """
         tp_info = self.get_order_trades(pair=pair, order_id=tp_id)
         sl_info = self.get_order_trades(pair=pair, order_id=sl_id)
-        position_info = self.get_actual_positions(pairs=pair)
         return {
             'tp': tp_info,
             'sl': sl_info,
-            'current_quantity': position_info[pair]['position_size']
         }
 
     def get_last_price(self, pair: str) -> dict:

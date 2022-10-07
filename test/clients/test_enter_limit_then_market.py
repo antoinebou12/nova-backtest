@@ -3,6 +3,12 @@ from decouple import config
 import time
 
 
+exchange='binance'
+pair ='BTCUSDT'
+type_pos ='LONG'
+quantity= 0.01
+
+
 def asserts_enter_limit_then_market(exchange: str,
                                     pair: str,
                                     type_pos: str,
@@ -44,8 +50,7 @@ def asserts_enter_limit_then_market(exchange: str,
     )
 
     keys_expected = ['pair', 'position_type', 'original_position_size', 'current_position_size', 'entry_time', 'tp_id',
-                     'tp_price', 'sl_id', 'sl_price', 'trade_status', 'quantity_exited', 'exit_fees',
-                     'last_exit_time', 'exit_price', 'entry_fees']
+                     'tp_price', 'sl_id', 'sl_price', 'trade_status', 'entry_fees']
 
     time.sleep(1)
 
@@ -54,7 +59,7 @@ def asserts_enter_limit_then_market(exchange: str,
 
     nb_decimals = len(str(entry_orders['tp_price']).split(".")[1])
 
-    # assert entry_orders['entry_time'] < int(time.time() * 1000)
+    assert entry_orders['entry_time'] < int(time.time() * 1000)
     assert entry_orders['original_position_size'] == quantity
     assert entry_orders['tp_price'] == round(tp_price, nb_decimals)
     assert entry_orders['sl_price'] == round(sl_price, nb_decimals)
@@ -85,12 +90,12 @@ def asserts_enter_limit_then_market(exchange: str,
 def test_enter_limit_then_market():
 
     all_tests = [
-        # {
-        #     'exchange': 'binance',
-        #     'pair': 'BTCUSDT',
-        #     'type_pos': 'LONG',
-        #     'quantity': 0.01,
-        # },
+        {
+            'exchange': 'binance',
+            'pair': 'BTCUSDT',
+            'type_pos': 'LONG',
+            'quantity': 0.01,
+        },
         {
             'exchange': 'bybit',
             'pair': 'BTCUSDT',

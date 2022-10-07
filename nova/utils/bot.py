@@ -167,33 +167,49 @@ class Bot(TelegramBOT):
         )
 
         for _pair_, _info_ in completed_entries.items():
-            # 7 - todo : create the position data in nova labs backend
             self.position_opened[_pair_] = _info_
 
             if self.telegram_notification:
                 self.telegram_enter_position(entry_info=_info_)
 
-    def add_exit_info(self, pair: str, exit_info: dict, exit_type: str, compute_profit: bool):
+    def update_exit_info(self, pair: str, exit_info: dict, exit_type: str):
 
-        self.position_opened[pair]['exit_fees'] += exit_info['exit_fees']
-        self.position_opened[pair]['quantity_exited'] += exit_info['executed_quantity']
-        self.position_opened[pair]['current_pos_size'] = self.position_opened[pair]['original_position_size'] - \
-                                                         self.position_opened[pair]['quantity_exited']
-        self.position_opened[pair]['last_exit_time'] = exit_info['last_exit_time']
+        fees_var = 'exit_fees' if exit_type not in ['TP', 'SL'] else 'tx_fee_in_quote_asset'
+        price_var = 'exit_price' if exit_type not in ['TP', 'SL'] else 'executed_price'
 
-        if exit_type == 'TP':
-            self.position_opened[pair]['exit_price'] = (exit_info['exit_price'] * exit_info['executed_quantity']) \
-                                       / self.position_opened[pair]['original_position_size']
+        old_pricing = self.position_opened[pair]['exit_price']
+        old_quantity_exited = self.position_opened[pair]['quantity_exited']
+
+        prc_precision = self.client.pairs_info[pair]['pricePrecision']
+
+        self.position_opened[pair]['exit_time'] = exit_info['time']
+        self.position_opened[pair]['exit_fees'] += exit_info[fees_var]
+
+        # Manage the Partial TP Update
+        if exit_type == "TP" and self.position_opened[pair]['last_tp_executed'] == exit_info['executed_quantity']:
+            pass
         else:
-            self.position_opened[pair]['exit_price'] += (exit_info['exit_price'] * exit_info['executed_quantity']) \
-                                        / self.position_opened[pair]['original_position_size']
+            self.position_opened[pair]['quantity_exited'] += exit_info['executed_quantity']
+
+        if exit_type == "TP":
+            self.position_opened[pair]['last_tp_executed'] = exit_info['executed_quantity']
+
+        self.position_opened[pair]['current_position_size'] = self.position_opened[pair]['original_position_size'] - \
+                                                              self.position_opened[pair]['quantity_exited']
+
+        if old_pricing == 0 and old_quantity_exited == 0:
+            self.position_opened[pair]['exit_price'] = exit_info[price_var]
+        else:
+
+            _price_ = (old_pricing * old_quantity_exited + exit_info[price_var] * exit_info['executed_quantity']) / \
+                      self.position_opened[pair]['quantity_exited']
+            self.position_opened[pair]['exit_price'] = float(round(_price_, prc_precision)),
 
         if self.position_opened[pair]['current_position_size'] == 0:
+
             self.position_opened[pair]['trade_status'] = 'CLOSED'
 
-        if compute_profit:
-            # Get total fees paid
-            self.position_opened[pair]['cum_exec_fees'] = self.position_opened[pair]['exit_fees']\
+            self.position_opened[pair]['total_fees'] = self.position_opened[pair]['exit_fees']\
                                                           + self.position_opened[pair]['entry_fees']
 
             side = 1 if self.position_opened[pair]['position_type'] == 'LONG' else -1
@@ -201,7 +217,15 @@ class Bot(TelegramBOT):
             _pnl = side * (self.position_opened[pair]['exit_price'] - self.position_opened[pair]['entry_price']) \
                    * self.position_opened[pair]['original_position_size']
 
-            self.position_opened[pair]['realized_pnl'] = round(_pnl - self.position_opened[pair]['cum_exec_fees'], 2)
+            self.position_opened[pair]['realized_pnl'] = round(_pnl - self.position_opened[pair]['total_fees'], 2)
+
+        if exit_type == "TP":
+            print(f'TP EXITING {pair} information')
+            print(self.position_opened[pair])
+
+        if exit_type == "SL":
+            print(f'TP EXITING {pair} information')
+            print(self.position_opened[pair])
 
     def close_local_state(self, pair: str):
 
@@ -211,6 +235,9 @@ class Bot(TelegramBOT):
 
         if self.telegram_notification:
             self.telegram_realized_pnl(pnl=self.realizedPNL)
+
+        print(f'{pair} should not an open position')
+        print(self.position_opened)
 
         print(f'Current pnl = {round(self.realizedPNL, 2)} $')
 
@@ -267,11 +294,10 @@ class Bot(TelegramBOT):
             )
 
             # Add new exit information to local bot positions data
-            self.add_exit_info(
+            self.update_exit_info(
                 pair=_pair_,
                 exit_info=_exit_info,
                 exit_type='ExitSignal',
-                compute_profit=True
             )
 
             self._push_backend()
@@ -307,14 +333,13 @@ class Bot(TelegramBOT):
             # 2 Verify if sl has been executed (ALL SL ARE MARKET)
             if data['sl']['status'] == 'FILLED':
 
-                self.client.cancel_order(pair=_pair, order_id=data['tp']['order_id'])
                 print('SL market order has been triggered')
+                self.client.cancel_order(pair=_pair, order_id=data['tp']['order_id'])
 
-                self.add_exit_info(
+                self.update_exit_info(
                     pair=_pair,
                     exit_info=data['sl'],
                     exit_type='SL',
-                    compute_profit=True
                 )
 
                 self._push_backend()
@@ -335,14 +360,14 @@ class Bot(TelegramBOT):
                 remaining_quantity = data['tp']['original_quantity'] - data['tp']['executed_quantity']
 
                 if remaining_quantity == 0:
+                    print('TP Limit has been triggered')
                     # Cancel sl order
                     self.client.cancel_order(pair=_pair, order_id=data['sl']['order_id'])
 
-                    self.add_exit_info(
+                    self.update_exit_info(
                         pair=_pair,
                         exit_info=data['tp'],
                         exit_type='TP',
-                        compute_profit=True
                     )
 
                     self._push_backend()
@@ -356,14 +381,11 @@ class Bot(TelegramBOT):
                     self.close_local_state(pair=_pair)
 
                 else:
-
-                    print('TP partially executed')
-
-                    self.add_exit_info(
+                    print('PARTIAL TP Limit has been triggered')
+                    self.update_exit_info(
                         pair=_pair,
                         exit_info=data['tp'],
                         exit_type='TP',
-                        compute_profit=False
                     )
 
                     self._push_backend()
@@ -373,8 +395,6 @@ class Bot(TelegramBOT):
                             pair=_pair,
                             tp_info=data['tp']
                         )
-
-        print('All Positions under BOT management updated')
 
     @staticmethod
     def _push_backend():

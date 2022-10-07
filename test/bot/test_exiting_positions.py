@@ -55,17 +55,16 @@ def asserts_exiting_position(
 
         if is_opening_candle(interval=bot.candle):
 
-            bot.entering_positions()
-
             current_nb_position = len(bot.position_opened)
 
             if current_nb_position > 0:
+                bot.verify_positions()
 
                 bot.exiting_positions()
 
-                assert len(bot.position_opened) == 0
+                # done = True
 
-                done = True
+            bot.entering_positions()
 
     print(f"Test verify_positions for {exchange.upper()} successful")
 

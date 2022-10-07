@@ -1,5 +1,7 @@
 from decouple import config
 from nova.utils.strategy import RandomStrategy
+from multiprocessing import set_start_method
+set_start_method('fork')
 
 
 def asserts_production_run(
