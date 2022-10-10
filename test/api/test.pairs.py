@@ -1,8 +1,8 @@
-from nova.api.client import NovaClient
+from nova.api.client import NovaAPI
 from decouple import config
 
 
-nova_client = NovaClient(config('NovaAPISecret'))
+nova_client = NovaAPI(config('NovaAPISecret'))
 
 
 value = "TEST"

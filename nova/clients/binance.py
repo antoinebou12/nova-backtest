@@ -667,6 +667,9 @@ class Binance:
             signed=True
         )
 
+        print('MARKET RESPONSE')
+        print(response)
+
         return self.get_order_trades(
             pair=pair,
             order_id=response['orderId']
@@ -887,7 +890,11 @@ class Binance:
 
                 _price = data['price']
                 _status = data['status']
-                _order_trade = {}
+
+                _order_trade = self.get_order_trades(
+                    pair=pair,
+                    order_id=data['order_id']
+                )
 
                 # If the best order book price stays the same, do not cancel current order
                 while (_price == data['price']) and (time.time() - t_start < duration) and (_status != 'FILLED'):
@@ -903,7 +910,7 @@ class Binance:
                     )
                     _status = _order_trade['status']
 
-                    all_limit_orders.append(_order_trade)
+                all_limit_orders.append(_order_trade)
 
                 self.cancel_order(
                     pair=pair,
@@ -966,8 +973,6 @@ class Binance:
                 quantity=residual_size
             )
 
-            print(market_order)
-
             all_orders.append(market_order)
 
         # Get current position info
@@ -990,6 +995,7 @@ class Binance:
             sl_price=sl_price
         )
 
+        print(f'# ALL ORDERS ENTERING {pair} #')
         return self._format_enter_limit_info(
             all_orders=all_orders,
             tp_order=tp_data,
@@ -998,6 +1004,7 @@ class Binance:
 
     def _format_enter_limit_info(self, all_orders: list, tp_order: dict, sl_order: dict):
 
+        print(all_orders)
         final_data = {
             'pair': all_orders[0]['pair'],
             'position_type': 'LONG' if all_orders[0]['side'] == 'BUY' else 'SHORT',
@@ -1081,11 +1088,14 @@ class Binance:
             if market_order:
                 all_orders.append(market_order)
 
+        print('# ALL ORDERS EXITING #')
+
         return self._format_exit_limit_info(
             all_orders=all_orders
         )
 
     def _format_exit_limit_info(self, all_orders: list):
+        print(all_orders)
 
         final_data = {
             'pair': all_orders[0]['pair'],

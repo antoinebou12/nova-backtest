@@ -74,7 +74,7 @@ def test_exiting_position():
         {
             'exchange': 'binance',
             'quote_asset': 'USDT',
-            'list_pair': ['BTCUSDT', 'ETHUSDT']
+            'list_pair': ['BTCUSDT', 'ETHUSDT', 'XRPUSDT']
         }
     ]
 

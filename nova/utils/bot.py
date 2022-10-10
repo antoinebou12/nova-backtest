@@ -177,8 +177,8 @@ class Bot(TelegramBOT):
         fees_var = 'exit_fees' if exit_type not in ['TP', 'SL'] else 'tx_fee_in_quote_asset'
         price_var = 'exit_price' if exit_type not in ['TP', 'SL'] else 'executed_price'
 
-        old_pricing = self.position_opened[pair]['exit_price']
-        old_quantity_exited = self.position_opened[pair]['quantity_exited']
+        old_pricing = 0 if exit_type != "TP" else self.position_opened[pair]['exit_price']
+        old_quantity_exited = 0 if exit_type != "TP" else self.position_opened[pair]['quantity_exited']
 
         prc_precision = self.client.pairs_info[pair]['pricePrecision']
 
@@ -200,10 +200,10 @@ class Bot(TelegramBOT):
         if old_pricing == 0 and old_quantity_exited == 0:
             self.position_opened[pair]['exit_price'] = exit_info[price_var]
         else:
-
+            print('Old pricing')
             _price_ = (old_pricing * old_quantity_exited + exit_info[price_var] * exit_info['executed_quantity']) / \
                       self.position_opened[pair]['quantity_exited']
-            self.position_opened[pair]['exit_price'] = float(round(_price_, prc_precision)),
+            self.position_opened[pair]['exit_price'] = float(round(_price_, prc_precision))
 
         if self.position_opened[pair]['current_position_size'] == 0:
 
@@ -219,14 +219,6 @@ class Bot(TelegramBOT):
 
             self.position_opened[pair]['realized_pnl'] = round(_pnl - self.position_opened[pair]['total_fees'], 2)
 
-        if exit_type == "TP":
-            print(f'TP EXITING {pair} information')
-            print(self.position_opened[pair])
-
-        if exit_type == "SL":
-            print(f'TP EXITING {pair} information')
-            print(self.position_opened[pair])
-
     def close_local_state(self, pair: str):
 
         self.realizedPNL += self.position_opened[pair]['realized_pnl']
@@ -236,9 +228,7 @@ class Bot(TelegramBOT):
         if self.telegram_notification:
             self.telegram_realized_pnl(pnl=self.realizedPNL)
 
-        print(f'{pair} should not an open position')
-        print(self.position_opened)
-
+        assert pair not in self.position_opened.keys(), f'{pair} HAS NOT BEEN REMOVED'
         print(f'Current pnl = {round(self.realizedPNL, 2)} $')
 
     def exiting_positions(self):
@@ -275,24 +265,23 @@ class Bot(TelegramBOT):
                                   'quantity': _info['current_position_size'],
                                   })
 
+        for _exit in all_exits:
+            print(f'Cancel TP {_exit["pair"]}')
+            self.client.cancel_order(
+                pair=_exit['pair'],
+                order_id=self.position_opened[_exit['pair']]['tp_id']
+            )
+
         # Execute Exit Orders
         completed_exits = self.client.exit_limit_then_market(
             orders=all_exits
         )
 
         for _pair_, _exit_info in completed_exits.items():
-
-            # Cancel TP and SL orders
-            self.client.cancel_order(
-                pair=_pair_,
-                order_id=self.position_opened[_pair_]['tp_id']
-            )
-
             self.client.cancel_order(
                 pair=_pair_,
                 order_id=self.position_opened[_pair_]['sl_id']
             )
-
             # Add new exit information to local bot positions data
             self.update_exit_info(
                 pair=_pair_,

@@ -19,7 +19,6 @@ class NovaAPI:
             fetch_schema_from_transport=True
         )
 
-    # Strategies
     def create_strategy(self,
                         name: str,
                         start_time: int,
