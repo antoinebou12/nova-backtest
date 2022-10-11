@@ -1,7 +1,30 @@
 from gql import gql
 
 
-class Query:
+class Queries:
+
+    @staticmethod
+    def read_pairs(pair_id: str = None):
+
+        to_add = "pairs " if pair_id is None else f'pair (pairId: "{pair_id}") '
+
+        return gql(
+            """
+            {
+                %s{
+                    _id
+                    value
+                    name
+                    fiat
+                    pair
+                    available_exchange
+                    available_strategy {
+                        name
+                    }
+                }
+            }
+            """ % to_add
+        )
 
     @staticmethod
     def read_strategy(_name: str):
@@ -30,7 +53,7 @@ class Query:
                     score
                 }
             }
-            """%(_name)
+            """ % _name
         )
 
     @staticmethod
@@ -62,47 +85,6 @@ class Query:
             }
             """
         )
-
-    @staticmethod
-    def read_pair(_pairId: str):
-        return gql(
-            """
-            {
-                pair (pairId: "%s") {
-                    _id
-                    value
-                    name
-                    fiat
-                    pair
-                    available_exchange
-                    available_strategy {
-                        name
-                    }
-                }
-            }
-            """%(_pairId)
-        )
-
-    @staticmethod
-    def read_pairs():
-        return gql(
-            """
-            {
-                pairs {
-                    _id
-                    value
-                    name
-                    fiat
-                    pair
-                    available_exchange
-                    available_strategy {
-                        name
-                    }
-                }
-            }
-            """
-        )
-
 
     @staticmethod
     def read_bots():

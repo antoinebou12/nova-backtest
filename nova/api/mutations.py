@@ -1,20 +1,7 @@
 from gql import gql
 
 
-class Mutation:
-
-    @staticmethod
-    def create_pair():
-        return gql(
-            """
-            mutation createPair($input: PairInput!){
-                createPair(input: $input) {
-                    _id
-                    name
-                }
-            }
-            """
-        )
+class Mutations:
 
     @staticmethod
     def delete_pair():
@@ -27,13 +14,40 @@ class Mutation:
         )
 
     @staticmethod
+    def create_pair():
+        return gql(
+            """
+            mutation createPair($input: PairInput!){
+                createPair(input: $input) {
+                    _id
+                    value
+                    name
+                    fiat
+                    pair
+                    available_exchange
+                    available_strategy {
+                        name
+                    }
+                }
+            }
+            """
+        )
+
+    @staticmethod
     def update_pair():
         return gql(
             """
             mutation updatePair($input: PairInput!){
                 updatePair(input: $input){
                     _id
+                    value
                     name
+                    fiat
+                    pair
+                    available_exchange
+                    available_strategy {
+                        name
+                    }
                 }
             }
             """

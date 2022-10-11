@@ -51,6 +51,8 @@ def asserts_exiting_position(
 
     print('Starting the Loop')
 
+    _index = 0
+
     while not done:
 
         if is_opening_candle(interval=bot.candle):
@@ -65,6 +67,10 @@ def asserts_exiting_position(
                 # done = True
 
             bot.entering_positions()
+
+            _index += 1
+
+            print(f'Cycle {_index}')
 
     print(f"Test verify_positions for {exchange.upper()} successful")
 

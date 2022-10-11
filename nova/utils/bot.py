@@ -223,6 +223,8 @@ class Bot(TelegramBOT):
 
         self.realizedPNL += self.position_opened[pair]['realized_pnl']
 
+        print(f'Realized PNL for {pair} = {self.position_opened[pair]["realized_pnl"]}')
+
         del self.position_opened[pair]
 
         if self.telegram_notification:

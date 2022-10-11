@@ -345,8 +345,11 @@ class Binance:
                         step_size = str(float(fil['stepSize']))
                         output[symbol['symbol']]['quantityPrecision'] = min(step_size[::-1].find('.'),
                                                                             symbol['quantityPrecision'])
+                        output[symbol['symbol']]['minQuantity'] = float(fil['minQty'])
+
                     if fil['filterType'] == 'MARKET_LOT_SIZE':
-                        output[symbol['symbol']]['max_market_trading_qty'] = fil['maxQty']
+                        output[symbol['symbol']]['maxQuantity'] = float(fil['maxQty'])
+
         return output
 
     # STANDARDIZED FUNCTIONS
@@ -667,9 +670,6 @@ class Binance:
             signed=True
         )
 
-        print('MARKET RESPONSE')
-        print(response)
-
         return self.get_order_trades(
             pair=pair,
             order_id=response['orderId']
@@ -848,7 +848,7 @@ class Binance:
                 pair=pair
             )
         else:
-            return False, None
+            return False, response
 
     def _looping_limit_orders(
             self,
@@ -877,7 +877,7 @@ class Binance:
         all_limit_orders = []
 
         # Try to enter with limit order during duration number of seconds
-        while (residual_size != 0) and (time.time() - t_start < duration):
+        while (residual_size >= self.pairs_info[pair]['minQuantity']) and (time.time() - t_start < duration):
 
             posted, data = self.place_limit_order_best_price(
                 pair=pair,
@@ -886,15 +886,15 @@ class Binance:
                 reduce_only=reduce_only
             )
 
+            if posted == False:
+                print(f'posted {pair} : {posted}')
+                print(f'{data}')
+
+
             if posted:
 
                 _price = data['price']
                 _status = data['status']
-
-                _order_trade = self.get_order_trades(
-                    pair=pair,
-                    order_id=data['order_id']
-                )
 
                 # If the best order book price stays the same, do not cancel current order
                 while (_price == data['price']) and (time.time() - t_start < duration) and (_status != 'FILLED'):
@@ -904,11 +904,17 @@ class Binance:
                     ob = self.get_order_book(pair=pair)
                     _type = 'bids' if side == 'BUY' else 'asks'
                     _price = float(ob[_type][0]['price'])
-                    _order_trade = self.get_order_trades(
+                    _status = self.get_order(
                         pair=pair,
                         order_id=data['order_id']
-                    )
-                    _status = _order_trade['status']
+                    )['status']
+
+                _order_trade = self.get_order_trades(
+                    pair=pair,
+                    order_id=data['order_id']
+                )
+
+                print(f'_order_trade : {_order_trade}')
 
                 all_limit_orders.append(_order_trade)
 
@@ -922,7 +928,7 @@ class Binance:
 
             if pair not in list(pos_info.keys()) and not reduce_only:
                 residual_size = quantity
-            elif pair not in list(pos_info.keys()) and reduce_only:
+            elif pair not in list(pos_info.keys()) and reduce_only and posted:
                 residual_size = 0
             elif pair in list(pos_info.keys()) and reduce_only:
                 residual_size = pos_info[pair]['position_size']
@@ -963,9 +969,9 @@ class Binance:
         )
 
         # If there is residual, enter with market order
-        if residual_size != 0:
+        if residual_size >= self.pairs_info[pair]['minQuantity']:
 
-            print('RESIDUAL HERE')
+            print(f'RESIDUAL HERE {pair} -- {residual_size}')
 
             market_order = self.enter_market_order(
                 pair=pair,
@@ -977,6 +983,9 @@ class Binance:
 
         # Get current position info
         pos_info = self.get_actual_positions(pairs=pair)
+
+        print(f'POSITION INFO {pair}')
+        print(f'{pos_info}')
 
         exit_side = 'SELL' if side == 'BUY' else 'BUY'
 
@@ -995,7 +1004,6 @@ class Binance:
             sl_price=sl_price
         )
 
-        print(f'# ALL ORDERS ENTERING {pair} #')
         return self._format_enter_limit_info(
             all_orders=all_orders,
             tp_order=tp_data,
@@ -1004,7 +1012,6 @@ class Binance:
 
     def _format_enter_limit_info(self, all_orders: list, tp_order: dict, sl_order: dict):
 
-        print(all_orders)
         final_data = {
             'pair': all_orders[0]['pair'],
             'position_type': 'LONG' if all_orders[0]['side'] == 'BUY' else 'SHORT',
@@ -1021,7 +1028,6 @@ class Binance:
 
         _price_information = []
         _avg_price = 0
-
 
         for order in all_orders:
             _trades = self.get_order_trades(pair=order['pair'], order_id=order['order_id'])
@@ -1078,7 +1084,10 @@ class Binance:
         )
 
         # If there is residual, exit with market order
-        if residual_size != 0:
+        if residual_size >= self.pairs_info[pair]['minQuantity']:
+
+            print(f'RESIDUAL HERE {pair} -- {residual_size}')
+
             market_order = self.exit_market_order(
                 pair=pair,
                 type_pos=type_pos,
@@ -1088,14 +1097,11 @@ class Binance:
             if market_order:
                 all_orders.append(market_order)
 
-        print('# ALL ORDERS EXITING #')
-
         return self._format_exit_limit_info(
             all_orders=all_orders
         )
 
     def _format_exit_limit_info(self, all_orders: list):
-        print(all_orders)
 
         final_data = {
             'pair': all_orders[0]['pair'],
@@ -1113,7 +1119,7 @@ class Binance:
             if _trades['executed_quantity'] > 0:
                 final_data['exit_fees'] += _trades['tx_fee_in_quote_asset']
                 final_data['executed_quantity'] += _trades['executed_quantity']
-                _price_information.append({'price': _trades['price'], 'qty': _trades['executed_quantity']})
+                _price_information.append({'price': _trades['executed_price'], 'qty': _trades['executed_quantity']})
 
         for _info in _price_information:
             _avg_price += _info['price'] * (_info['qty'] / final_data['executed_quantity'])
