@@ -3,6 +3,7 @@ from nova.api.queries import Queries
 from gql.transport.aiohttp import AIOHTTPTransport
 from gql import Client
 from typing import Union
+import re
 
 
 class NovaAPI:
@@ -19,25 +20,6 @@ class NovaAPI:
             fetch_schema_from_transport=True
         )
 
-    def read_pairs(self, pair_id: str = None) -> Union[dict, list]:
-        data = self._client.execute(
-            document=Queries.read_pairs(pair_id=pair_id)
-        )
-        if pair_id is not None:
-            return data['pair']
-        else:
-            return data['pairs']
-
-    def delete_pair(self, pair_id: str) -> dict:
-        return self._client.execute(
-            document=Mutations.delete_pair(),
-            variable_values={
-                "pairId": {
-                    'id': pair_id
-                }
-            }
-        )
-
     def create_pair(self, value: str, name: str, fiat: str, strategies: list, exchanges: list) -> dict:
         return self._client.execute(
             document=Mutations.create_pair(),
@@ -52,45 +34,74 @@ class NovaAPI:
             }
         )['createPair']
 
+    def read_pairs(self, pair_id: str = None) -> Union[dict, list]:
+        data = self._client.execute(
+            document=Queries.read_pairs(pair_id=pair_id)
+        )
+        if pair_id:
+            return data['pair']
+        else:
+            return data['pairs']
+
     def update_pair(self,
                     pair_id: str,
-                    value: str,
-                    name: str,
-                    fiat: str,
                     strategies: list,
                     exchanges: list
                     ):
+        """
+        Note: We can only update the strategies
+        Args:
+            pair_id:
+            strategies:
+            exchanges:
+        Returns:
+        """
 
-        original_value = self._client.execute(
-            document=Queries.read_pairs(pair_id=pair_id)
-        )
+        original_value = self.read_pairs(pair_id=pair_id)
+
+        for exchange in exchanges:
+            for key, value in exchange.items():
+                if key == 'add':
+                    original_value['available_exchange'].append(value)
+                elif key == 'remove':
+                    original_value['available_exchange'].remove(value)
+
+        for strategy in strategies:
+            for _key, _value in strategy.items():
+                if _key == 'add':
+                    original_value['available_strategy'].append({"name": _value})
+                elif _key == 'remove':
+                    original_value['available_strategy'].remove({"name": _value})
 
         return self._client.execute(
             document=Mutations.update_pair(),
             variable_values={
                 "input": {
                     "id": pair_id,
-                    "value": value,
-                    "name": name,
-                    "fiat": fiat,
-                    "available_strategy": strategies,
-                    "available_exchange": exchanges
+                    "value": original_value['value'],
+                    "name": original_value['name'],
+                    "fiat": original_value['fiat'],
+                    "available_strategy": original_value['available_strategy'],
+                    "available_exchange": original_value['available_exchange']
                 }
             }
         )['updatePair']
 
-    def delete_strategy(self, params) -> dict:
+    def delete_pair(self, pair_id: str) -> dict:
         return self._client.execute(
-            document=Mutations.delete_strategy(),
-            variable_values=params
-        )
+            document=Mutations.delete_pair(),
+            variable_values={
+                "pairId": {
+                    'id': pair_id
+                }
+            }
+        )['deletePair']
 
     def create_strategy(self,
                         name: str,
                         start_time: int,
                         end_time: int,
                         description: str,
-                        version: str,
                         candles: str,
                         leverage: int,
                         max_position: int,
@@ -114,7 +125,7 @@ class NovaAPI:
                     "backtestStartAt": start_time,
                     "backtestEndAt": end_time,
                     "description": description,
-                    "version": version,
+                    "version": "V1",
                     "candles": candles,
                     "leverage": leverage,
                     "maxPosition": max_position,
@@ -131,33 +142,101 @@ class NovaAPI:
                 }
             }
         )
-    #
-    # def read_strategy(self, strat_name: str) -> dict:
-    #     return self._client.execute(
-    #         document=Query.read_strategy(_name=strat_name)
-    #     )
-    #
-    # def read_strategies(self) -> dict:
-    #     return self._client.execute(
-    #         document=Query.read_strategies()
-    #     )
-    #
-    # def update_strategy(self, params: dict) -> dict:
-    #     return self._client.execute(
-    #         document=Mutation.update_strategy(),
-    #         variable_values=params
-    #     )
-    #
 
-    #
-    #
-    #
-    # def create_bot(self,
-    #                params: dict) -> dict:
-    #     return self._client.execute(
-    #         document=Mutation.create_bot(),
-    #         variable_values=params
-    #     )
+    def read_strategies(self, name: str = None) -> Union[dict, list]:
+        data = self._client.execute(
+            document=Queries.read_strategies(name=name)
+        )
+        if name:
+            return data['strategyByName']
+        else:
+            return data['strategies']
+
+    def update_strategy(self,
+                        name: str,
+                        description: str = None,
+                        start_time: int = None,
+                        end_time: int = None,
+                        leverage: int = None,
+                        max_position: int = None,
+                        trades: int = None,
+                        max_day_underwater: int = None,
+                        ratio_winning: float = None,
+                        ratio_sortino: float = None,
+                        ratio_sharp: float = None,
+                        max_down: float = None,
+                        monthly_fee: float = None,
+                        avg_profit: float = None,
+                        avg_hold_time: float = None,
+                        score: float = None
+                        ) -> dict:
+
+        info = self.read_strategies(name=name)
+        nb = [int(s) for s in re.findall(r'\d+', info['version'])][0] + 1
+        new_version = f'V{nb}'
+
+        return self._client.execute(
+            document=Mutations.update_strategy(),
+            variable_values={
+                'input': {
+                    "id": info['_id'],
+                    "name": name,
+                    "backtestStartAt": start_time if start_time is not None else info['backtestStartAt'],
+                    "backtestEndAt": end_time if end_time is not None else info['backtestEndAt'],
+                    "description": description if description is not None else info['description'],
+                    "version": new_version,
+                    "candles": info['candles'],
+                    "leverage": leverage if leverage is not None else info['leverage'],
+                    "maxPosition": max_position if max_position is not None else info['maxPosition'],
+                    "trades": trades if trades is not None else info['trades'],
+                    "maxDayUnderwater": max_day_underwater if max_day_underwater is not None else info['maxDayUnderwater'],
+                    "ratioWinning": ratio_winning if ratio_winning is not None else info['ratioWinning'],
+                    "ratioSharp": ratio_sharp if ratio_sharp is not None else info['ratioSharp'],
+                    "ratioSortino": ratio_sortino if ratio_sortino is not None else info['ratioSortino'],
+                    "maxDrawdown": max_down if max_down is not None else info['maxDrawdown'],
+                    "monthlyFee": monthly_fee if monthly_fee is not None else info['monthlyFee'],
+                    "avgProfit": avg_profit if avg_profit is not None else info['avgProfit'],
+                    "avgHoldTime": avg_hold_time if avg_hold_time is not None else info['avgHoldTime'],
+                    "score": score if score is not None else info['score']
+                }
+            }
+        )['updateStrategy']
+
+    def delete_strategy(self, params) -> dict:
+        return self._client.execute(
+            document=Mutations.delete_strategy(),
+            variable_values=params
+        )
+
+    def create_bot(self,
+                   name: str,
+                   exchange: str,
+                   max_down: float,
+                   bankroll: float,
+                   strategy: str,
+                   exchange_key: str,
+                   pairs: list) -> dict:
+
+        return self._client.execute(
+            document=Mutations.create_bot(),
+            variable_values={
+                'input': {
+                    'name': name,
+                    'exchange': exchange,
+                    'maxDown': max_down,
+                    'bankRoll': bankroll,
+                    'totalProfit': 0,
+                    'status': 'offline',
+                    'strategy': {
+                        'name': strategy
+                    },
+                    'exchangeKey': {
+                        'exchangeKey': exchange_key
+                    },
+                    'pairs': [{'pair': pair} for pair in pairs],
+                }
+            }
+        )
     #
     # def update_bot(self,
     #                params: dict) -> dict:

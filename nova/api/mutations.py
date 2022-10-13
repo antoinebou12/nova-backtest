@@ -4,16 +4,6 @@ from gql import gql
 class Mutations:
 
     @staticmethod
-    def delete_pair():
-        return gql(
-            """
-            mutation deletePair($pairId: ObjectId!){
-                deletePair(pairId: $pairId)
-            }
-            """
-        )
-
-    @staticmethod
     def create_pair():
         return gql(
             """
@@ -54,6 +44,16 @@ class Mutations:
         )
 
     @staticmethod
+    def delete_pair():
+        return gql(
+            """
+            mutation deletePair($pairId: ObjectId!){
+                deletePair(pairId: $pairId)
+            }
+            """
+        )
+
+    @staticmethod
     def create_strategy():
         return gql(
         """
@@ -61,9 +61,55 @@ class Mutations:
                 createStrategy(input: $input) {
                     _id
                     name
+                    backtestStartAt
+                    backtestEndAt
+                    description
+                    version
+                    candles
+                    leverage
+                    maxPosition
+                    trades
+                    maxDayUnderwater
+                    ratioWinning
+                    ratioSortino
+                    ratioSharp
+                    maxDrawdown
+                    monthlyFee
+                    avgProfit
+                    avgHoldTime
+                    score
                 }
             }
         """)
+
+    @staticmethod
+    def update_strategy():
+        return gql(
+            """
+                mutation updateStrategy($input: StrategyInput!){
+                    updateStrategy(input: $input) {
+                        _id
+                        name
+                        backtestStartAt
+                        backtestEndAt
+                        description
+                        version
+                        candles
+                        leverage
+                        maxPosition
+                        trades
+                        maxDayUnderwater
+                        ratioWinning
+                        ratioSortino
+                        ratioSharp
+                        maxDrawdown
+                        monthlyFee
+                        avgProfit
+                        avgHoldTime
+                        score
+                    }
+                }
+            """)
 
     @staticmethod
     def delete_strategy():
@@ -74,17 +120,6 @@ class Mutations:
             }
         """)
 
-    @staticmethod
-    def update_strategy():
-        return gql(
-            """
-                mutation editStrategy($input: StrategyInput!){
-                    editStrategy(input: $input) {
-                        _id
-                        name
-                    }
-                }
-            """)
 
     @staticmethod
     def create_bot():

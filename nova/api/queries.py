@@ -27,41 +27,14 @@ class Queries:
         )
 
     @staticmethod
-    def read_strategy(_name: str):
-        return gql(
-            """
-            {
-                strategyByName (name: "%s") {
-                    _id
-                    name
-                    backtestStartAt
-                    backtestEndAt
-                    description
-                    version
-                    candles
-                    leverage
-                    maxPosition
-                    trades
-                    maxDayUnderwater
-                    ratioWinning
-                    ratioSortino
-                    ratioSharp
-                    maxDrawdown
-                    monthlyFee
-                    avgProfit
-                    avgHoldTime
-                    score
-                }
-            }
-            """ % _name
-        )
+    def read_strategies(name: str = None):
 
-    @staticmethod
-    def read_strategies():
+        to_add = "strategies " if name is None else f'strategyByName (name: "{name}") '
+
         return gql(
             """
             {
-                strategies {
+                %s{
                     _id
                     name
                     backtestStartAt
@@ -83,7 +56,7 @@ class Queries:
                     score
                 }
             }
-            """
+            """ % to_add
         )
 
     @staticmethod

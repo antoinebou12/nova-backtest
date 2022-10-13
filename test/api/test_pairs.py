@@ -20,21 +20,21 @@ def test_create_pair(value: str, name: str, fiat: str, strategies: list, exchang
     assert data['pair'] == value + fiat
 
 
-test_create_pair(
-    value="BTC",
-    name="Bitcoin",
-    fiat="USDT",
-    strategies=[{"name": "vmc"}, {"name": "super_trend"}],
-    exchanges=['binance', 'ftx', 'bybit'],
-)
-
-test_create_pair(
-    value="ETH",
-    name="Ethereum",
-    fiat="USDT",
-    strategies=[{"name": "vmc"}, {"name": "super_trend"}],
-    exchanges=['binance', 'ftx', 'bybit'],
-)
+# test_create_pair(
+#     value="BTC",
+#     name="Bitcoin",
+#     fiat="USDT",
+#     strategies=[{"name": "vmc"}, {"name": "super_trend"}],
+#     exchanges=['binance', 'ftx', 'bybit'],
+# )
+#
+# test_create_pair(
+#     value="ETH",
+#     name="Ethereum",
+#     fiat="USDT",
+#     strategies=[{"name": "vmc"}, {"name": "super_trend"}],
+#     exchanges=['binance', 'ftx', 'bybit'],
+# )
 
 
 def test_delete_pair(pair_id: str):
@@ -47,9 +47,9 @@ def test_delete_pair(pair_id: str):
 
     assert is_true['deletePair']
 
-
-test_delete_pair(pair_id="6345879384e8922219888321")
-test_delete_pair(pair_id="634588bd84e892221988832d")
+#
+# test_delete_pair(pair_id="6345879384e8922219888321")
+# test_delete_pair(pair_id="634588bd84e892221988832d")
 
 
 def test_read_pairs(pair_id: str = None):
@@ -64,33 +64,24 @@ def test_read_pairs(pair_id: str = None):
 
 
 test_read_pairs(pair_id="634588fd84e892221988833b")
-test_read_pairs()
+# test_read_pairs()
 
 
-def test_update_pair(_id: str, value: str, name: str, fiat: str, strategies: list, exchanges: list):
+def test_update_pair(_id: str, strategies: list, exchanges: list):
 
     nova_client = NovaAPI(config('NovaAPISecret'))
 
     data = nova_client.update_pair(
-        _id=_id,
-        value=value,
-        name=name,
-        fiat=fiat,
+        pair_id=_id,
         strategies=strategies,
         exchanges=exchanges
     )
 
-    assert data['name'] == name
-    assert data['value'] == value
-    assert data['fiat'] == fiat
-    assert data['pair'] == value + fiat
+    print(data)
 
 
 test_update_pair(
     _id="634588fd84e8922219888347",
-    value="ETH",
-    name="Ethereum",
-    fiat="USDT",
-    strategies=[{"name": "vmc"}, {"name": "super_trend"}],
-    exchanges=['binance', 'ftx', 'bybit', 'kraken'],
+    strategies=[{"remove": "super_trend"}],
+    exchanges=[{"add": 'huobi'}, {"remove": "kraken"}],
 )
