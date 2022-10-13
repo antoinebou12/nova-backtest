@@ -106,7 +106,7 @@ class NovaAPI:
                         leverage: int,
                         max_position: int,
                         trades: int,
-                        max_day_underwater: int,
+                        day_underwater: int,
                         ratio_winning: float,
                         ratio_sortino: float,
                         ratio_sharp: float,
@@ -130,7 +130,7 @@ class NovaAPI:
                     "leverage": leverage,
                     "maxPosition": max_position,
                     "trades": trades,
-                    "maxDayUnderwater": max_day_underwater,
+                    "maxDayUnderwater": day_underwater,
                     "ratioWinning": ratio_winning,
                     "ratioSharp": ratio_sortino,
                     "ratioSortino": ratio_sharp,
@@ -160,7 +160,7 @@ class NovaAPI:
                         leverage: int = None,
                         max_position: int = None,
                         trades: int = None,
-                        max_day_underwater: int = None,
+                        day_underwater: int = None,
                         ratio_winning: float = None,
                         ratio_sortino: float = None,
                         ratio_sharp: float = None,
@@ -189,7 +189,7 @@ class NovaAPI:
                     "leverage": leverage if leverage is not None else info['leverage'],
                     "maxPosition": max_position if max_position is not None else info['maxPosition'],
                     "trades": trades if trades is not None else info['trades'],
-                    "maxDayUnderwater": max_day_underwater if max_day_underwater is not None else info['maxDayUnderwater'],
+                    "maxDayUnderwater": day_underwater if day_underwater is not None else info['maxDayUnderwater'],
                     "ratioWinning": ratio_winning if ratio_winning is not None else info['ratioWinning'],
                     "ratioSharp": ratio_sharp if ratio_sharp is not None else info['ratioSharp'],
                     "ratioSortino": ratio_sortino if ratio_sortino is not None else info['ratioSortino'],
@@ -209,19 +209,17 @@ class NovaAPI:
         )
 
     def create_bot(self,
-                   name: str,
                    exchange: str,
                    max_down: float,
                    bankroll: float,
                    strategy: str,
-                   exchange_key: str,
+                   exchange_key_name: str,
                    pairs: list) -> dict:
 
         return self._client.execute(
             document=Mutations.create_bot(),
             variable_values={
                 'input': {
-                    'name': name,
                     'exchange': exchange,
                     'maxDown': max_down,
                     'bankRoll': bankroll,
@@ -231,75 +229,98 @@ class NovaAPI:
                         'name': strategy
                     },
                     'exchangeKey': {
-                        'exchangeKey': exchange_key
+                        'name': exchange_key_name
                     },
                     'pairs': [{'pair': pair} for pair in pairs],
                 }
             }
+        )['createBot']
+
+    def read_bots(self, bot_id: str = None) -> dict:
+        data = self._client.execute(
+            document=Queries.read_bots(bot_id=bot_id)
         )
-    #
-    # def update_bot(self,
-    #                params: dict) -> dict:
-    #     return self._client.execute(
-    #         document=Mutation.update_bot(),
-    #         variable_values=params
-    #     )
-    #
-    # def delete_bot(self,
-    #                id_bot: str) -> dict:
-    #     params = {
-    #         "botId": {
-    #             'id': id_bot
-    #         }
-    #     }
-    #     return self._client.execute(
-    #         document=Mutation.delete_bot(),
-    #         variable_values=params
-    #     )
-    #
-    # def read_bots(self) -> dict:
-    #     return self._client.execute(
-    #         document=Query.read_bots()
-    #     )
-    #
-    # def read_bot(self, _bot_id) -> dict:
-    #     return self._client.execute(
-    #         document=Query.read_bot(_bot_id)
-    #     )
-    #
-    # def create_position(self,
-    #                     bot_name: str,
-    #                     post_type: str,
-    #                     value: float,
-    #                     state: str,
-    #                     entry_price: float,
-    #                     take_profit: float,
-    #                     stop_loss: float,
-    #                     token: str,
-    #                     pair: str):
-    #
-    #     params = {
-    #         "name": bot_name,
-    #         "input": {
-    #             "type": post_type,
-    #             "value": value,
-    #             "state": state,
-    #             "entry_price": entry_price,
-    #             "take_profit": take_profit,
-    #             "stop_loss": stop_loss,
-    #             "pair": {
-    #                 "value": token,
-    #                 "name": "Bitcoin",
-    #                 "fiat": "USDT",
-    #                 "pair": pair,
-    #                 "available_exchange": ['binance']
-    #             }
-    #         }
-    #     }
-    #     return self._client.execute(
-    #         document=Mutation.create_position(),
-    #         variable_values=params
-    #     )
+        if bot_id:
+            return data['bot']
+        else:
+            return data['bots']
+
+    def update_bot(self,
+                   bot_id: str,
+                   max_down: float = None,
+                   bankroll: float = None,
+                   status: str = None,
+                   new_exchange_key: str = None,
+                   pairs: list = None
+                   ) -> dict:
+
+        info = self.read_bots(bot_id=bot_id)
+
+        for pair in pairs:
+            for _key, _value in pair.items():
+                if _key == 'add':
+                    info['pairs'].append({"pair": _value})
+                elif _key == 'remove':
+                    info['pairs'].remove({"pair": _value})
+
+        return self._client.execute(
+            document=Mutations.update_bot(),
+            variable_values={
+                'input': {
+                    'id': bot_id,
+                    'maxDown': max_down if max_down is not None else info['maxDown'],
+                    'bankRoll': bankroll if bankroll is not None else info['bankRoll'],
+                    'status': status if status is not None else info['status'],
+                    'exchangeKey': {
+                        'name': new_exchange_key if new_exchange_key is not None else info['exchangeKey']['name']
+                    },
+                    'pairs': info['pairs']
+                }
+            }
+        )['updateBot']
+
+    def delete_bot(self, bot_id: str) -> dict:
+        return self._client.execute(
+            document=Mutations.delete_bot(),
+            variable_values={
+                "botId": {
+                    'id': bot_id
+                }
+            }
+        )['deleteBot']
+
+    def create_position(self,
+                        bot_name: str,
+                        post_type: str,
+                        value: float,
+                        state: str,
+                        entry_price: float,
+                        take_profit: float,
+                        stop_loss: float,
+                        token: str,
+                        pair: str):
+
+        return self._client.execute(
+            document=Mutations.create_position(),
+            variable_values={
+                "name": bot_name,
+                "input": {
+                    "type": post_type,
+                    "value": value,
+                    "state": state,
+                    "entry_price": entry_price,
+                    "take_profit": take_profit,
+                    "stop_loss": stop_loss,
+                    "pair": {
+                        "value": token,
+                        "name": "Bitcoin",
+                        "fiat": "USDT",
+                        "pair": pair,
+                        "available_exchange": ['binance']
+                    }
+                }
+            }
+        )["createPosition"]
     #
     # def update_position(self,
     #                     pos_id: str,
@@ -359,5 +380,3 @@ class NovaAPI:
     #         document=Query.read_positions()
     #     )
     #
-    # def trading_pairs(self):
-    #     pass

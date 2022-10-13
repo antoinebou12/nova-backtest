@@ -20,8 +20,7 @@ class Mutations:
                     }
                 }
             }
-            """
-        )
+            """)
 
     @staticmethod
     def update_pair():
@@ -40,8 +39,7 @@ class Mutations:
                     }
                 }
             }
-            """
-        )
+            """)
 
     @staticmethod
     def delete_pair():
@@ -50,37 +48,36 @@ class Mutations:
             mutation deletePair($pairId: ObjectId!){
                 deletePair(pairId: $pairId)
             }
-            """
-        )
+            """)
 
     @staticmethod
     def create_strategy():
         return gql(
-        """
-            mutation createStrategy($input: StrategyInput!){
-                createStrategy(input: $input) {
-                    _id
-                    name
-                    backtestStartAt
-                    backtestEndAt
-                    description
-                    version
-                    candles
-                    leverage
-                    maxPosition
-                    trades
-                    maxDayUnderwater
-                    ratioWinning
-                    ratioSortino
-                    ratioSharp
-                    maxDrawdown
-                    monthlyFee
-                    avgProfit
-                    avgHoldTime
-                    score
+            """
+                mutation createStrategy($input: StrategyInput!){
+                    createStrategy(input: $input) {
+                        _id
+                        name
+                        backtestStartAt
+                        backtestEndAt
+                        description
+                        version
+                        candles
+                        leverage
+                        maxPosition
+                        trades
+                        maxDayUnderwater
+                        ratioWinning
+                        ratioSortino
+                        ratioSharp
+                        maxDrawdown
+                        monthlyFee
+                        avgProfit
+                        avgHoldTime
+                        score
+                    }
                 }
-            }
-        """)
+            """)
 
     @staticmethod
     def update_strategy():
@@ -114,45 +111,72 @@ class Mutations:
     @staticmethod
     def delete_strategy():
         return gql(
-        """
-            mutation deleteStrategy($strategyId: ObjectId!){
-                deleteStrategy(strategyId: $strategyId)
-            }
-        """)
-
+            """
+                mutation deleteStrategy($strategyId: ObjectId!){
+                    deleteStrategy(strategyId: $strategyId)
+                }
+            """)
 
     @staticmethod
     def create_bot():
         return gql(
-        """
-            mutation createBot($input: BotInput!) {
-                createBot(input: $input) {
-                    _id
-                    name
+            """
+                mutation createBot($input: BotInput!) {
+                    createBot(input: $input) {
+                        _id
+                        name
+                        exchange
+                        maxDown
+                        bankRoll
+                        totalProfit
+                        status
+                        strategy {
+                            name
+                        }
+                        exchangeKey {
+                            name
+                        }                    
+                        pairs {
+                            pair
+                        }
+                    }
                 }
-            }
-        """)
+            """)
 
     @staticmethod
     def update_bot():
         return gql(
-        """
-            mutation updateBot($input: BotInput!) {
-                updateBot(input: $input) {
-                    _id
-                    name
+            """
+                mutation updateBot($input: BotInput!) {
+                    updateBot(input: $input) {
+                        _id
+                        name
+                        exchange
+                        maxDown
+                        bankRoll
+                        totalProfit
+                        status
+                        strategy {
+                            name
+                        }
+                        exchangeKey {
+                            name
+                        }      
+                        pairs {
+                            pair
+                        }
+                    }
                 }
-            }
-        """)
+            """)
 
     @staticmethod
     def delete_bot():
         return gql(
-        """
-            mutation deleteBot($botId: ObjectId!) {
-                deleteBot(botId: $botId)
-            }
-        """)
+            """
+                mutation deleteBot($botId: ObjectId!) {
+                    deleteBot(botId: $botId)
+                }
+            """)
 
     @staticmethod
     def create_position():

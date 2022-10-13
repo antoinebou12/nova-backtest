@@ -670,6 +670,8 @@ class Binance:
             signed=True
         )
 
+        print(f'ENTER MARKET RESPONSE {response}')
+
         return self.get_order_trades(
             pair=pair,
             order_id=response['orderId']
@@ -702,6 +704,8 @@ class Binance:
             params=_params,
             signed=True
         )
+
+        print(f'EXIT MARKET RESPONSE {response}')
 
         return self.get_order_trades(
             pair=pair,
@@ -890,7 +894,6 @@ class Binance:
                 print(f'posted {pair} : {posted}')
                 print(f'{data}')
 
-
             if posted:
 
                 _price = data['price']
@@ -930,6 +933,9 @@ class Binance:
                 residual_size = quantity
             elif pair not in list(pos_info.keys()) and reduce_only and posted:
                 residual_size = 0
+            elif pair not in list(pos_info.keys()) and reduce_only and not posted:
+                print('INSIDE')
+                return 0, {}
             elif pair in list(pos_info.keys()) and reduce_only:
                 residual_size = pos_info[pair]['position_size']
             else:
@@ -1083,6 +1089,10 @@ class Binance:
             reduce_only=True
         )
 
+        if residual_size == 0 and all_orders == {}:
+            print(f'In between execution {pair}')
+            return None
+
         # If there is residual, exit with market order
         if residual_size >= self.pairs_info[pair]['minQuantity']:
 
@@ -1152,7 +1162,8 @@ class Binance:
             results = pool.starmap(func=self._exit_limit_then_market, iterable=all_arguments)
 
         for _information in results:
-            final[_information['pair']] = _information
+            if _information is not None:
+                final[_information['pair']] = _information
 
         return final
 

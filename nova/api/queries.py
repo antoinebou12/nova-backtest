@@ -60,37 +60,39 @@ class Queries:
         )
 
     @staticmethod
-    def read_bots():
-        return gql('''
-        {
-            bots {
-                _id
-                name
-            }
-        }
-        ''')
+    def read_bots(bot_id: str = None):
 
-    @staticmethod
-    def read_bot(_bot_id: str):
-        return gql('''
-        {
-            bot(botId: "%s") {
-                _id
-                name
-                exchange
-                maxDown
-                bankRoll
-                status
-                totalProfit
-                pairs{
-                    pair
-                }
-                bot{
+        to_add = "bots " if bot_id is None else f'bot (botId: "{bot_id}") '
+
+        return gql(
+            '''
+            {
+                %s{
+                    _id
                     name
+                    exchange
+                    maxDown
+                    bankRoll
+                    totalProfit
+                    status
+                    strategy {
+                        name
+                    }
+                    exchangeKey {
+                        name
+                    }
+                    positions{
+                        type
+                        value
+                        state
+                    }         
+                    pairs {
+                        pair
+                    }
                 }
             }
-        }
-        ''' % _bot_id)
+            ''' % to_add
+            )
 
     @staticmethod
     def read_positions():
@@ -115,28 +117,3 @@ class Queries:
                 }
             }
             ''')
-
-    @staticmethod
-    def read_position(_position_id: str):
-        return gql(
-            """
-               {
-                    position (positionId: "%s") {
-                        _id
-                        type
-                        value
-                        state
-                        entry_price
-                        exit_price
-                        take_profit
-                        stop_loss
-                        exit_type
-                        profit
-                        fees
-                        pair {
-                            pair
-                        }
-                    }
-                }
-           """%(_position_id)
-        )
