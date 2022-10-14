@@ -21,14 +21,15 @@ def asserts_get_pairs_info(exchange: str):
         assert 'pricePrecision' in list(value.keys())
         assert 'quote_asset' in list(value.keys())
         assert 'quantityPrecision' in list(value.keys())
-        assert 'max_market_trading_qty' in list(value.keys())
+        assert 'maxQuantity' in list(value.keys())
+        assert 'minQuantity' in list(value.keys())
 
     print(f"Test get_pairs_info for {exchange.upper()} successful")
 
 
 def test_get_pairs_info():
 
-    for exchange in ['binance', 'bybit']:
+    for exchange in ['binance']:
         asserts_get_pairs_info(exchange=exchange)
 
 

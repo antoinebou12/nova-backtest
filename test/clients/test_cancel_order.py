@@ -46,6 +46,12 @@ def asserts_cancel_order(exchange: str, pair: str, type_pos: str, quantity: floa
     assert isinstance(cancel, dict)
     assert cancel['status'] == 'CANCELED'
 
+    client.exit_market_order(
+        pair=pair,
+        type_pos=type_pos,
+        quantity=quantity
+    )
+
     print(f"Test cancel_order for {exchange.upper()} successful")
 
 
@@ -53,10 +59,10 @@ def test_cancel_order():
 
     all_tests = [
         {
-            'exchange': 'bybit',
-            'pair': 'BTCUSDT',
+            'exchange': 'binance',
+            'pair': 'XRPUSDT',
             'type_pos': 'LONG',
-            'quantity': 0.01
+            'quantity': 200
         }
     ]
 

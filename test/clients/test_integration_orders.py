@@ -28,12 +28,18 @@ def asserts_integration_orders(exchange: str, orders: list):
 
     for _order_ in orders:
         assert _order_['pair'] in list(entry_orders.keys())
+
+        del _order_['sl_price']
+        del _order_['tp_price']
+
+        tp_order = client.get_order(pair=_order_['pair'], order_id=entry_orders[_order_['pair']]['tp_id'])
+
         client.cancel_order(pair=_order_['pair'], order_id=entry_orders[_order_['pair']]['tp_id'])
         client.cancel_order(pair=_order_['pair'], order_id=entry_orders[_order_['pair']]['sl_id'])
 
-    for _order in orders:
-        del _order['sl_price']
-        del _order['tp_price']
+        _order_['tp_time'] = tp_order["time"]
+        _order_['tp_id'] = entry_orders[_order_['pair']]['tp_id']
+        _order_['sl_id'] = entry_orders[_order_['pair']]['sl_id']
 
     exit_orders = client.exit_limit_then_market(orders)
 
@@ -46,20 +52,20 @@ def asserts_integration_orders(exchange: str, orders: list):
 def test_integration_orders():
 
     all_tests = [
-        # {
-        #     'exchange': 'binance',
-        #     'orders': [
-        #         {'pair': 'BTCUSDT', 'type_pos': 'LONG', 'quantity': 0.01},
-        #         {'pair': 'ETHUSDT', 'type_pos': 'SHORT', 'quantity': 0.1}
-        #     ]
-        # },
         {
-            'exchange': 'bybit',
+            'exchange': 'binance',
             'orders': [
-                {'pair': 'BTCUSDT', 'type_pos': 'LONG', 'quantity': 0.1},
-                {'pair': 'ETHUSDT', 'type_pos': 'SHORT', 'quantity': 1}
+                {'pair': 'BTCUSDT', 'type_pos': 'LONG', 'quantity': 0.01},
+                {'pair': 'ETHUSDT', 'type_pos': 'SHORT', 'quantity': 0.1}
             ]
-        }
+        },
+        # {
+        #     'exchange': 'bybit',
+        #     'orders': [
+        #         {'pair': 'BTCUSDT', 'type_pos': 'LONG', 'quantity': 0.1},
+        #         {'pair': 'ETHUSDT', 'type_pos': 'SHORT', 'quantity': 1}
+        #     ]
+        # }
     ]
 
     for _test in all_tests:

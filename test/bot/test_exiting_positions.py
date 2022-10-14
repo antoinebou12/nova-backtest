@@ -30,6 +30,7 @@ def asserts_exiting_position(
         telegram_bot_token='',
         telegram_bot_chat_id='',
         exit_prob=1,
+        tp_sl_delta=0.01
     )
 
     bot.client.setup_account(
@@ -80,7 +81,7 @@ def test_exiting_position():
         {
             'exchange': 'binance',
             'quote_asset': 'USDT',
-            'list_pair': ['BTCUSDT', 'ETHUSDT', 'XRPUSDT']
+            'list_pair': ['BTCUSDT', 'ETHUSDT']
         }
     ]
 

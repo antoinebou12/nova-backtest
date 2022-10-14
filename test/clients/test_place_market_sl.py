@@ -65,12 +65,12 @@ def test_place_market_sl():
             'type_pos': 'LONG',
             'quantity': 0.01
         },
-        {
-            'exchange': 'bybit',
-            'pair': 'BTCUSDT',
-            'type_pos': 'LONG',
-            'quantity': 0.01
-        }
+        # {
+        #     'exchange': 'bybit',
+        #     'pair': 'BTCUSDT',
+        #     'type_pos': 'LONG',
+        #     'quantity': 0.01
+        # }
     ]
 
     for _test in all_tests:

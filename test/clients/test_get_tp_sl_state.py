@@ -65,7 +65,7 @@ def assert_get_tp_sl_state(exchange: str,
         sl_id=sl_order['order_id']
     )
 
-    for var in ['tp', 'sl', 'current_quantity']:
+    for var in ['tp', 'sl']:
         assert var in list(_update.keys())
 
     assert _update['tp']['order_id'] == tp_order['order_id']
@@ -99,12 +99,12 @@ def test_get_tp_sl_state():
             'type_pos': 'LONG',
             'quantity': 0.01
         },
-        {
-            'exchange': 'bybit',
-            'pair': 'BTCUSDT',
-            'type_pos': 'LONG',
-            'quantity': 0.01
-        }
+        # {
+        #     'exchange': 'bybit',
+        #     'pair': 'BTCUSDT',
+        #     'type_pos': 'LONG',
+        #     'quantity': 0.01
+        # }
     ]
 
     for _test in all_tests:

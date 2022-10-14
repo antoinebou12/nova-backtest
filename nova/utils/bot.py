@@ -200,7 +200,6 @@ class Bot(TelegramBOT):
         if old_pricing == 0 and old_quantity_exited == 0:
             self.position_opened[pair]['exit_price'] = exit_info[price_var]
         else:
-            print('Old pricing')
             _price_ = (old_pricing * old_quantity_exited + exit_info[price_var] * exit_info['executed_quantity']) / \
                       self.position_opened[pair]['quantity_exited']
             self.position_opened[pair]['exit_price'] = float(round(_price_, prc_precision))
@@ -265,6 +264,9 @@ class Bot(TelegramBOT):
                 all_exits.append({'pair': _pair,
                                   'type_pos': _info['position_type'],
                                   'quantity': _info['current_position_size'],
+                                  'tp_time': self.position_opened[_pair]['last_tp_time'],
+                                  'tp_id': self.position_opened[_pair]['tp_id'],
+                                  'sl_id': self.position_opened[_pair]['sl_id'],
                                   })
 
         for _exit in all_exits:

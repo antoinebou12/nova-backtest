@@ -3,11 +3,6 @@ from decouple import config
 import time
 
 
-exchange='binance'
-pair ='BTCUSDT'
-type_pos ='LONG'
-quantity= 0.01
-
 def asserts_exit_limit_then_market(exchange: str,
                                    pair: str,
                                    type_pos: str,
@@ -35,25 +30,37 @@ def asserts_exit_limit_then_market(exchange: str,
                 quantity=_info['position_size']
             )
 
-    # entering in position
-    client.enter_market_order(
+    upper = client.get_last_price(pair=pair)['latest_price'] * 1.1
+    lower = client.get_last_price(pair=pair)['latest_price'] * 0.9
+
+    sl_price = lower if type_pos == 'LONG' else upper
+    tp_price = upper if type_pos == 'LONG' else lower
+
+    entry_orders = client._enter_limit_then_market(
         pair=pair,
         type_pos=type_pos,
         quantity=quantity,
+        sl_price=sl_price,
+        tp_price=tp_price,
     )
 
     time.sleep(1)
+
+    state_tp = client.get_order_trades(pair=pair, order_id=entry_orders['tp_id'])
 
     # exiting the position
     exit_orders = client._exit_limit_then_market(
         pair=pair,
         type_pos=type_pos,
         quantity=quantity,
+        tp_time=state_tp['time'],
+        tp_id=entry_orders['tp_id'],
+        sl_id=entry_orders['sl_id']
     )
 
     time.sleep(1)
 
-    keys_expected = ['pair', 'executed_quantity', 'last_exit_time', 'exit_fees', 'exit_price']
+    keys_expected = ['pair', 'executed_quantity', 'time', 'exit_fees', 'trade_status', 'exit_price']
 
     for var in keys_expected:
 
@@ -62,6 +69,12 @@ def asserts_exit_limit_then_market(exchange: str,
     # assert exit_orders['last_exit_time'] < int(time.time() * 1000)
     assert exit_orders['exit_fees'] > 0
     assert exit_orders['exit_price'] > 0
+
+    for var in ['tp_id', 'sl_id']:
+        client.cancel_order(
+            pair=pair,
+            order_id=entry_orders[var]
+        )
 
     print(f"Test exit_limit_then_market for {exchange.upper()} successful")
 
@@ -73,14 +86,14 @@ def test_exit_limit_then_market():
             'exchange': 'binance',
             'pair': 'BTCUSDT',
             'type_pos': 'LONG',
-            'quantity': 0.01,
+            'quantity': 0.01
         },
-        {
-            'exchange': 'bybit',
-            'pair': 'BTCUSDT',
-            'type_pos': 'LONG',
-            'quantity': 0.01,
-        }
+        # {
+        #     'exchange': 'bybit',
+        #     'pair': 'BTCUSDT',
+        #     'type_pos': 'LONG',
+        #     'quantity': 0.01,
+        # }
     ]
 
     for _test in all_tests:
@@ -89,7 +102,7 @@ def test_exit_limit_then_market():
             exchange=_test['exchange'],
             pair=_test['pair'],
             type_pos=_test['type_pos'],
-            quantity=_test['quantity']
+            quantity=_test['quantity'],
 
         )
 

@@ -51,7 +51,11 @@ class Binance:
         prepared.headers['User-Agent'] = "NovaLabs"
         prepared.headers['X-MBX-APIKEY'] = self.api_key
         response = self._session.send(prepared)
-        return response.json()
+        data = response.json()
+        if isinstance(data, dict) and 'code' in data.keys() and data['code'] not in [200, -2011]:
+            raise Exception(f'Error : {data["msg"]}')
+        else:
+            return data
 
     def get_server_time(self) -> int:
         """
@@ -670,8 +674,6 @@ class Binance:
             signed=True
         )
 
-        print(f'ENTER MARKET RESPONSE {response}')
-
         return self.get_order_trades(
             pair=pair,
             order_id=response['orderId']
@@ -704,8 +706,6 @@ class Binance:
             params=_params,
             signed=True
         )
-
-        print(f'EXIT MARKET RESPONSE {response}')
 
         return self.get_order_trades(
             pair=pair,
@@ -890,10 +890,6 @@ class Binance:
                 reduce_only=reduce_only
             )
 
-            if posted == False:
-                print(f'posted {pair} : {posted}')
-                print(f'{data}')
-
             if posted:
 
                 _price = data['price']
@@ -912,34 +908,39 @@ class Binance:
                         order_id=data['order_id']
                     )['status']
 
-                _order_trade = self.get_order_trades(
-                    pair=pair,
-                    order_id=data['order_id']
-                )
-
-                print(f'_order_trade : {_order_trade}')
-
-                all_limit_orders.append(_order_trade)
-
                 self.cancel_order(
                     pair=pair,
                     order_id=data['order_id']
                 )
 
-            # Get current position size
+                _order_trade = self.get_order_trades(
+                    pair=pair,
+                    order_id=data['order_id']
+                )
+
+                all_limit_orders.append(_order_trade)
+
+            # Get the positions information
             pos_info = self.get_actual_positions(pairs=pair)
 
+            # looping enter position : current_size = 0 => no limit execution => try again
             if pair not in list(pos_info.keys()) and not reduce_only:
                 residual_size = quantity
-            elif pair not in list(pos_info.keys()) and reduce_only and posted:
-                residual_size = 0
-            elif pair not in list(pos_info.keys()) and reduce_only and not posted:
-                print('INSIDE')
-                return 0, {}
+            # 0 < current_size < quantity => partial limit execution => update residual_size => try again
+            elif pair in list(pos_info.keys()) and not reduce_only and pos_info[pair]['position_size'] <= quantity:
+                residual_size = quantity - pos_info[pair]['position_size']
+
+            # looping exit position (current_size > 0 => no or partial limit execution => try again)
             elif pair in list(pos_info.keys()) and reduce_only:
                 residual_size = pos_info[pair]['position_size']
-            else:
-                residual_size = quantity - pos_info[pair]['position_size']
+            # current_size = 0 => limit exit order fully executed => update residual_size to 0
+            elif pair not in list(pos_info.keys()) and reduce_only and posted:
+                residual_size = 0
+
+            # side situation 1 : current_size = 0 + exit position but latest order has not been posted
+            # => complete execution from the tp or sl happening between checking position and exiting position
+            elif pair not in list(pos_info.keys()) and reduce_only and not posted:
+                residual_size = 0
 
         return residual_size, all_limit_orders
     
@@ -977,8 +978,6 @@ class Binance:
         # If there is residual, enter with market order
         if residual_size >= self.pairs_info[pair]['minQuantity']:
 
-            print(f'RESIDUAL HERE {pair} -- {residual_size}')
-
             market_order = self.enter_market_order(
                 pair=pair,
                 type_pos=type_pos,
@@ -989,9 +988,6 @@ class Binance:
 
         # Get current position info
         pos_info = self.get_actual_positions(pairs=pair)
-
-        print(f'POSITION INFO {pair}')
-        print(f'{pos_info}')
 
         exit_side = 'SELL' if side == 'BUY' else 'BUY'
 
@@ -1077,7 +1073,7 @@ class Binance:
 
         return final
 
-    def _exit_limit_then_market(self, pair: str, type_pos: str, quantity: float):
+    def _exit_limit_then_market(self, pair: str, type_pos: str, quantity: float, tp_time: int, tp_id: str, sl_id: str):
 
         side = 'SELL' if type_pos == 'LONG' else 'BUY'
 
@@ -1090,13 +1086,10 @@ class Binance:
         )
 
         if residual_size == 0 and all_orders == {}:
-            print(f'In between execution {pair}')
             return None
 
         # If there is residual, exit with market order
         if residual_size >= self.pairs_info[pair]['minQuantity']:
-
-            print(f'RESIDUAL HERE {pair} -- {residual_size}')
 
             market_order = self.exit_market_order(
                 pair=pair,
@@ -1108,24 +1101,63 @@ class Binance:
                 all_orders.append(market_order)
 
         return self._format_exit_limit_info(
-            all_orders=all_orders
+            pair=pair,
+            all_orders=all_orders,
+            tp_id=tp_id,
+            tp_time=tp_time,
+            sl_id=sl_id
         )
 
-    def _format_exit_limit_info(self, all_orders: list):
+    def _format_exit_limit_info(self, pair: str, all_orders: list, tp_id: str, tp_time: int, sl_id: str):
 
         final_data = {
-            'pair': all_orders[0]['pair'],
+            'pair': pair,
             'executed_quantity': 0,
-            'time': all_orders[-1]['time'],
+            'time': int(time.time() * 1000),
             'trade_status': 'CLOSED',
             'exit_fees': 0,
         }
+
+        data = self.get_tp_sl_state(pair=pair, tp_id=tp_id, sl_id=sl_id)
+
+        tp_execution = {
+            'tp_execution_unregistered': True,
+            'executed_quantity': 0,
+            'executed_price': 0,
+            'tx_fee_in_quote_asset': 0,
+        }
+
+        if data['tp']['time'] > tp_time:
+
+            print('IN BETWEEN TP EXECUTION')
+            # TP activation between verification and execution
+            trades = self._send_request(
+                end_point=f"/fapi/v1/userTrades",
+                request_type="GET",
+                params={"symbol": data['tp']['pair'], "startTime": data['tp']['time']},
+                signed=True
+            )
+
+            for trade in trades:
+                if trade['orderId'] == tp_id:
+                    tp_execution['executed_quantity'] += float(trade['qty'])
+                    tp_execution['executed_price'] = float(trade['price'])
+                    tp_execution['tx_fee_in_quote_asset'] += float(trade['commission'])
+
+        if data['sl']['status'] in ['FILLED']:
+            print('IN BETWEEN SL EXECUTION')
+            all_orders.append(data['sl'])
 
         _price_information = []
         _avg_price = 0
 
         for order in all_orders:
-            _trades = self.get_order_trades(pair=order['pair'], order_id=order['order_id'])
+            if 'tp_execution_unregistered' in order.keys():
+                print('TP EXECUTION')
+                _trades = tp_execution
+            else:
+                _trades = self.get_order_trades(pair=order['pair'], order_id=order['order_id'])
+
             if _trades['executed_quantity'] > 0:
                 final_data['exit_fees'] += _trades['tx_fee_in_quote_asset']
                 final_data['executed_quantity'] += _trades['executed_quantity']

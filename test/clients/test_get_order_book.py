@@ -33,10 +33,10 @@ def test_get_order_book():
             'exchange': 'binance',
             'pair': 'BTCUSDT'
         },
-        {
-            'exchange': 'bybit',
-            'pair': 'BTCUSDT'
-        }
+        # {
+        #     'exchange': 'bybit',
+        #     'pair': 'BTCUSDT'
+        # }
     ]
 
     for _test in all_tests:

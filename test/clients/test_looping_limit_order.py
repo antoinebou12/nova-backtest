@@ -33,20 +33,20 @@ def asserts_looping_limit_order(
 
 def test_looping_limit_order():
     all_tests = [
-        # {
-        #     'exchange': 'binance',
-        #     'pair': 'BTCUSDT',
-        #     'side': 'BUY',
-        #     'quantity': 0.01,
-        #     'reduce_only': False
-        # },
         {
-            'exchange': 'bybit',
+            'exchange': 'binance',
             'pair': 'BTCUSDT',
             'side': 'BUY',
             'quantity': 0.01,
             'reduce_only': False
-        }
+        },
+        # {
+        #     'exchange': 'bybit',
+        #     'pair': 'BTCUSDT',
+        #     'side': 'BUY',
+        #     'quantity': 0.01,
+        #     'reduce_only': False
+        # }
     ]
 
     for _test in all_tests:

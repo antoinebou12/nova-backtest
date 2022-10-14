@@ -39,13 +39,13 @@ def test_place_limit_order_best_price():
             'quantity': 0.01,
             'reduce_only': False
         },
-        {
-            'exchange': 'bybit',
-            'pair': 'BTCUSDT',
-            'side': 'BUY',
-            'quantity': 0.01,
-            'reduce_only': False
-        }
+        # {
+        #     'exchange': 'bybit',
+        #     'pair': 'BTCUSDT',
+        #     'side': 'BUY',
+        #     'quantity': 0.01,
+        #     'reduce_only': False
+        # }
     ]
 
     for _test in all_tests:

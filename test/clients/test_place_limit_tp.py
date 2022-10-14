@@ -60,8 +60,6 @@ def asserts_place_limit_tp(exchange: str, pair: str, type_pos: str, quantity: fl
         quantity=quantity
     )
 
-
-
     print(f"Test place_limit_tp for {exchange.upper()} successful")
 
 
@@ -73,12 +71,12 @@ def test_place_limit_tp():
             'type_pos': 'LONG',
             'quantity': 0.01
         },
-        {
-            'exchange': 'bybit',
-            'pair': 'BTCUSDT',
-            'type_pos': 'LONG',
-            'quantity': 0.1
-        }
+        # {
+        #     'exchange': 'bybit',
+        #     'pair': 'BTCUSDT',
+        #     'type_pos': 'LONG',
+        #     'quantity': 0.1
+        # }
     ]
 
     for _test in all_tests:
