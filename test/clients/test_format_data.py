@@ -5,7 +5,7 @@ from decouple import config
 from nova.utils.constant import STD_CANDLE_FORMAT
 
 
-def test_format_data(exchange: str, pair: str, interval: str, start_time: int, end_time: int):
+def asserts_format_data(exchange: str, pair: str, interval: str, start_time: int, end_time: int):
 
     client = clients(
         exchange=exchange,
@@ -39,9 +39,8 @@ def test_format_data(exchange: str, pair: str, interval: str, start_time: int, e
     for var in STD_CANDLE_FORMAT:
         assert var in list(hist_data.columns)
         assert var in list(data.columns)
-
-        assert hist_data.dtypes[var] == 'int64' or hist_data.dtypes[var] == 'float32'
-        assert data.dtypes[var] == 'int64' or data.dtypes[var] == 'float32'
+        assert hist_data.dtypes[var] in ['int64', 'float32', 'float64']
+        assert data.dtypes[var] in ['int64', 'float32', 'float64']
 
     assert 'next_open' not in list(data.columns)
 
@@ -51,10 +50,37 @@ def test_format_data(exchange: str, pair: str, interval: str, start_time: int, e
         assert str(df.loc[0, 'open_time'])[-3:] == '000'
         assert str(df.loc[0, 'close_time'])[-3:] == '999'
 
-    assert 'open_time_datetime' in list(data.columns)
-    assert str(data.dtypes['open_time_datetime']) == 'datetime64[ns]'
-
     print(f"Test _get_historical_data for {exchange.upper()} successful")
 
 
-test_format_data('binance', 'BTCUSDT', '1d', 1631210861000, 1662746861000)
+def test_format_data():
+
+    all_tests = [
+        {
+            'exchange': 'binance',
+            'pair': 'BTCUSDT',
+            'interval': '1d',
+            'start_time': 1631210861000,
+            'end_time': 1662746861000
+        },
+        {
+            'exchange': 'bybit',
+            'pair': 'BTCUSDT',
+            'interval': '1d',
+            'start_time': 1631210861000,
+            'end_time': 1662746861000
+        }
+    ]
+
+    for _test in all_tests:
+
+        asserts_format_data(
+            exchange=_test['exchange'],
+            pair=_test['pair'],
+            interval=_test['interval'],
+            start_time=_test['start_time'],
+            end_time=_test['end_time']
+        )
+
+
+test_format_data()

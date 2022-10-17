@@ -1,11 +1,14 @@
 from decouple import config
 from nova.utils.strategy import RandomStrategy
+from multiprocessing import set_start_method
+set_start_method('fork')
 
 
-def asserts_get_position_size(exchange: str,
-                              quote_asset: str,
-                              list_pair: list):
-
+def asserts_production_run(
+        exchange: str,
+        quote_asset: str,
+        list_pair: list
+):
     bot = RandomStrategy(
         exchange=exchange,
         key=config(f"{exchange}TestAPIKey"),
@@ -22,19 +25,14 @@ def asserts_get_position_size(exchange: str,
         max_down=0.3,
         telegram_notification=False,
         telegram_bot_token='',
-        telegram_bot_chat_id=''
+        telegram_bot_chat_id='',
+        tp_sl_delta=0.02
     )
 
-    size_amount_1 = bot.get_position_size()
-
-    # position size should be equal to leverage / max_pos
-
-    estimated = bot.leverage / bot.max_pos * bot.bankroll
-    assert size_amount_1 == estimated
-    print(f"Test get_position_size for {exchange.upper()} successful")
+    bot.production_run()
 
 
-def test_get_position_size():
+def test_production_run():
     all_tests = [
         {
             'exchange': 'binance',
@@ -44,11 +42,11 @@ def test_get_position_size():
     ]
 
     for _test in all_tests:
-        asserts_get_position_size(
-            exchange=_test['exchange'],
-            quote_asset=_test['quote_asset'],
-            list_pair=_test['list_pair']
+        asserts_production_run(
+                exchange=_test['exchange'],
+                quote_asset=_test['quote_asset'],
+                list_pair=_test['list_pair']
         )
 
 
-test_get_position_size()
+test_production_run()

@@ -8,7 +8,8 @@ import asyncio
 import hashlib
 import time
 import hmac
-from multiprocessing import Process, Manager
+from multiprocessing import Pool
+from typing import Union
 
 
 class Binance:
@@ -50,7 +51,12 @@ class Binance:
         prepared.headers['User-Agent'] = "NovaLabs"
         prepared.headers['X-MBX-APIKEY'] = self.api_key
         response = self._session.send(prepared)
-        return response.json()
+        data = response.json()
+
+        if isinstance(data, dict) and 'code' in data.keys() and data['code'] not in [200, -2011]:
+            print(f'##### ERROR : {data["msg"]} #####')
+
+        return data
 
     def get_server_time(self) -> int:
         """
@@ -122,12 +128,13 @@ class Binance:
         for var in DATA_FORMATING['binance']['num_var']:
             df[var] = pd.to_numeric(df[var], downcast="float")
 
+        for var in DATA_FORMATING['binance']['date_var']:
+            df[var] = pd.to_numeric(df[var], downcast="integer")
+
         if historical:
             df['next_open'] = df['open'].shift(-1)
-            return df.dropna()
-        else:
-            df['open_time_datetime'] = pd.to_datetime(df['open_time'], unit='ms')
-            return df.dropna()
+
+        return df.dropna()
 
     def get_historical_data(self, pair: str, interval: str, start_ts: int, end_ts: int) -> pd.DataFrame:
         """
@@ -232,7 +239,7 @@ class Binance:
         Args:
             quote_asset:
             leverage:
-            list_pairs: todo:  execute setup only if asset in list
+            list_pairs:
             bankroll:
             max_down:
 
@@ -240,24 +247,31 @@ class Binance:
             None
         """
         accounts = self.get_account_info()
-        positions_info = self.get_position_info()
+        positions_info = self._send_request(
+                end_point=f"/fapi/v2/positionRisk",
+                request_type="GET",
+                signed=True
+        )
+        balance = self.get_token_balance(quote_asset=quote_asset)
         position_mode = self.get_position_mode()
 
         for info in positions_info:
 
-            # ISOLATE MARGIN TYPE -> ISOLATED
-            if info['marginType'] != 'isolated':
-                self.change_margin_type(
-                    pair=info['symbol'],
-                    margin_type="ISOLATED",
-                )
+            if info['symbol'] in list_pairs:
 
-            # SET LEVERAGE
-            if int(info['leverage']) != leverage:
-                self.change_leverage(
-                    pair=info['symbol'],
-                    leverage=leverage,
-                )
+                # ISOLATE MARGIN TYPE -> ISOLATED
+                if info['marginType'] != 'isolated':
+                    self.change_margin_type(
+                        pair=info['symbol'],
+                        margin_type="ISOLATED",
+                    )
+
+                # SET LEVERAGE
+                if int(info['leverage']) != leverage:
+                    self.change_leverage(
+                        pair=info['symbol'],
+                        leverage=leverage,
+                    )
 
         if position_mode['dualSidePosition']:
             self.change_position_mode(
@@ -268,8 +282,9 @@ class Binance:
 
             if x["asset"] == quote_asset:
                 # Assert_1: The account need to have the minimum bankroll
-                assert float(x['availableBalance']) >= bankroll * (1 + max_down), f"The account has only {round(balance, 2)} {quote_asset}. " \
-                                                             f"{round(bankroll * (1 + max_down), 2)} {quote_asset} is required"
+                assert float(x['availableBalance']) >= bankroll * (1 + max_down), \
+                    f"The account has only {round(balance, 2)} {quote_asset}. " \
+                    f"{round(bankroll * (1 + max_down), 2)} {quote_asset} is required"
 
                 # Assert_2: The account has margin available
                 assert x['marginAvailable']
@@ -335,8 +350,11 @@ class Binance:
                         step_size = str(float(fil['stepSize']))
                         output[symbol['symbol']]['quantityPrecision'] = min(step_size[::-1].find('.'),
                                                                             symbol['quantityPrecision'])
+                        output[symbol['symbol']]['minQuantity'] = float(fil['minQty'])
+
                     if fil['filterType'] == 'MARKET_LOT_SIZE':
-                        output[symbol['symbol']]['max_market_trading_qty'] = fil['maxQty']
+                        output[symbol['symbol']]['maxQuantity'] = float(fil['maxQty'])
+
         return output
 
     # STANDARDIZED FUNCTIONS
@@ -348,19 +366,6 @@ class Binance:
             signed=True
         )
         print(f"{pair} leverage is now set to : x{data['leverage']} with max notional to {data['maxNotionalValue']}")
-
-    def get_position_info(self, pair: str = None):
-        _params = {}
-        if pair:
-            _params['symbol'] = pair
-
-        # get a standardized return
-        return self._send_request(
-            end_point=f"/fapi/v2/positionRisk",
-            request_type="GET",
-            params=_params,
-            signed=True
-        )
 
     def get_account_info(self):
         return self._send_request(
@@ -376,14 +381,14 @@ class Binance:
             params={"symbol": pair}
         )
 
-    def get_balance(self) -> dict:
-        return self._send_request(
-            end_point=f"/fapi/v2/balance",
-            request_type="GET",
-            signed=True
-        )
-
-    async def get_prod_candles(self, session, pair, interval, window, current_pair_state: dict = None):
+    async def get_prod_candles(
+            self,
+            session,
+            pair: str,
+            interval: str,
+            window: int,
+            current_pair_state: dict = None
+    ):
 
         url = "https://fapi.binance.com/fapi/v1/klines"
 
@@ -392,33 +397,46 @@ class Binance:
 
         if current_pair_state is not None:
             limit = 3
+            final_dict[pair]['data'] = current_pair_state[pair]['data']
+            final_dict[pair]['latest_update'] = current_pair_state[pair]['latest_update']
         else:
             limit = window
 
         params = dict(symbol=pair, interval=interval, limit=limit)
 
         # Compute the server time
-        s_time = self.get_server_time()
+        s_time = int(1000 * time.time())
 
         async with session.get(url=url, params=params) as response:
             data = await response.json()
+
             df = self._format_data(all_data=data, historical=False)
+
             df = df[df['close_time'] < s_time]
+
+            for var in ['open_time', 'close_time']:
+                df[var] = pd.to_datetime(df[var], unit='ms')
 
             if current_pair_state is None:
                 final_dict[pair]['latest_update'] = s_time
                 final_dict[pair]['data'] = df
 
             else:
-                df_new = pd.concat([current_pair_state['data'], df])
-                df_new = df_new.drop_duplicates(subset=['open_time_datetime']).sort_values(by=['open_time_datetime'],
-                                                                                           ascending=True)
+                df_new = pd.concat([final_dict[pair]['data'], df])
+                df_new = df_new.drop_duplicates(subset=['open_time']).sort_values(
+                    by=['open_time'],
+                    ascending=True
+                )
                 final_dict[pair]['latest_update'] = s_time
                 final_dict[pair]['data'] = df_new.tail(window)
 
             return final_dict
 
-    async def get_prod_data(self, list_pair: list, interval: str, nb_candles: int, current_state: dict):
+    async def get_prod_data(self,
+                            list_pair: list,
+                            interval: str,
+                            nb_candles: int,
+                            current_state: dict):
         """
         Note: This function is called once when the bot is instantiated.
         This function execute n API calls with n representing the number of pair in the list
@@ -451,22 +469,37 @@ class Binance:
                 all_data.update(info)
             return all_data
 
-    def get_actual_positions(self, list_pair: list):
+    def get_actual_positions(self, pairs: Union[list, str]) -> dict:
         """
         Args:
-            list_pair: list of pair that we want to run analysis on
+            pairs: list of pair that we want to run analysis on
         Returns:
             a dictionary containing all the current OPEN positions
         """
-        all_pos = self.get_position_info()
+
+        _params = {}
+
+        if isinstance(pairs, str):
+            _params['symbol'] = pairs
+
+        all_pos = self._send_request(
+                end_point=f"/fapi/v2/positionRisk",
+                request_type="GET",
+                params=_params,
+                signed=True
+        )
+
         position = {}
 
         for pos in all_pos:
-            if (pos['symbol'] in list_pair) and (float(pos['positionAmt']) != 0):
+
+            if (pos['symbol'] in pairs) and (float(pos['positionAmt']) != 0):
                 position[pos['symbol']] = {}
-                position[pos['symbol']]['position_amount'] = pos['positionAmt']
-                position[pos['symbol']]['entry_price'] = pos['entryPrice']
-                position[pos['symbol']]['unrealized_pnl'] = pos['unRealizedProfit']
+                position[pos['symbol']]['position_size'] = abs(float(pos['positionAmt']))
+                position[pos['symbol']]['entry_price'] = float(pos['entryPrice'])
+                position[pos['symbol']]['unrealized_pnl'] = float(pos['unRealizedProfit'])
+                position[pos['symbol']]['type_pos'] = 'LONG' if float(pos['positionAmt']) > 0 else 'SHORT'
+                position[pos['symbol']]['exit_side'] = 'SELL' if float(pos['positionAmt']) > 0 else 'BUY'
 
         return position
 
@@ -478,467 +511,25 @@ class Binance:
         Returns:
             Available based_asset amount.
         """
-        balances = self.get_balance()
+
+        balances = self._send_request(
+            end_point=f"/fapi/v2/balance",
+            request_type="GET",
+            signed=True
+        )
+
         for balance in balances:
             if balance['asset'] == quote_asset:
                 return float(balance['availableBalance'])
 
-    def get_order(self, pair: str, order_id: str):
+    def get_order_book(self, pair: str):
         """
-        Args:
-            pair: pair traded in the order
-            order_id: order id
-
-        Returns:
-            order information from binance
-        """
-        return self._send_request(
-            end_point=f"/fapi/v1/order",
-            request_type="GET",
-            params={"symbol": pair, "orderId": order_id},
-            signed=True
-        )
-
-    def get_order_trades(self, pair: str, order_id: str):
-        """
-        Args:
-            pair: pair that is currently analysed
-            order_id: order_id number
-
-        Returns:
-            standardize output of the trades needed to complete an order
-        """
-
-        order_data = self.get_order(
-            pair=pair,
-            order_id=order_id
-        )
-        trades = self._send_request(
-            end_point=f"/fapi/v1/userTrades",
-            request_type="GET",
-            params={"symbol": pair, "startTime": order_data['time']},
-            signed=True
-        )
-
-        results = {
-            'time': order_data['time'],
-            'pair': order_data['symbol'],
-            'based_asset': None,
-            'order_id': order_id,
-            'tx_fee_in_based_asset': 0,
-            'tx_fee_in_other_asset': {},
-            'price': float(order_data['avgPrice']),
-            'originalQuantity':  float(order_data['origQty']),
-            'executedQuantity': float(order_data['executedQty']),
-            'nb_of_trades': 0,
-            'is_buyer': None,
-            'order_status': order_data['status']
-        }
-
-        for trade in trades:
-            if trade['orderId'] == order_id:
-                if results['based_asset'] is None:
-                    results['based_asset'] = trade['marginAsset']
-                if results['is_buyer'] is None:
-                    results['is_buyer'] = trade['buyer']
-                if trade['commissionAsset'] != trade['marginAsset']:
-                    if trade['commissionAsset'] not in results['tx_fee_in_other_asset'].keys():
-                        results['tx_fee_in_other_asset'][trade['commissionAsset']] = float(trade['commission'])
-                    else:
-                        results['tx_fee_in_other_asset'][trade['commissionAsset']] += float(trade['commission'])
-                else:
-                    results['tx_fee_in_based_asset'] += float(trade['commission'])
-                results['nb_of_trades'] += 1
-
-        for key, value in results['tx_fee_in_other_asset'].items():
-            price_info = self.get_pair_price(f'{key}{results["based_asset"]}')
-            results['tx_fee_in_based_asset'] += float(price_info['price']) * value
-
-        return results
-
-    def enter_market_order(self, pair: str, side: str, quantity: float):
-
-        """
-            Args:
-                pair: pair id that we want to create the order for
-                side: could be 'BUY' or 'SELL'
-                quantity: quantity should respect the minimum precision
-
-            Returns:
-                standardized output containing time, pair, order_id, quantity, price, side, is_position_closing
-        """
-        
-        _params = {
-            "symbol": pair,
-            "side": side,
-            "quantity": float(round(quantity, self.pairs_info[pair]['quantityPrecision'])),
-            "type": "MARKET",
-        }
-
-        response = self._send_request(
-            end_point=f"/fapi/v1/order",
-            request_type="POST",
-            params=_params,
-            signed=True
-        )
-
-        return self.get_order_trades(
-            pair=pair,
-            order_id=response['orderId']
-        )
-
-    def exit_market_order(self, pair: str, side: str, quantity: float):
-
-        _params = {
-            "symbol": pair,
-            "side": side,
-            "quantity": float(round(quantity, self.pairs_info[pair]['quantityPrecision'])),
-            "type": "MARKET",
-            "reduceOnly": "true"
-        }
-
-        response = self._send_request(
-            end_point=f"/fapi/v1/order",
-            request_type="POST",
-            params=_params,
-            signed=True
-        )
-
-        return self.get_order_trades(
-            pair=pair,
-            order_id=response['orderId']
-        )
-
-    def _verify_limit_order_posted(self,
-                                   pair: str,
-                                   order_id: str):
-        """
-        When posting a limit order (with time_in_force='PostOnly') the order can be immediately canceled if its
-        price is too high for buy orders and to low for a sell orders. Sometimes the first order book changes too
-        quickly that the first buy or sell order prices are no longer the same since the time we retrieve the OB. This
-        can eventually get our limit order automatically canceled and never posted. Thus each time we send a limit order
-        we verify that the order is posted.
-
         Args:
             pair:
-            order_id:
 
         Returns:
-            This function returns True if the limit order has been posted, False else.
+            the current orderbook with a depth of 20 observations
         """
-
-        last_active_order = None
-        t_start = time.time()
-
-        # Keep trying to get order status during 30s
-        while time.time() - t_start < 30:
-
-            time.sleep(5)
-
-            last_active_order = self.get_order(
-                pair=pair,
-                order_id=order_id
-            )
-
-            if last_active_order:
-                break
-
-        if not last_active_order:
-            return False
-
-        return last_active_order['status'] != 'CANCELLED'
-
-    def _limit_order_best_price(self,
-                                pair: str,
-                                side: str,
-                                qty: float,
-                                reduce_only: bool = False
-                                ):
-
-        """
-
-        Args:
-            pair:
-            side:
-            qty:
-            reduce_only:
-
-        Returns:
-
-        """
-        ob = self.get_order_book(pair=pair)
-        _type = 'bids' if side == 'BUY' else 'asks'
-        price = float(ob[_type][0]['price'])
-
-        _params = {
-            "symbol": pair,
-            "side": side,
-            "quantity": float(round(qty, self.pairs_info[pair]['quantityPrecision'])),
-            "type": "LIMIT",
-            "price": float(round(price, self.pairs_info[pair]['pricePrecision'])),
-            "timeInForce": "GTX",
-            "reduceOnly": "true" if reduce_only else "false"
-        }
-
-        response = self._send_request(
-            end_point=f"/fapi/v1/order",
-            request_type="POST",
-            params=_params,
-            signed=True
-        )
-
-        if not response:
-            return False, ''
-
-        limit_order_posted = self._verify_limit_order_posted(
-            order_id=response['orderId'],
-            pair=pair
-        )
-
-        return limit_order_posted, response
-
-    def _looping_limit_orders(
-            self,
-            pair: str,
-            side: str,
-            position_size: float,
-            duration: int,
-            reduce_only: bool
-    ):
-        """
-        This function will try to enter in position by sending only limit orders to be sure to pay limit orders fees.
-
-        Args:
-            pair:
-            side:
-            position_size:
-            duration: number of seconds we keep trying to enter in position with limit orders
-            reduce_only: True if we are exiting a position
-
-        Returns:
-            Residual size to fill the based qty
-        """
-
-        residual_size = position_size
-
-        t_start = time.time()
-
-        all_limit_orders = []
-
-        # Try to enter with limit order during 2 min
-        while (residual_size != 0) and (time.time() - t_start < duration):
-
-            posted, order = self._limit_order_best_price(
-                pair=pair,
-                side=side,
-                qty=residual_size,
-                reduce_only=reduce_only
-            )
-
-            if posted:
-
-                all_limit_orders.append(order)
-
-                new_price = order['price']
-                order_status = order['status']
-
-                # If the best order book price stays the same, do not cancel current order
-                while (new_price == order['price']) and (time.time() - t_start < 120) and (order_status != 'FILLED'):
-                    time.sleep(10)
-
-                    ob = self.get_order_book(pair=pair)
-                    _type = 'bids' if side == 'BUY' else 'asks'
-
-                    new_price = float(ob[_type][0]['price'])
-
-                    order_status = self.get_order(pair=pair, order_id=order['orderId'])
-
-                # Cancel order
-                self.cancel_order(
-                    pair=pair,
-                    order_id=order['orderId']
-                )
-
-                # Get current position size
-                pos_info = self.get_position_info(pair=pair)
-
-                if reduce_only:
-                    residual_size = pos_info[0]['size']
-                else:
-                    residual_size = position_size - pos_info[0]['size']
-
-        return {'residual_size': residual_size, 'all_limit_orders': all_limit_orders}
-    
-    def _enter_limit_then_market(self,
-                                 pair,
-                                 side,
-                                 qty,
-                                 sl_price,
-                                 tp_price,
-                                 return_dict):
-        """
-        Optimized way to enter in position. The method tries to enter with limit orders during 2 minutes.
-        If after 2min we still did not entered with the desired amount, a market order is sent.
-
-        Args:
-            pair:
-            side:
-            sl_price:
-            qty:
-
-        Returns:
-            Size of the current position
-        """
-
-        after_looping_limit = self._looping_limit_orders(
-            pair=pair,
-            side=side,
-            position_size=qty,
-            duration=120,
-            reduce_only=False
-        )
-
-        residual_size = after_looping_limit['residual_size']
-        all_orders = after_looping_limit['all_limit_orders']
-
-        # If there is residual, enter with market order
-        if residual_size != 0:
-            market_order = self.enter_market_order(
-                pair=pair,
-                side=side,
-                quantity=residual_size
-            )
-
-            all_orders.append(market_order)
-
-        # Get current position info
-        pos_info = self.get_position_info(pair=pair)
-
-        exit_side = 'SELL' if side == 'BUY' else 'BUY'
-
-        # Place take profit limit order
-        self.place_limit_tp(pair=pair,
-                            side=exit_side,
-                            position_size=pos_info[0]['size'],
-                            tp_prc=tp_price
-                            )
-
-        self.place_market_sl(pair=pair,
-                             side=exit_side,
-                             position_size=pos_info[0]['size'],
-                             sl_prc=sl_price
-                             )
-
-        return_dict[pair] = all_orders
-
-    def enter_limit_then_market(self, pair: str, side: str, qty: float, price: float, tp_price, sl_price: float):
-        pass
-
-    def exit_limit_then_market(self, pair: str, side: str, position_size: float):
-        pass
-
-    def place_limit_tp(self, pair: str, side: str, position_size: float, tp_prc: float):
-        """
-        Args:
-            pair: pair id that we want to create the order for
-            side: could be 'BUY' or 'SELL'
-            position_size: for binance  quantity is not needed since the tp order "closes" the "opened" position
-            tp_prc: price of the tp or sl
-        Returns:
-            Standardized output
-        """
-        _params = {
-            "symbol": pair,
-            "side": side,
-            "type": 'TAKE_PROFIT',
-            "timeInForce": 'GTC',
-            "price": float(round(tp_prc,  self.pairs_info[pair]['pricePrecision'])),
-            "stopPrice": float(round(tp_prc,  self.pairs_info[pair]['pricePrecision'])),
-            "quantity": float(round(position_size, self.pairs_info[pair]['quantityPrecision']))
-        }
-
-        data = self._send_request(
-            end_point=f"/fapi/v1/order",
-            request_type="POST",
-            params=_params,
-            signed=True
-        )
-
-        return {
-            'time': data['updateTime'],
-            'pair': data['symbol'],
-            'order_id': data['orderId'],
-            'type': data['type'],
-            'tp_price': data['price'],
-            'executedQty': data['executedQty']
-        }
-
-    def place_market_sl(self, pair: str, side: str, position_size: float, sl_prc: float):
-        """
-        Args:
-            pair: pair id that we want to create the order for
-            side: could be 'BUY' or 'SELL'
-            position_size: for binance  quantity is not needed since the tp order "closes" the "opened" position
-            sl_prc: price of the tp or sl
-        Returns:
-            Standardized output
-        """
-        _params = {
-            "symbol": pair,
-            "side": side,
-            "type": 'STOP_MARKET',
-            "timeInForce": 'GTC',
-            "price": float(round(sl_prc, self.pairs_info[pair]['pricePrecision'])),
-            "stopPrice": float(round(sl_prc, self.pairs_info[pair]['pricePrecision'])),
-            "quantity": float(round(position_size, self.pairs_info[pair]['quantityPrecision'])),
-            "reduceOnly": "true"
-        }
-
-        data = self._send_request(
-            end_point=f"/fapi/v1/order",
-            request_type="POST",
-            params=_params,
-            signed=True
-        )
-
-        return {
-            'time': data['updateTime'],
-            'pair': data['symbol'],
-            'order_id': data['orderId'],
-            'type': data['type'],
-            'tp_price': data['price'],
-            'executedQty': data['executedQty']
-        }
-
-    def cancel_order(self, pair: str, order_id: str):
-        return self._send_request(
-            end_point=f"/fapi/v1/order",
-            request_type="DELETE",
-            params={"symbol": pair, "orderId": order_id},
-            signed=True
-        )
-
-    def cancel_pair_orders(self, pair: str):
-        return self._send_request(
-            end_point=f"/fapi/v1/allOpenOrders",
-            request_type="DELETE",
-            params={"symbol": pair},
-            signed=True
-        )
-
-    def get_tp_sl_state(self, pair: str, tp_id: str, sl_id: str):
-
-        tp_info = self.get_order_trades(pair=pair, order_id=tp_id)
-        sl_info = self.get_order_trades(pair=pair, order_id=sl_id)
-        position_info = self.get_position_info(pair=pair)
-        return {
-            'tp': tp_info,
-            'sl': sl_info,
-            'current_quantity': position_info['positionAmt']
-        }
-
-    def get_order_book(self,
-                       pair):
 
         _params = {
             'symbol': pair,
@@ -965,3 +556,740 @@ class Binance:
             })
 
         return std_ob
+
+    @staticmethod
+    def _format_order(data: dict):
+
+        _price = 0.0 if data['type'] in ["MARKET", "STOP_MARKET", "TAKE_PROFIT"] else data['price']
+        _stop_price = 0.0 if data['type'] in ["MARKET", "LIMIT"] else data['stopPrice']
+
+        formatted = {
+            'time': data['time'] if 'time' in list(data.keys()) else data['updateTime'],
+            'order_id': data['orderId'],
+            'pair': data['symbol'],
+            'status': data['status'],
+            'type': data['type'],
+            'time_in_force': data['timeInForce'],
+            'reduce_only': data['reduceOnly'],
+            'side': data['side'],
+            'price': float(_price),
+            'stop_price': float(_stop_price),
+            'original_quantity': float(data['origQty']),
+            'executed_quantity': float(data['executedQty']),
+            'executed_price': float(data['avgPrice'])
+        }
+
+        return formatted
+
+    def get_order(self, pair: str, order_id: str):
+        """
+        Args:
+            pair: pair traded in the order
+            order_id: order id
+
+        Returns:
+            order information from binance
+        """
+        data = self._send_request(
+            end_point=f"/fapi/v1/order",
+            request_type="GET",
+            params={"symbol": pair, "orderId": order_id},
+            signed=True
+        )
+
+        return self._format_order(data)
+
+    def get_order_trades(self, pair: str, order_id: str):
+        """
+        Args:
+            pair: pair that is currently analysed
+            order_id: order_id number
+
+        Returns:
+            standardize output of the trades needed to complete an order
+        """
+
+        results = self.get_order(
+            pair=pair,
+            order_id=order_id
+        )
+        trades = self._send_request(
+            end_point=f"/fapi/v1/userTrades",
+            request_type="GET",
+            params={"symbol": pair, "startTime": results['time']},
+            signed=True
+        )
+
+        results['quote_asset'] = None
+        results['tx_fee_in_quote_asset'] = 0
+        results['tx_fee_in_other_asset'] = {}
+        results['nb_of_trades'] = 0
+        results['is_buyer'] = None
+
+        for trade in trades:
+            if trade['orderId'] == order_id:
+                if results['quote_asset'] is None:
+                    results['quote_asset'] = trade['marginAsset']
+                if results['is_buyer'] is None:
+                    results['is_buyer'] = trade['buyer']
+                if trade['commissionAsset'] != trade['marginAsset']:
+                    if trade['commissionAsset'] not in results['tx_fee_in_other_asset'].keys():
+                        results['tx_fee_in_other_asset'][trade['commissionAsset']] = float(trade['commission'])
+                    else:
+                        results['tx_fee_in_other_asset'][trade['commissionAsset']] += float(trade['commission'])
+                else:
+                    results['tx_fee_in_quote_asset'] += float(trade['commission'])
+                results['nb_of_trades'] += 1
+
+        for key, value in results['tx_fee_in_other_asset'].items():
+            price_info = self.get_pair_price(f'{key}{results["quote_asset"]}')
+            results['tx_fee_in_quote_asset'] += float(price_info['price']) * value
+
+        return results
+
+    def enter_market_order(self, pair: str, type_pos: str, quantity: float):
+
+        """
+            Args:
+                pair: pair id that we want to create the order for
+                type_pos: could be 'LONG' or 'SHORT'
+                quantity: quantity should respect the minimum precision
+
+            Returns:
+                standardized output
+        """
+
+        side = 'BUY' if type_pos == 'LONG' else 'SELL'
+
+        _params = {
+            "symbol": pair,
+            "side": side,
+            "quantity": float(round(quantity, self.pairs_info[pair]['quantityPrecision'])),
+            "type": "MARKET",
+        }
+
+        response = self._send_request(
+            end_point=f"/fapi/v1/order",
+            request_type="POST",
+            params=_params,
+            signed=True
+        )
+
+        return self.get_order_trades(
+            pair=pair,
+            order_id=response['orderId']
+        )
+
+    def exit_market_order(self, pair: str, type_pos: str, quantity: float):
+        """
+
+        Args:
+            pair: pair id that we want to create the order for
+            type_pos: could be 'BUY' or 'SELL'
+            quantity: quantity should respect the minimum precision
+
+        Returns:
+                standardized output
+        """
+        side = 'SELL' if type_pos == 'LONG' else 'BUY'
+
+        _params = {
+            "symbol": pair,
+            "side": side,
+            "quantity": float(round(quantity, self.pairs_info[pair]['quantityPrecision'])),
+            "type": "MARKET",
+            "reduceOnly": "true"
+        }
+
+        response = self._send_request(
+            end_point=f"/fapi/v1/order",
+            request_type="POST",
+            params=_params,
+            signed=True
+        )
+
+        return self.get_order_trades(
+            pair=pair,
+            order_id=response['orderId']
+        )
+
+    def place_limit_tp(self, pair: str, side: str, quantity: float, tp_price: float):
+        """
+        Args:
+            pair: pair id that we want to create the order for
+            side: could be 'BUY' or 'SELL'
+            quantity: for binance  quantity is not needed since the tp order "closes" the "opened" position
+            tp_price: price of the tp or sl
+        Returns:
+            Standardized output
+        """
+        _params = {
+            "symbol": pair,
+            "reduceOnly": "true",
+            "side": side,
+            "type": 'TAKE_PROFIT',
+            "timeInForce": 'GTC',
+            "price": float(round(tp_price,  self.pairs_info[pair]['pricePrecision'])),
+            "stopPrice": float(round(tp_price,  self.pairs_info[pair]['pricePrecision'])),
+            "quantity": float(round(quantity, self.pairs_info[pair]['quantityPrecision']))
+        }
+
+        data = self._send_request(
+            end_point=f"/fapi/v1/order",
+            request_type="POST",
+            params=_params,
+            signed=True
+        )
+
+        while 'code' in data.keys():
+
+            multiplier = 1.005 if side == 'SELL' else 0.995
+            _params['stopPrice'] = float(round(_params['stopPrice'] * multiplier,
+                                               self.pairs_info[pair]['pricePrecision']))
+            _params['price'] = float(round(_params['price'] * multiplier, self.pairs_info[pair]['pricePrecision']))
+
+            del _params['signature']
+            del _params['timestamp']
+
+            print(f'Placing TP new_price {_params["stopPrice"]}')
+            time.sleep(1)
+
+            data = self._send_request(
+                end_point=f"/fapi/v1/order",
+                request_type="POST",
+                params=_params,
+                signed=True
+            )
+
+        return self._format_order(data)
+
+    def place_market_sl(self, pair: str, side: str, quantity: float, sl_price: float):
+        """
+        Args:
+            pair: pair id that we want to create the order for
+            side: could be 'BUY' or 'SELL'
+            quantity: for binance  quantity is not needed since the tp order "closes" the "opened" position
+            sl_price: price of the tp or sl
+        Returns:
+            Standardized output
+        """
+        _params = {
+            "symbol": pair,
+            "side": side,
+            "type": 'STOP_MARKET',
+            "timeInForce": 'GTC',
+            "stopPrice": float(round(sl_price, self.pairs_info[pair]['pricePrecision'])),
+            "quantity": float(round(quantity, self.pairs_info[pair]['quantityPrecision'])),
+            "reduceOnly": "true"
+        }
+
+        data = self._send_request(
+            end_point=f"/fapi/v1/order",
+            request_type="POST",
+            params=_params,
+            signed=True
+        )
+
+        while 'code' in data.keys():
+
+            multiplier = 1.005 if side == 'BUY' else 0.995
+            _params['stopPrice'] = float(round(_params['stopPrice'] * multiplier,
+                                               self.pairs_info[pair]['pricePrecision']))
+
+            del _params['signature']
+            del _params['timestamp']
+
+            print(f'Placing SL new_price {_params["stopPrice"]}')
+
+            time.sleep(1)
+
+            data = self._send_request(
+                end_point=f"/fapi/v1/order",
+                request_type="POST",
+                params=_params,
+                signed=True
+            )
+
+        return self._format_order(data)
+
+    def _verify_limit_posted(self,
+                             pair: str,
+                             order_id: str):
+        """
+        When posting a limit order (with time_in_force='PostOnly') the order can be immediately canceled if its
+        price is too high for buy orders and to low for a sell orders. Sometimes the first order book changes too
+        quickly that the first buy or sell order prices are no longer the same since the time we retrieve the OB. This
+        can eventually get our limit order automatically canceled and never posted. Thus each time we send a limit order
+        we verify that the order is posted.
+
+        Args:
+            pair:
+            order_id:
+
+        Returns:
+            This function returns True if the limit order has been posted, False else.
+        """
+
+        t_start = time.time()
+        # try to request the order in the next 5 seconds
+        while time.time() - t_start < 5:
+
+            order_data = self.get_order(
+                pair=pair,
+                order_id=order_id
+            )
+
+            if order_data['status'] != ['EXPIRED', 'CANCELED']:
+                return True, order_data
+
+            time.sleep(1)
+
+        return False, None
+
+    def place_limit_order_best_price(
+            self,
+            pair: str,
+            side: str,
+            quantity: float,
+            reduce_only: bool = False
+    ):
+
+        """
+
+        Args:
+            pair: pair
+            side:
+            quantity:
+            reduce_only:
+
+        Returns:
+
+        """
+
+        ob = self.get_order_book(pair=pair)
+        _type = 'bids' if side == 'BUY' else 'asks'
+        best_price = float(ob[_type][0]['price'])
+
+        _params = {
+            "symbol": pair,
+            "side": side,
+            "quantity": float(round(quantity, self.pairs_info[pair]['quantityPrecision'])),
+            "type": "LIMIT",
+            "price": float(round(best_price, self.pairs_info[pair]['pricePrecision'])),
+            "timeInForce": "GTX",
+            "reduceOnly": "true" if reduce_only else "false"
+        }
+
+        response = self._send_request(
+            end_point=f"/fapi/v1/order",
+            request_type="POST",
+            params=_params,
+            signed=True
+        )
+
+        if 'orderId' in list(response.keys()):
+            return self._verify_limit_posted(
+                order_id=response['orderId'],
+                pair=pair
+            )
+        else:
+            return False, response
+
+    def _looping_limit_orders(
+            self,
+            pair: str,
+            side: str,
+            quantity: float,
+            reduce_only: bool,
+            duration: int
+    ):
+        """
+        This function will try to enter in position by sending only limit orders to be sure to pay limit orders fees.
+
+        Args:
+            pair:
+            side:
+            quantity:
+            reduce_only: True if we are exiting a position
+            duration: number of seconds we keep trying to enter in position with limit orders
+
+        Returns:
+            Residual size to fill the based qty
+        """
+
+        residual_size = quantity
+        t_start = time.time()
+        all_limit_orders = []
+
+        # Try to enter with limit order during duration number of seconds
+        while (residual_size >= self.pairs_info[pair]['minQuantity']) and (time.time() - t_start < duration):
+
+            posted, data = self.place_limit_order_best_price(
+                pair=pair,
+                side=side,
+                quantity=residual_size,
+                reduce_only=reduce_only
+            )
+
+            if posted:
+
+                _price = data['price']
+                _status = data['status']
+
+                # If the best order book price stays the same, do not cancel current order
+                while (_price == data['price']) and (time.time() - t_start < duration) and (_status != 'FILLED'):
+
+                    time.sleep(10)
+
+                    ob = self.get_order_book(pair=pair)
+                    _type = 'bids' if side == 'BUY' else 'asks'
+                    _price = float(ob[_type][0]['price'])
+                    _status = self.get_order(
+                        pair=pair,
+                        order_id=data['order_id']
+                    )['status']
+
+                self.cancel_order(
+                    pair=pair,
+                    order_id=data['order_id']
+                )
+
+                _order_trade = self.get_order_trades(
+                    pair=pair,
+                    order_id=data['order_id']
+                )
+
+                all_limit_orders.append(_order_trade)
+
+            # Get the positions information
+            pos_info = self.get_actual_positions(pairs=pair)
+
+            # looping enter position : current_size = 0 => no limit execution => try again
+            if pair not in list(pos_info.keys()) and not reduce_only:
+                residual_size = quantity
+            # 0 < current_size < quantity => partial limit execution => update residual_size => try again
+            elif pair in list(pos_info.keys()) and not reduce_only and pos_info[pair]['position_size'] <= quantity:
+                residual_size = quantity - pos_info[pair]['position_size']
+
+            # looping exit position (current_size > 0 => no or partial limit execution => try again)
+            elif pair in list(pos_info.keys()) and reduce_only:
+                residual_size = pos_info[pair]['position_size']
+            # current_size = 0 => limit exit order fully executed => update residual_size to 0
+            elif pair not in list(pos_info.keys()) and reduce_only and posted:
+                residual_size = 0
+
+            # side situation 1 : current_size = 0 + exit position but latest order has not been posted
+            # => complete execution from the tp or sl happening between checking position and exiting position
+            elif pair not in list(pos_info.keys()) and reduce_only and not posted:
+                residual_size = 0
+
+        return residual_size, all_limit_orders
+    
+    def _enter_limit_then_market(self,
+                                 pair,
+                                 type_pos,
+                                 quantity,
+                                 sl_price,
+                                 tp_price,
+                                 ):
+        """
+        Optimized way to enter in position. The method tries to enter with limit orders during 2 minutes.
+        If after 2min we still did not enter with the desired amount, a market order is sent.
+
+        Args:
+            pair:
+            type_pos:
+            sl_price:
+            quantity:
+
+        Returns:
+            Size of the current position
+        """
+
+        side = 'BUY' if type_pos == 'LONG' else 'SELL'
+
+        residual_size, all_orders = self._looping_limit_orders(
+            pair=pair,
+            side=side,
+            quantity=float(round(quantity, self.pairs_info[pair]['quantityPrecision'])),
+            duration=60,
+            reduce_only=False
+        )
+
+        # If there is residual, enter with market order
+        if residual_size >= self.pairs_info[pair]['minQuantity']:
+
+            market_order = self.enter_market_order(
+                pair=pair,
+                type_pos=type_pos,
+                quantity=residual_size
+            )
+
+            all_orders.append(market_order)
+
+        # Get current position info
+        pos_info = self.get_actual_positions(pairs=pair)
+
+        exit_side = 'SELL' if side == 'BUY' else 'BUY'
+
+        # Place take profit limit order
+        tp_data = self.place_limit_tp(
+            pair=pair,
+            side=exit_side,
+            quantity=pos_info[pair]['position_size'],
+            tp_price=tp_price
+        )
+
+        sl_data = self.place_market_sl(
+            pair=pair,
+            side=exit_side,
+            quantity=pos_info[pair]['position_size'],
+            sl_price=sl_price
+        )
+
+        return self._format_enter_limit_info(
+            all_orders=all_orders,
+            tp_order=tp_data,
+            sl_order=sl_data
+        )
+
+    def _format_enter_limit_info(self, all_orders: list, tp_order: dict, sl_order: dict):
+
+        final_data = {
+            'pair': all_orders[0]['pair'],
+            'position_type': 'LONG' if all_orders[0]['side'] == 'BUY' else 'SHORT',
+            'original_position_size': 0,
+            'current_position_size': 0,
+            'entry_time': all_orders[-1]['time'],
+            'tp_id': tp_order['order_id'],
+            'tp_price': tp_order['stop_price'],
+            'sl_id': sl_order['order_id'],
+            'sl_price': sl_order['stop_price'],
+            'trade_status': 'ACTIVE',
+            'entry_fees': 0,
+        }
+
+        _price_information = []
+        _avg_price = 0
+
+        for order in all_orders:
+            _trades = self.get_order_trades(pair=order['pair'], order_id=order['order_id'])
+
+            if _trades['executed_quantity'] > 0:
+                    final_data['entry_fees'] += _trades['tx_fee_in_quote_asset']
+                    final_data['original_position_size'] += _trades['executed_quantity']
+                    final_data['current_position_size'] += _trades['executed_quantity']
+                    _price_information.append({'price': _trades['executed_price'], 'qty': _trades['executed_quantity']})
+
+        for _info in _price_information:
+            _avg_price += _info['price'] * (_info['qty'] / final_data['current_position_size'])
+
+        final_data['entry_price'] = round(_avg_price, self.pairs_info[final_data['pair']]['pricePrecision'])
+
+        # needed for TP partial Execution
+        final_data['last_tp_executed'] = 0
+        final_data['last_tp_time'] = float('inf')
+        final_data['exit_time'] = 0
+        final_data['exit_fees'] = 0
+        final_data['exit_price'] = 0
+        final_data['quantity_exited'] = 0
+        final_data['total_fees'] = 0
+        final_data['realized_pnl'] = 0
+
+        return final_data
+
+    def enter_limit_then_market(self, orders: list):
+
+        final = {}
+        all_arguments = []
+
+        for order in orders:
+            arguments = tuple(order.values())
+            all_arguments.append(arguments)
+
+        with Pool() as pool:
+            results = pool.starmap(func=self._enter_limit_then_market, iterable=all_arguments)
+
+        for _information in results:
+            final[_information['pair']] = _information
+
+        return final
+
+    def _exit_limit_then_market(self, pair: str, type_pos: str, quantity: float, tp_time: int, tp_id: str, sl_id: str):
+
+        side = 'SELL' if type_pos == 'LONG' else 'BUY'
+
+        residual_size, all_orders = self._looping_limit_orders(
+            pair=pair,
+            side=side,
+            quantity=quantity,
+            duration=60,
+            reduce_only=True
+        )
+
+        if residual_size == 0 and all_orders == {}:
+            return None
+
+        # If there is residual, exit with market order
+        if residual_size >= self.pairs_info[pair]['minQuantity']:
+
+            market_order = self.exit_market_order(
+                pair=pair,
+                type_pos=type_pos,
+                quantity=residual_size
+            )
+
+            if market_order:
+                all_orders.append(market_order)
+
+        return self._format_exit_limit_info(
+            pair=pair,
+            all_orders=all_orders,
+            tp_id=tp_id,
+            tp_time=tp_time,
+            sl_id=sl_id
+        )
+
+    def _format_exit_limit_info(self, pair: str, all_orders: list, tp_id: str, tp_time: int, sl_id: str):
+
+        final_data = {
+            'pair': pair,
+            'executed_quantity': 0,
+            'time': int(time.time() * 1000),
+            'trade_status': 'CLOSED',
+            'exit_fees': 0,
+        }
+
+        data = self.get_tp_sl_state(pair=pair, tp_id=tp_id, sl_id=sl_id)
+
+        tp_execution = {
+            'tp_execution_unregistered': True,
+            'executed_quantity': 0,
+            'executed_price': 0,
+            'tx_fee_in_quote_asset': 0,
+        }
+
+        if data['tp']['time'] > tp_time:
+
+            print('IN BETWEEN TP EXECUTION')
+            # TP activation between verification and execution
+            trades = self._send_request(
+                end_point=f"/fapi/v1/userTrades",
+                request_type="GET",
+                params={"symbol": data['tp']['pair'], "startTime": data['tp']['time']},
+                signed=True
+            )
+
+            for trade in trades:
+                if trade['orderId'] == tp_id:
+                    tp_execution['executed_quantity'] += float(trade['qty'])
+                    tp_execution['executed_price'] = float(trade['price'])
+                    tp_execution['tx_fee_in_quote_asset'] += float(trade['commission'])
+
+            all_orders.append(tp_execution)
+
+        if data['sl']['status'] in ['FILLED']:
+            print('IN BETWEEN SL EXECUTION')
+            all_orders.append(data['sl'])
+
+        _price_information = []
+        _avg_price = 0
+
+        for order in all_orders:
+            if 'tp_execution_unregistered' in order.keys():
+                print('TP BETWEEN EXECUTION')
+                _trades = tp_execution
+            else:
+                _trades = self.get_order_trades(pair=order['pair'], order_id=order['order_id'])
+
+            if _trades['executed_quantity'] > 0:
+                final_data['exit_fees'] += _trades['tx_fee_in_quote_asset']
+                final_data['executed_quantity'] += _trades['executed_quantity']
+                _price_information.append({'price': _trades['executed_price'], 'qty': _trades['executed_quantity']})
+
+        for _info in _price_information:
+            _avg_price += _info['price'] * (_info['qty'] / final_data['executed_quantity'])
+
+        final_data['exit_price'] = round(_avg_price, self.pairs_info[final_data['pair']]['pricePrecision'])
+
+        return final_data
+
+    def exit_limit_then_market(self,
+                               orders: list) -> dict:
+
+        """
+        Parallelize the execution of _exit_limit_then_market.
+        Args:
+            orders: list of dict. Each element represents the params of an order.
+            [{'pair': 'BTCUSDT', 'type_pos': 'LONG', 'position_size': 0.1},
+             {'pair': 'ETHUSDT', 'type_pos': 'SHORT', 'position_size': 1}]
+        Returns:
+            list of positions info after executing all exit orders.
+        """
+
+        final = {}
+        all_arguments = []
+
+        for order in orders:
+            arguments = tuple(order.values())
+            all_arguments.append(arguments)
+
+        with Pool() as pool:
+            results = pool.starmap(func=self._exit_limit_then_market, iterable=all_arguments)
+
+        for _information in results:
+            if _information is not None:
+                final[_information['pair']] = _information
+
+        return final
+
+    def cancel_order(self, pair: str, order_id: str):
+        data = self._send_request(
+            end_point=f"/fapi/v1/order",
+            request_type="DELETE",
+            params={"symbol": pair, "orderId": order_id},
+            signed=True
+        )
+
+        if 'code' not in list(data.keys()):
+            return self._format_order(data)
+        else:
+            return None
+
+    def get_tp_sl_state(self, pair: str, tp_id: str, sl_id: str):
+        """
+
+        Args:
+            pair:
+            tp_id:
+            sl_id:
+
+        Returns:
+
+        """
+        tp_info = self.get_order_trades(pair=pair, order_id=tp_id)
+        sl_info = self.get_order_trades(pair=pair, order_id=sl_id)
+        return {
+            'tp': tp_info,
+            'sl': sl_info,
+        }
+
+    def get_last_price(self, pair: str) -> dict:
+        """
+        Args:
+            pair: pair desired
+        Returns:
+            a dictionary containing the pair_id, latest_price, price_timestamp in timestamp
+        """
+        data = self._send_request(
+            end_point=f"/fapi/v1/ticker/price",
+            request_type="GET",
+            params={"symbol": pair}
+        )
+
+        return {
+            'pair': data['symbol'],
+            'timestamp': data['time'],
+            'latest_price': float(data['price'])
+        }
+

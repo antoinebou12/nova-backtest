@@ -1,8 +1,9 @@
 from nova.clients.clients import clients
 from decouple import config
+import time
 
 
-def asserts_enter_market_order(exchange: str, pair: str, type_pos: str, quantity: float):
+def asserts_get_order(exchange: str, pair: str, type_pos: str, quantity: float):
 
     client = clients(
         exchange=exchange,
@@ -31,15 +32,26 @@ def asserts_enter_market_order(exchange: str, pair: str, type_pos: str, quantity
         quantity=quantity
     )
 
+    time.sleep(1)
+
+    order_data = client.get_order(
+        pair=pair,
+        order_id=market_order['order_id']
+    )
+
+    std_output = ['time', 'order_id', 'pair', 'status', 'type', 'time_in_force', 'reduce_only', 'side',
+                  'price', 'original_quantity', 'executed_quantity', 'executed_price']
+
     side = 'BUY' if type_pos == 'LONG' else 'SELL'
 
-    assert market_order['type'] == 'MARKET'
-    assert market_order['status'] in ['FILLED', 'CREATED']
-    assert market_order['pair'] == pair
-    assert not market_order['reduce_only']
-    assert market_order['side'] == side
-    assert market_order['original_quantity'] == quantity
-    assert market_order['executed_quantity'] == quantity
+    assert set(std_output).issubset(list(order_data.keys()))
+    assert order_data['type'] == 'MARKET'
+    assert order_data['status'] == 'FILLED'
+    assert order_data['pair'] == pair
+    assert not order_data['reduce_only']
+    assert order_data['side'] == side
+    assert order_data['original_quantity'] == quantity
+    assert order_data['executed_quantity'] == quantity
 
     client.exit_market_order(
         pair=pair,
@@ -47,29 +59,27 @@ def asserts_enter_market_order(exchange: str, pair: str, type_pos: str, quantity
         quantity=quantity
     )
 
-    print(f"Test enter_market_order for {exchange.upper()} successful")
+    print(f"Test get_order for {exchange.upper()} successful")
 
 
-def test_enter_market_order():
-
+def test_get_order():
     all_tests = [
-        {
-            'exchange': 'binance',
-            'pair': 'BTCUSDT',
-            'type_pos': 'LONG',
-            'quantity': 0.01
-        },
+        # {
+        #     'exchange': 'binance',
+        #     'pair': 'BTCUSDT',
+        #     'type_pos': 'LONG',
+        #     'quantity': 0.01
+        # },
         {
             'exchange': 'bybit',
             'pair': 'BTCUSDT',
             'type_pos': 'LONG',
-            'quantity': 0.01
+            'quantity': 0.1
         }
     ]
 
     for _test in all_tests:
-
-        asserts_enter_market_order(
+        asserts_get_order(
             exchange=_test['exchange'],
             pair=_test['pair'],
             type_pos=_test['type_pos'],
@@ -77,7 +87,5 @@ def test_enter_market_order():
         )
 
 
-test_enter_market_order()
-
-
+test_get_order()
 
