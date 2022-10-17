@@ -16,7 +16,7 @@ with open("README.md", "r") as fh:
 
 setup(
     name="novalabs",
-    version="1.2.03",
+    version="1.2.1",
     author="Nova Labs",
     author_email="devteam@novalabs.ai",
     description="Wrappers around Nova Labs utilities focused on safety and testability",
