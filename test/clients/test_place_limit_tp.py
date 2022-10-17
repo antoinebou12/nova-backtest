@@ -1,6 +1,6 @@
 from nova.clients.clients import clients
 from decouple import config
-
+import time
 
 def asserts_place_limit_tp(exchange: str, pair: str, type_pos: str, quantity: float):
 
@@ -54,6 +54,10 @@ def asserts_place_limit_tp(exchange: str, pair: str, type_pos: str, quantity: fl
     assert tp_data['executed_quantity'] == 0
     assert tp_data['stop_price'] > 0
 
+    time.sleep(1)
+
+    client.cancel_order(pair=pair, order_id=tp_data['order_id'])
+
     client.exit_market_order(
         pair=pair,
         type_pos=type_pos,
@@ -65,18 +69,18 @@ def asserts_place_limit_tp(exchange: str, pair: str, type_pos: str, quantity: fl
 
 def test_place_limit_tp():
     all_tests = [
-        {
-            'exchange': 'binance',
-            'pair': 'BTCUSDT',
-            'type_pos': 'LONG',
-            'quantity': 0.01
-        },
         # {
-        #     'exchange': 'bybit',
+        #     'exchange': 'binance',
         #     'pair': 'BTCUSDT',
         #     'type_pos': 'LONG',
-        #     'quantity': 0.1
-        # }
+        #     'quantity': 0.01
+        # },
+        {
+            'exchange': 'bybit',
+            'pair': 'BTCUSDT',
+            'type_pos': 'LONG',
+            'quantity': 0.1
+        }
     ]
 
     for _test in all_tests:

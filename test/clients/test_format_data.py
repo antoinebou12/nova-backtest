@@ -39,8 +39,8 @@ def asserts_format_data(exchange: str, pair: str, interval: str, start_time: int
     for var in STD_CANDLE_FORMAT:
         assert var in list(hist_data.columns)
         assert var in list(data.columns)
-        # assert hist_data.dtypes[var] in ['int64', 'float32']
-        # assert data.dtypes[var] in ['int64', 'float32']
+        assert hist_data.dtypes[var] in ['int64', 'float32', 'float64']
+        assert data.dtypes[var] in ['int64', 'float32', 'float64']
 
     assert 'next_open' not in list(data.columns)
 

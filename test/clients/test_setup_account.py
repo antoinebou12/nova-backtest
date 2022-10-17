@@ -43,14 +43,14 @@ def test_setup_account():
             'bankroll': 1000,
             'max_down': 0.3
         },
-        # {
-        #     'exchange': 'bybit',
-        #     'quote_asset': 'USDT',
-        #     'leverage': 2,
-        #     'list_pairs': ['BTCUSDT', 'ETHUSDT'],
-        #     'bankroll': 1000,
-        #     'max_down': 0.3
-        # }
+        {
+            'exchange': 'bybit',
+            'quote_asset': 'USDT',
+            'leverage': 2,
+            'list_pairs': ['BTCUSDT', 'ETHUSDT'],
+            'bankroll': 1000,
+            'max_down': 0.3
+        }
     ]
 
     for _test in all_tests:

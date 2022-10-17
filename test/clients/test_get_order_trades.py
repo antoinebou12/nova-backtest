@@ -47,23 +47,29 @@ def asserts_get_order_trades(exchange: str, pair: str, type_pos: str, quantity: 
     assert ot_data['nb_of_trades'] > 0
     assert ot_data['is_buyer']
 
+    client.exit_market_order(
+        pair=pair,
+        type_pos=type_pos,
+        quantity=quantity
+    )
+
     print(f"Test get_order for {exchange.upper()} successful")
 
 
 def test_get_order_trades():
     all_tests = [
-        {
-            'exchange': 'binance',
-            'pair': 'BTCUSDT',
-            'type_pos': 'LONG',
-            'quantity': 0.01
-        },
         # {
-        #     'exchange': 'bybit',
+        #     'exchange': 'binance',
         #     'pair': 'BTCUSDT',
         #     'type_pos': 'LONG',
         #     'quantity': 0.01
-        # }
+        # },
+        {
+            'exchange': 'bybit',
+            'pair': 'BTCUSDT',
+            'type_pos': 'LONG',
+            'quantity': 0.01
+        }
     ]
 
     for _test in all_tests:

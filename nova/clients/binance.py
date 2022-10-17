@@ -52,10 +52,11 @@ class Binance:
         prepared.headers['X-MBX-APIKEY'] = self.api_key
         response = self._session.send(prepared)
         data = response.json()
+
         if isinstance(data, dict) and 'code' in data.keys() and data['code'] not in [200, -2011]:
-            raise Exception(f'Error : {data["msg"]}')
-        else:
-            return data
+            print(f'##### ERROR : {data["msg"]} #####')
+
+        return data
 
     def get_server_time(self) -> int:
         """
@@ -740,6 +741,26 @@ class Binance:
             signed=True
         )
 
+        while 'code' in data.keys():
+
+            multiplier = 1.005 if side == 'SELL' else 0.995
+            _params['stopPrice'] = float(round(_params['stopPrice'] * multiplier,
+                                               self.pairs_info[pair]['pricePrecision']))
+            _params['price'] = float(round(_params['price'] * multiplier, self.pairs_info[pair]['pricePrecision']))
+
+            del _params['signature']
+            del _params['timestamp']
+
+            print(f'Placing TP new_price {_params["stopPrice"]}')
+            time.sleep(1)
+
+            data = self._send_request(
+                end_point=f"/fapi/v1/order",
+                request_type="POST",
+                params=_params,
+                signed=True
+            )
+
         return self._format_order(data)
 
     def place_market_sl(self, pair: str, side: str, quantity: float, sl_price: float):
@@ -768,6 +789,26 @@ class Binance:
             params=_params,
             signed=True
         )
+
+        while 'code' in data.keys():
+
+            multiplier = 1.005 if side == 'BUY' else 0.995
+            _params['stopPrice'] = float(round(_params['stopPrice'] * multiplier,
+                                               self.pairs_info[pair]['pricePrecision']))
+
+            del _params['signature']
+            del _params['timestamp']
+
+            print(f'Placing SL new_price {_params["stopPrice"]}')
+
+            time.sleep(1)
+
+            data = self._send_request(
+                end_point=f"/fapi/v1/order",
+                request_type="POST",
+                params=_params,
+                signed=True
+            )
 
         return self._format_order(data)
 
@@ -1047,6 +1088,7 @@ class Binance:
 
         # needed for TP partial Execution
         final_data['last_tp_executed'] = 0
+        final_data['last_tp_time'] = float('inf')
         final_data['exit_time'] = 0
         final_data['exit_fees'] = 0
         final_data['exit_price'] = 0
@@ -1144,6 +1186,8 @@ class Binance:
                     tp_execution['executed_price'] = float(trade['price'])
                     tp_execution['tx_fee_in_quote_asset'] += float(trade['commission'])
 
+            all_orders.append(tp_execution)
+
         if data['sl']['status'] in ['FILLED']:
             print('IN BETWEEN SL EXECUTION')
             all_orders.append(data['sl'])
@@ -1153,7 +1197,7 @@ class Binance:
 
         for order in all_orders:
             if 'tp_execution_unregistered' in order.keys():
-                print('TP EXECUTION')
+                print('TP BETWEEN EXECUTION')
                 _trades = tp_execution
             else:
                 _trades = self.get_order_trades(pair=order['pair'], order_id=order['order_id'])

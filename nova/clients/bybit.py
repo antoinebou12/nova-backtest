@@ -61,8 +61,12 @@ class Bybit:
         prepared = request.prepare()
         prepared.headers['Content-Type'] = "application/json"
         response = self._session.send(prepared)
+        data = response.json()
 
-        return response.json()
+        if data['ret_msg'] != "OK" and data['ret_code'] != 20001:
+            print(f"{data['ret_code']} : {data['ret_msg']}")
+
+        return data
 
     def get_server_time(self) -> int:
         """
@@ -128,7 +132,8 @@ class Bybit:
                 pairs_info[pair['name']] = {}
                 pairs_info[pair['name']]['quote_asset'] = pair['quote_currency']
                 pairs_info[pair['name']]['pricePrecision'] = pair['price_scale']
-                pairs_info[pair['name']]['max_market_trading_qty'] = pair['lot_size_filter']['max_trading_qty']
+                pairs_info[pair['name']]['maxQuantity'] = pair['lot_size_filter']['max_trading_qty']
+                pairs_info[pair['name']]['minQuantity'] = pair['lot_size_filter']['min_trading_qty']
                 pairs_info[pair['name']]['quantityPrecision'] = str(pair['lot_size_filter']['qty_step'])[::-1].find('.')
 
         return pairs_info
@@ -463,14 +468,17 @@ class Bybit:
             response of the API call
         """
 
-        _side = 'Buy' if side == 'BUY' else 'Sell'
+        multi = 0.995 if side == 'SELL' else 1.005
 
         params = {
-            "side": _side,
+            "side": 'Buy' if side == 'BUY' else 'Sell',
             "symbol": pair,
             "price": float(round(tp_price, self.pairs_info[pair]['pricePrecision'])),
+            "base_price": float(round(tp_price * multi, self.pairs_info[pair]['pricePrecision'])),
+            "stop_px": float(round(tp_price, self.pairs_info[pair]['pricePrecision'])),
             "qty": float(round(quantity, self.pairs_info[pair]['quantityPrecision'])),
             "order_type": 'Limit',
+            "trigger_by": "LastPrice",
             "time_in_force": 'PostOnly',
             "close_on_trigger": True,
             "reduce_only": True,
@@ -479,7 +487,7 @@ class Bybit:
         }
 
         response = self._send_request(
-            end_point=f"/private/linear/order/create",
+            end_point=f"/private/linear/stop-order/create",
             request_type="POST",
             params=params,
             signed=True
@@ -489,22 +497,18 @@ class Bybit:
 
         return self._format_order(data=response['result'])
 
-    def place_market_sl(self, pair: str, exit_side: str, quantity: float, sl_price: float):
+    def place_market_sl(self, pair: str, side: str, quantity: float, sl_price: float):
 
-        _side = 'Buy' if exit_side == 'BUY' else 'Sell'
-
-        stop_px = float(round(sl_price, self.pairs_info[pair]['pricePrecision']))
-        base_price = stop_px * 0.9 if exit_side == 'BUY' else stop_px * 1.1
+        # specificity of bybit
+        multi = 1.005 if side == 'SELL' else 0.995
 
         params = {
-            "side": _side,
+            "side": 'Buy' if side == 'BUY' else 'Sell',
             "symbol": pair,
             "order_type": 'Market',
             "qty": float(round(quantity, self.pairs_info[pair]['quantityPrecision'])),
-
-            'base_price': float(round(base_price, self.pairs_info[pair]['pricePrecision'])),
-            "stop_px":  stop_px,
-
+            "base_price": float(round(sl_price * multi, self.pairs_info[pair]['pricePrecision'])),
+            "stop_px":  float(round(sl_price, self.pairs_info[pair]['pricePrecision'])),
             "trigger_by": "LastPrice",
             "time_in_force": 'GoodTillCancel',
             "close_on_trigger": True,
@@ -643,54 +647,66 @@ class Bybit:
         t_start = time.time()
         all_limit_orders = []
 
-        # Try to enter with limit order during 2 min
-        while (residual_size != 0) and (time.time() - t_start < duration):
+        # Try to enter with limit order during duration number of seconds
+        while (residual_size >= self.pairs_info[pair]['minQuantity']) and (time.time() - t_start < duration):
 
-            posted, order = self.place_limit_order_best_price(
+            posted, data = self.place_limit_order_best_price(
                 pair=pair,
                 side=side,
                 quantity=residual_size,
-                reduce_only=reduce_only,
+                reduce_only=reduce_only
             )
 
             if posted:
 
-                all_limit_orders.append(order)
-
-                _price = order['price']
-                _status = order['status']
+                _price = data['price']
+                _status = data['status']
 
                 # If the best order book price stays the same, do not cancel current order
-                while (order['price'] == _price) and (time.time() - t_start < duration) and (_status != 'FILLED'):
-
+                while (_price == data['price']) and (time.time() - t_start < duration) and (_status != 'FILLED'):
                     time.sleep(10)
 
                     ob = self.get_order_book(pair=pair)
                     _type = 'bids' if side == 'BUY' else 'asks'
                     _price = float(ob[_type][0]['price'])
-
                     _status = self.get_order(
                         pair=pair,
-                        order_id=order['order_id']
+                        order_id=data['order_id']
                     )['status']
 
-                # Cancel order
                 self.cancel_order(
                     pair=pair,
-                    order_id=order['order_id']
+                    order_id=data['order_id']
                 )
 
-            # Get current position size
+                _order_trade = self.get_order_trades(
+                    pair=pair,
+                    order_id=data['order_id']
+                )
+
+                all_limit_orders.append(_order_trade)
+
+            # Get the positions information
             pos_info = self.get_actual_positions(pairs=pair)
 
+            # looping enter position : current_size = 0 => no limit execution => try again
             if pair not in list(pos_info.keys()) and not reduce_only:
                 residual_size = quantity
-            elif pair not in list(pos_info.keys()) and reduce_only:
-                residual_size = 0
+            # 0 < current_size < quantity => partial limit execution => update residual_size => try again
+            elif pair in list(pos_info.keys()) and not reduce_only and pos_info[pair]['position_size'] <= quantity:
+                residual_size = quantity - pos_info[pair]['position_size']
+
+            # looping exit position (current_size > 0 => no or partial limit execution => try again)
             elif pair in list(pos_info.keys()) and reduce_only:
                 residual_size = pos_info[pair]['position_size']
-            else:
-                residual_size = quantity - pos_info[pair]['position_size']
+            # current_size = 0 => limit exit order fully executed => update residual_size to 0
+            elif pair not in list(pos_info.keys()) and reduce_only and posted:
+                residual_size = 0
+
+            # side situation 1 : current_size = 0 + exit position but latest order has not been posted
+            # => complete execution from the tp or sl happening between checking position and exiting position
+            elif pair not in list(pos_info.keys()) and reduce_only and not posted:
+                residual_size = 0
 
         return residual_size, all_limit_orders
 
@@ -699,7 +715,7 @@ class Bybit:
         final_data = {
             'pair': all_orders[0]['pair'],
             'position_type': 'LONG' if all_orders[0]['side'] == 'BUY' else 'SHORT',
-            'original_position_size': all_orders[0]['original_quantity'],
+            'original_position_size': 0,
             'current_position_size': 0,
             'entry_time': all_orders[-1]['time'],
             'tp_id': tp_order['order_id'],
@@ -707,11 +723,7 @@ class Bybit:
             'sl_id': sl_order['order_id'],
             'sl_price': sl_order['stop_price'],
             'trade_status': 'ACTIVE',
-            'quantity_exited': 0,
-            'exit_fees': 0,
-            'last_exit_time': 0,
-            'exit_price': 0,
-            'entry_fees': 0
+            'entry_fees': 0,
         }
 
         _price_information = []
@@ -719,31 +731,29 @@ class Bybit:
 
         for order in all_orders:
             _trades = self.get_order_trades(pair=order['pair'], order_id=order['order_id'])
+
             if _trades['executed_quantity'] > 0:
                 final_data['entry_fees'] += _trades['tx_fee_in_quote_asset']
+                final_data['original_position_size'] += _trades['executed_quantity']
                 final_data['current_position_size'] += _trades['executed_quantity']
-                _price_information.append({'price': _trades['price'], 'qty': _trades['executed_quantity']})
+                _price_information.append({'price': _trades['executed_price'], 'qty': _trades['executed_quantity']})
 
         for _info in _price_information:
             _avg_price += _info['price'] * (_info['qty'] / final_data['current_position_size'])
 
         final_data['entry_price'] = round(_avg_price, self.pairs_info[final_data['pair']]['pricePrecision'])
 
+        # needed for TP partial Execution
+        final_data['last_tp_executed'] = 0
+        final_data['last_tp_time'] = float('inf')
+        final_data['exit_time'] = 0
+        final_data['exit_fees'] = 0
+        final_data['exit_price'] = 0
+        final_data['quantity_exited'] = 0
+        final_data['total_fees'] = 0
+        final_data['realized_pnl'] = 0
+
         return final_data
-
-    def get_sl_order(self,
-                     pair: str):
-
-        params = {"symbol": pair}
-
-        response = self._send_request(
-            end_point="/private/linear/stop-order/search",
-            request_type="GET",
-            params=params,
-            signed=True
-        )
-
-        return response.json()['result'][0]
 
     def cancel_order(self,
                      pair: str,
@@ -900,11 +910,9 @@ class Bybit:
 
         tp_info = self.get_order_trades(pair=pair, order_id=tp_id)
         sl_info = self.get_order_trades(pair=pair, order_id=sl_id)
-        position_info = self.get_actual_positions(pairs=pair)
         return {
             'tp': tp_info,
             'sl': sl_info,
-            'current_quantity': position_info[pair]['position_size']
         }
 
     def _enter_limit_then_market(self,
@@ -938,7 +946,7 @@ class Bybit:
         )
 
         # If there is residual, enter with market order
-        if residual_size != 0:
+        if residual_size >= self.pairs_info[pair]['minQuantity']:
             market_order = self.enter_market_order(
                 pair=pair,
                 type_pos=type_pos,
@@ -946,24 +954,25 @@ class Bybit:
             )
 
             all_orders.append(market_order)
+
         # Get current position info
         pos_info = self.get_actual_positions(pairs=pair)
 
-        exit_side = 'SELL' if type_pos == 'LONG' else 'BUY'
+        exit_side = 'SELL' if side == 'BUY' else 'BUY'
 
         # Place take profit limit order
         tp_data = self.place_limit_tp(
             pair=pair,
             side=exit_side,
             quantity=pos_info[pair]['position_size'],
-            tp_price=round(tp_price, self.pairs_info[pair]['pricePrecision'])
+            tp_price=tp_price
         )
 
         sl_data = self.place_market_sl(
             pair=pair,
-            exit_side=exit_side,
+            side=exit_side,
             quantity=pos_info[pair]['position_size'],
-            sl_price=round(sl_price, self.pairs_info[pair]['pricePrecision'])
+            sl_price=sl_price
         )
 
         return self._format_enter_limit_info(
@@ -989,7 +998,7 @@ class Bybit:
 
         return final
 
-    def _exit_limit_then_market(self, pair: str, type_pos: str, quantity: float):
+    def _exit_limit_then_market(self, pair: str, type_pos: str, quantity: float, tp_time: int, tp_id: str, sl_id: str):
 
         side = 'SELL' if type_pos == 'LONG' else 'BUY'
 
@@ -997,12 +1006,16 @@ class Bybit:
             pair=pair,
             side=side,
             quantity=quantity,
-            duration=120,
+            duration=60,
             reduce_only=True
         )
 
+        if residual_size == 0 and all_orders == {}:
+            return None
+
         # If there is residual, exit with market order
-        if residual_size != 0:
+        if residual_size >= self.pairs_info[pair]['minQuantity']:
+
             market_order = self.exit_market_order(
                 pair=pair,
                 type_pos=type_pos,
@@ -1013,27 +1026,53 @@ class Bybit:
                 all_orders.append(market_order)
 
         return self._format_exit_limit_info(
-            all_orders=all_orders
+            pair=pair,
+            all_orders=all_orders,
+            tp_id=tp_id,
+            tp_time=tp_time,
+            sl_id=sl_id
         )
 
-    def _format_exit_limit_info(self, all_orders: list):
+    def _format_exit_limit_info(self, pair: str, all_orders: list, tp_id: str, tp_time: int, sl_id: str):
 
         final_data = {
-            'pair': all_orders[0]['pair'],
+            'pair': pair,
             'executed_quantity': 0,
-            'last_exit_time': all_orders[-1]['time'],
+            'time': int(time.time() * 1000),
+            'trade_status': 'CLOSED',
             'exit_fees': 0,
         }
+
+        data = self.get_tp_sl_state(pair=pair, tp_id=tp_id, sl_id=sl_id)
+
+        tp_execution = {
+            'tp_execution_unregistered': True,
+            'executed_quantity': 0,
+            'executed_price': 0,
+            'tx_fee_in_quote_asset': 0,
+        }
+
+        if data['tp']['time'] > tp_time:
+            print('IN BETWEEN TP EXECUTION TO BUILD')
+
+        if data['sl']['status'] in ['FILLED']:
+            print('IN BETWEEN SL EXECUTION')
+            all_orders.append(data['sl'])
 
         _price_information = []
         _avg_price = 0
 
         for order in all_orders:
-            _trades = self.get_order_trades(pair=order['pair'], order_id=order['order_id'])
+            if 'tp_execution_unregistered' in order.keys():
+                print('TP BETWEEN EXECUTION')
+                _trades = tp_execution
+            else:
+                _trades = self.get_order_trades(pair=order['pair'], order_id=order['order_id'])
+
             if _trades['executed_quantity'] > 0:
                 final_data['exit_fees'] += _trades['tx_fee_in_quote_asset']
                 final_data['executed_quantity'] += _trades['executed_quantity']
-                _price_information.append({'price': _trades['price'], 'qty': _trades['executed_quantity']})
+                _price_information.append({'price': _trades['executed_price'], 'qty': _trades['executed_quantity']})
 
         for _info in _price_information:
             _avg_price += _info['price'] * (_info['qty'] / final_data['executed_quantity'])
@@ -1066,7 +1105,8 @@ class Bybit:
             results = pool.starmap(func=self._exit_limit_then_market, iterable=all_arguments)
 
         for _information in results:
-            final[_information['pair']] = _information
+            if _information is not None:
+                final[_information['pair']] = _information
 
         return final
 

@@ -4,6 +4,8 @@ from nova.utils.helpers import is_opening_candle
 import time
 import asyncio
 from datetime import datetime
+from multiprocessing import set_start_method
+set_start_method('fork')
 
 
 def asserts_computed_profit(exchange: str,
@@ -19,7 +21,7 @@ def asserts_computed_profit(exchange: str,
         quote_asset='USDT',
         candle='5m',
         list_pair=list_pair,
-        bankroll=10000,
+        bankroll=1000,
         leverage=2,
         max_pos=6,
         max_down=0.3,
@@ -100,7 +102,7 @@ def test_computed_profit():
 
     all_tests = [
         {
-            'exchange': 'bybit',
+            'exchange': 'binance',
             'list_pair': ['BTCUSDT', 'ETHUSDT'],
         }
     ]

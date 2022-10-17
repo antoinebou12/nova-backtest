@@ -21,7 +21,7 @@ def asserts_exit_market_order(exchange: str, pair: str, type_pos: str, quantity:
 
             client.exit_market_order(
                 pair=_pair,
-                type_pos=_info['type'],
+                type_pos=_info['type_pos'],
                 quantity=_info['position_size']
             )
 
@@ -59,12 +59,12 @@ def test_exit_market_order():
             'type_pos': 'LONG',
             'quantity': 0.01
         },
-        # {
-        #     'exchange': 'bybit',
-        #     'pair': 'BTCUSDT',
-        #     'type_pos': 'LONG',
-        #     'quantity': 0.01
-        # }
+        {
+            'exchange': 'bybit',
+            'pair': 'BTCUSDT',
+            'type_pos': 'LONG',
+            'quantity': 0.01
+        }
     ]
 
     for _test in all_tests:

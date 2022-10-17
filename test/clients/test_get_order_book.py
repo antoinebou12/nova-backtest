@@ -29,14 +29,14 @@ def asserts_get_order_book(exchange: str, pair: str):
 
 def test_get_order_book():
     all_tests = [
-        {
-            'exchange': 'binance',
-            'pair': 'BTCUSDT'
-        },
         # {
-        #     'exchange': 'bybit',
+        #     'exchange': 'binance',
         #     'pair': 'BTCUSDT'
-        # }
+        # },
+        {
+            'exchange': 'bybit',
+            'pair': 'BTCUSDT'
+        }
     ]
 
     for _test in all_tests:

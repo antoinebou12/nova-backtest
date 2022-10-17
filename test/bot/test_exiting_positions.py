@@ -22,7 +22,7 @@ def asserts_exiting_position(
         quote_asset=quote_asset,
         candle='1m',
         list_pair=list_pair,
-        bankroll=1000,
+        bankroll=500,
         leverage=2,
         max_pos=6,
         max_down=0.3,
@@ -81,7 +81,7 @@ def test_exiting_position():
         {
             'exchange': 'binance',
             'quote_asset': 'USDT',
-            'list_pair': ['BTCUSDT', 'ETHUSDT']
+            'list_pair': ['BTCUSDT', 'ETHUSDT', 'XRPUSDT']
         }
     ]
 

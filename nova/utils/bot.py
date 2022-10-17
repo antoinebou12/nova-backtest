@@ -186,13 +186,16 @@ class Bot(TelegramBOT):
         self.position_opened[pair]['exit_fees'] += exit_info[fees_var]
 
         # Manage the Partial TP Update
-        if exit_type == "TP" and self.position_opened[pair]['last_tp_executed'] == exit_info['executed_quantity']:
-            pass
+        if exit_type == "TP" and exit_info['executed_quantity'] < self.position_opened[pair]['last_tp_executed']:
+            self.position_opened[pair]['quantity_exited'] = exit_info['executed_quantity']
+            self.position_opened[pair]['last_tp_executed'] = exit_info['executed_quantity']
+            self.position_opened[pair]['last_tp_time'] = exit_info['time']
+        if exit_type == "TP" and exit_info['status'] == 'FILLED':
+            self.position_opened[pair]['last_tp_executed'] = exit_info['executed_quantity']
+            self.position_opened[pair]['quantity_exited'] = exit_info['executed_quantity']
+
         else:
             self.position_opened[pair]['quantity_exited'] += exit_info['executed_quantity']
-
-        if exit_type == "TP":
-            self.position_opened[pair]['last_tp_executed'] = exit_info['executed_quantity']
 
         self.position_opened[pair]['current_position_size'] = self.position_opened[pair]['original_position_size'] - \
                                                               self.position_opened[pair]['quantity_exited']

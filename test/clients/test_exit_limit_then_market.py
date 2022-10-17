@@ -82,18 +82,18 @@ def asserts_exit_limit_then_market(exchange: str,
 def test_exit_limit_then_market():
 
     all_tests = [
-        {
-            'exchange': 'binance',
-            'pair': 'BTCUSDT',
-            'type_pos': 'LONG',
-            'quantity': 0.01
-        },
         # {
-        #     'exchange': 'bybit',
+        #     'exchange': 'binance',
         #     'pair': 'BTCUSDT',
         #     'type_pos': 'LONG',
-        #     'quantity': 0.01,
-        # }
+        #     'quantity': 0.01
+        # },
+        {
+            'exchange': 'bybit',
+            'pair': 'BTCUSDT',
+            'type_pos': 'LONG',
+            'quantity': 0.01,
+        }
     ]
 
     for _test in all_tests:

@@ -64,18 +64,18 @@ def asserts_get_order(exchange: str, pair: str, type_pos: str, quantity: float):
 
 def test_get_order():
     all_tests = [
-        {
-            'exchange': 'binance',
-            'pair': 'BTCUSDT',
-            'type_pos': 'LONG',
-            'quantity': 0.01
-        },
         # {
-        #     'exchange': 'bybit',
+        #     'exchange': 'binance',
         #     'pair': 'BTCUSDT',
         #     'type_pos': 'LONG',
         #     'quantity': 0.01
-        # }
+        # },
+        {
+            'exchange': 'bybit',
+            'pair': 'BTCUSDT',
+            'type_pos': 'LONG',
+            'quantity': 0.1
+        }
     ]
 
     for _test in all_tests:

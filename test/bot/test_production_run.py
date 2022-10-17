@@ -25,7 +25,8 @@ def asserts_production_run(
         max_down=0.3,
         telegram_notification=False,
         telegram_bot_token='',
-        telegram_bot_chat_id=''
+        telegram_bot_chat_id='',
+        tp_sl_delta=0.02
     )
 
     bot.production_run()

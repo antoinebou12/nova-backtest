@@ -54,23 +54,31 @@ def asserts_place_market_sl(exchange: str, pair: str, type_pos: str, quantity: f
     assert sl_data['executed_quantity'] == 0
     assert sl_data['stop_price'] > 0
 
+    client.exit_market_order(
+        pair=pair,
+        type_pos=type_pos,
+        quantity=quantity
+    )
+
+    client.cancel_order(pair=pair, order_id=sl_data['order_id'])
+
     print(f"Test place_market_sl for {exchange.upper()} successful")
 
 
 def test_place_market_sl():
     all_tests = [
-        {
-            'exchange': 'binance',
-            'pair': 'BTCUSDT',
-            'type_pos': 'LONG',
-            'quantity': 0.01
-        },
         # {
-        #     'exchange': 'bybit',
+        #     'exchange': 'binance',
         #     'pair': 'BTCUSDT',
         #     'type_pos': 'LONG',
         #     'quantity': 0.01
-        # }
+        # },
+        {
+            'exchange': 'bybit',
+            'pair': 'BTCUSDT',
+            'type_pos': 'LONG',
+            'quantity': 0.01
+        }
     ]
 
     for _test in all_tests:

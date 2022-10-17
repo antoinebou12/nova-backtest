@@ -7,7 +7,6 @@ def asserts_get_last_price(
     exchange: str,
     pair: str,
 ):
-    start_time = int(time.time() * 1000)
 
     client = clients(
         exchange=exchange,
@@ -33,10 +32,10 @@ def test_get_last_price():
             'exchange': 'binance',
             'pair': 'BTCUSDT',
         },
-        # {
-        #     'exchange': 'bybit',
-        #     'pair': 'BTCUSDT'
-        # }
+        {
+            'exchange': 'bybit',
+            'pair': 'BTCUSDT'
+        }
     ]
 
     for _test in all_tests:

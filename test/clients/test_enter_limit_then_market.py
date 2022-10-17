@@ -52,12 +52,7 @@ def asserts_enter_limit_then_market(exchange: str,
     for var in keys_expected:
         assert var in list(entry_orders.keys())
 
-    nb_decimals = len(str(entry_orders['tp_price']).split(".")[1])
-
-    assert entry_orders['entry_time'] < int(time.time() * 1000)
     assert entry_orders['original_position_size'] == quantity
-    assert entry_orders['tp_price'] == round(tp_price, nb_decimals)
-    assert entry_orders['sl_price'] == round(sl_price, nb_decimals)
     assert entry_orders['trade_status'] == 'ACTIVE'
     assert entry_orders['quantity_exited'] == 0
     assert entry_orders['exit_fees'] == 0
@@ -85,18 +80,18 @@ def asserts_enter_limit_then_market(exchange: str,
 def test_enter_limit_then_market():
 
     all_tests = [
-        {
-            'exchange': 'binance',
-            'pair': 'XRPUSDT',
-            'type_pos': 'LONG',
-            'quantity': 200,
-        },
         # {
-        #     'exchange': 'bybit',
-        #     'pair': 'BTCUSDT',
+        #     'exchange': 'binance',
+        #     'pair': 'XRPUSDT',
         #     'type_pos': 'LONG',
-        #     'quantity': 0.01,
-        # }
+        #     'quantity': 200,
+        # },
+        {
+            'exchange': 'bybit',
+            'pair': 'ETHUSDT',
+            'type_pos': 'LONG',
+            'quantity': 1,
+        }
     ]
 
     for _test in all_tests:
