@@ -2,6 +2,7 @@ from nova.clients.clients import clients
 from decouple import config
 import time
 
+
 def asserts_place_limit_tp(exchange: str, pair: str, type_pos: str, quantity: float):
 
     client = clients(
@@ -45,14 +46,19 @@ def asserts_place_limit_tp(exchange: str, pair: str, type_pos: str, quantity: fl
         tp_price=tp_price
     )
 
+    p_precision = client.pairs_info[pair]['pricePrecision']
+    q_precision = client.pairs_info[pair]['quantityPrecision']
+
     assert tp_data['type'] == 'TAKE_PROFIT'
-    assert tp_data['status'] in ['NEW', 'CREATED']
+    assert tp_data['status'] in ['NEW', 'UNTRIGGERED']
     assert tp_data['pair'] == pair
     assert tp_data['reduce_only']
     assert tp_data['side'] == exit_side
-    assert tp_data['original_quantity'] == quantity
+    assert tp_data['price'] == 0
+    assert round(tp_price * 0.9999, p_precision) < tp_data['stop_price'] < round(tp_price * 1.0001, p_precision)
+    assert tp_data['original_quantity'] == round(quantity, q_precision)
     assert tp_data['executed_quantity'] == 0
-    assert tp_data['stop_price'] > 0
+    assert tp_data['executed_price'] == 0
 
     time.sleep(1)
 

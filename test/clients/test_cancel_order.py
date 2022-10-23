@@ -32,19 +32,26 @@ def asserts_cancel_order(exchange: str, pair: str, type_pos: str, quantity: floa
         tp_price=tp_price
     )
 
-    time.sleep(1)
-
     tp = client.get_order(pair=pair, order_id=tp_order['order_id'])
 
-    assert tp['status'] == 'NEW'
+    # Verify all information about TP d
+    assert tp['status'] in ['NEW', "UNTRIGGERED"]
 
-    cancel = client.cancel_order(
+    client.cancel_order(
         pair=pair,
         order_id=tp_order['order_id']
     )
 
+    cancel = client.get_order(pair=pair, order_id=tp_order['order_id'])
+
     assert isinstance(cancel, dict)
-    assert cancel['status'] == 'CANCELED'
+    assert cancel['status'] in ['CANCELED', 'DEACTIVATED']
+
+    # Cancel the TP order that already been cancelled
+    client.cancel_order(
+        pair=pair,
+        order_id=tp_order['order_id']
+    )
 
     client.exit_market_order(
         pair=pair,
@@ -63,7 +70,14 @@ def test_cancel_order():
             'pair': 'XRPUSDT',
             'type_pos': 'LONG',
             'quantity': 200
-        }
+        },
+        {
+            'exchange': 'bybit',
+            'pair': 'BTCUSDT',
+            'type_pos': 'SHORT',
+            'quantity': 0.1
+        },
+
     ]
 
     for _test in all_tests:

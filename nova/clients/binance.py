@@ -1252,9 +1252,12 @@ class Binance:
         )
 
         if 'code' not in list(data.keys()):
-            return self._format_order(data)
+            print(f'Order id : {order_id} has been Cancelled')
         else:
-            return None
+            if data['code'] == -2011:
+                print(f'Order id : {order_id} has been already Cancelled')
+            else:
+                print(data['msg'])
 
     def get_tp_sl_state(self, pair: str, tp_id: str, sl_id: str):
         """
