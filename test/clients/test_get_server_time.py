@@ -25,7 +25,7 @@ def asserts_get_server_time(exchange: str):
 
 
 def test_get_server_time():
-    for _exchange in ['binance', 'bybit']:
+    for _exchange in ['binance', 'bybit', 'ftx']:
         asserts_get_server_time(_exchange)
 
 

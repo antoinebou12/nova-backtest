@@ -109,4 +109,22 @@ def test_get_actual_positions():
         )
 
 
-test_get_actual_positions()
+# test_get_actual_positions()
+
+
+# no testnet tests
+
+exchange = 'ftx'
+
+client = clients(
+    exchange=exchange,
+    key=config(f"{exchange}TestAPIKey"),
+    secret=config(f"{exchange}TestAPISecret"),
+    testnet=True
+)
+
+positions = client.get_actual_positions(
+    pairs=['BTC-PERP', 'ETH-PERP']
+)
+
+positions

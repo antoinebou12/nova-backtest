@@ -1,8 +1,6 @@
-import pandas as pd
 
 from nova.clients.clients import clients
 from decouple import config
-from nova.utils.constant import STD_CANDLE_FORMAT
 
 
 def asserts_setup_account(
@@ -32,24 +30,33 @@ def asserts_setup_account(
     print(f"Test setup_account for {exchange.upper()} successful")
 
 
+
 def test_setup_account():
 
     all_tests = [
+        # {
+        #     'exchange': 'binance',
+        #     'quote_asset': 'USDT',
+        #     'leverage': 2,
+        #     'list_pairs': ['BTCUSDT', 'ETHUSDT'],
+        #     'bankroll': 1000,
+        #     'max_down': 0.3
+        # },
+        # {
+        #     'exchange': 'bybit',
+        #     'quote_asset': 'USDT',
+        #     'leverage': 2,
+        #     'list_pairs': ['BTCUSDT', 'ETHUSDT'],
+        #     'bankroll': 1000,
+        #     'max_down': 0.3
+        # },
         {
-            'exchange': 'binance',
-            'quote_asset': 'USDT',
-            'leverage': 2,
-            'list_pairs': ['BTCUSDT', 'ETHUSDT'],
-            'bankroll': 1000,
-            'max_down': 0.3
-        },
-        {
-            'exchange': 'bybit',
-            'quote_asset': 'USDT',
-            'leverage': 2,
-            'list_pairs': ['BTCUSDT', 'ETHUSDT'],
-            'bankroll': 1000,
-            'max_down': 0.3
+            'exchange': 'ftx',
+            'quote_asset': 'USD',
+            'leverage': 5,
+            'list_pairs': ['BTC-PERP', 'ETH-PERP'],
+            'bankroll': 50,
+            'max_down': 0.2
         }
     ]
 

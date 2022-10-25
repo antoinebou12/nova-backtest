@@ -56,15 +56,21 @@ def asserts_update_historical(exchange: str, pair: str, interval: str, start_ts:
 def test_update_historical():
 
     all_tests = [
-        {'exchange': 'binance',
+        # {'exchange': 'binance',
+        #  'interval': '4h',
+        #  'pair': 'BTCUSDT',
+        #  'start_ts': int(datetime(2018, 1, 1).timestamp() * 1000),
+        #  'end_ts': int(datetime(2022, 4, 10).timestamp() * 1000)
+        #  },
+        # {'exchange': 'bybit',
+        #  'interval': '4h',
+        #  'pair': 'ETHUSDT',
+        #  'start_ts': int(datetime(2021, 1, 1).timestamp() * 1000),
+        #  'end_ts': int(datetime(2022, 4, 10).timestamp() * 1000)
+        #  },
+        {'exchange': 'ftx',
          'interval': '4h',
-         'pair': 'BTCUSDT',
-         'start_ts': int(datetime(2018, 1, 1).timestamp() * 1000),
-         'end_ts': int(datetime(2022, 4, 10).timestamp() * 1000)
-         },
-        {'exchange': 'bybit',
-         'interval': '4h',
-         'pair': 'ETHUSDT',
+         'pair': 'ETH-PERP',
          'start_ts': int(datetime(2021, 1, 1).timestamp() * 1000),
          'end_ts': int(datetime(2022, 4, 10).timestamp() * 1000)
          },

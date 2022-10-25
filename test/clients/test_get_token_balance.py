@@ -14,8 +14,8 @@ def assert_get_token_balance(
     # Test does not work with Testnet
     client = clients(
         exchange=exchange,
-        key=config(f"{exchange}APIKey"),
-        secret=config(f"{exchange}APISecret"),
+        key=config(f"{exchange}TestAPIKey"),
+        secret=config(f"{exchange}TestAPISecret"),
         testnet=False
     )
 
@@ -36,6 +36,10 @@ def test_get_token_balance():
         #     'exchange': 'bybit',
         #     'quote_asset': 'USDT'
         # }
+        {
+            'exchange': 'ftx',
+            'quote_asset': 'USD'
+        }
     ]
 
     for _test in all_tests:

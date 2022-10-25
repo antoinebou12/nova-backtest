@@ -20,7 +20,6 @@ def assert_get_historical_data(exchange: str, pair: str, interval: str, start_ts
         pair=pair,
         interval=interval
     )
-
     real_start = max(earliest_start, start_ts)
     time_milli = interval_to_milliseconds(interval=interval)
 
@@ -34,7 +33,7 @@ def assert_get_historical_data(exchange: str, pair: str, interval: str, start_ts
     df['open_time_difference'] = df['open_time'] - df['open_time'].shift(1)
     df['close_time_difference'] = df['close_time'] - df['close_time'].shift(1)
 
-    assert df['open_time_difference'].min() == df['open_time_difference'].max()
+    assert df['open_time_difference'].max() == df['open_time_difference'].min()
     assert df['close_time_difference'].min() == df['close_time_difference'].max()
 
     assert df['open_time'].min() < real_start + time_milli
@@ -49,16 +48,22 @@ def assert_get_historical_data(exchange: str, pair: str, interval: str, start_ts
 def test_get_historical_data():
 
     all_tests = [
-        {'exchange': 'binance',
+        # {'exchange': 'binance',
+        #  'interval': '4h',
+        #  'pair': 'ETHUSDT',
+        #  'start_ts': int(datetime(2018, 1, 1).timestamp() * 1000),
+        #  'end_ts': int(datetime(2022, 4, 10).timestamp() * 1000)
+        #  },
+        # {'exchange': 'bybit',
+        #  'interval': '4h',
+        #  'pair': 'BTCUSDT',
+        #  'start_ts': int(datetime(2018, 1, 1).timestamp() * 1000),
+        #  'end_ts': int(datetime(2022, 4, 10).timestamp() * 1000)
+        #  },
+        {'exchange': 'ftx',
          'interval': '4h',
-         'pair': 'ETHUSDT',
-         'start_ts': int(datetime(2018, 1, 1).timestamp() * 1000),
-         'end_ts': int(datetime(2022, 4, 10).timestamp() * 1000)
-         },
-        {'exchange': 'bybit',
-         'interval': '4h',
-         'pair': 'BTCUSDT',
-         'start_ts': int(datetime(2018, 1, 1).timestamp() * 1000),
+         'pair': 'BTC-PERP',
+         'start_ts': int(datetime(2020, 3, 20).timestamp() * 1000),
          'end_ts': int(datetime(2022, 4, 10).timestamp() * 1000)
          },
     ]
