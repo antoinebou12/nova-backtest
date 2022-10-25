@@ -26,9 +26,9 @@ def asserts_exiting_position(
         leverage=2,
         max_pos=6,
         max_down=0.3,
-        telegram_notification=False,
-        telegram_bot_token='',
-        telegram_bot_chat_id='',
+        telegram_notification=True,
+        telegram_bot_token=config('token_vmc_binance_bot'),
+        telegram_bot_chat_id=config('chat_vmc_binance'),
         exit_prob=0.6,
         tp_sl_delta=0.02
     )
@@ -79,7 +79,7 @@ def asserts_exiting_position(
 def test_exiting_position():
     all_tests = [
         {
-            'exchange': 'bybit',
+            'exchange': 'binance',
             'quote_asset': 'USDT',
             'list_pair': ['BTCUSDT', 'ETHUSDT', 'XRPUSDT']
         }

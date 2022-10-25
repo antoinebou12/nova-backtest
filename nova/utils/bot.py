@@ -83,10 +83,13 @@ class Bot(TelegramBOT):
 
         # TELEGRAM NOTIFICATION
         self.telegram_notification = telegram_notification
+
         if self.telegram_notification:
-            TelegramBOT.__init__(self,
-                                 bot_token=telegram_bot_token,
-                                 bot_chatID=telegram_bot_chat_id)
+            TelegramBOT.__init__(
+                self,
+                bot_token=telegram_bot_token,
+                bot_chat_id=telegram_bot_chat_id
+            )
 
         # BOT STATE
         self.unrealizedPNL = 0
