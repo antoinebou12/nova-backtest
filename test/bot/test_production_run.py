@@ -19,14 +19,14 @@ def asserts_production_run(
         quote_asset=quote_asset,
         candle='1m',
         list_pair=list_pair,
-        bankroll=1000,
+        bankroll=150,
         leverage=2,
         max_pos=6,
-        max_down=0.3,
-        telegram_notification=False,
-        telegram_bot_token='',
-        telegram_bot_chat_id='',
-        tp_sl_delta=0.02
+        max_down=0.2,
+        telegram_notification=True,
+        telegram_bot_token=config('token_vmc_binance_bot'),
+        telegram_bot_chat_id=config('chat_vmc_binance'),
+        tp_sl_delta=0.01,
     )
 
     bot.production_run()
