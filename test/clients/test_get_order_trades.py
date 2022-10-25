@@ -45,7 +45,7 @@ def asserts_get_order_trades(exchange: str, pair: str, type_pos: str, quantity: 
     assert ot_data['quote_asset'] == 'USDT'
     assert ot_data['tx_fee_in_quote_asset'] > 0
     assert ot_data['nb_of_trades'] > 0
-    assert ot_data['is_buyer']
+    assert ot_data['is_buyer'] if type_pos == 'LONG' else not ot_data['is_buyer']
 
     client.exit_market_order(
         pair=pair,
@@ -53,7 +53,7 @@ def asserts_get_order_trades(exchange: str, pair: str, type_pos: str, quantity: 
         quantity=quantity
     )
 
-    print(f"Test get_order for {exchange.upper()} successful")
+    print(f"Test get_order {type_pos} for {exchange.upper()} successful")
 
 
 def test_get_order_trades():
@@ -64,10 +64,22 @@ def test_get_order_trades():
         #     'type_pos': 'LONG',
         #     'quantity': 0.01
         # },
+        # {
+        #     'exchange': 'binance',
+        #     'pair': 'BTCUSDT',
+        #     'type_pos': 'SHORT',
+        #     'quantity': 0.01
+        # },
         {
             'exchange': 'bybit',
             'pair': 'BTCUSDT',
             'type_pos': 'LONG',
+            'quantity': 0.01
+        },
+        {
+            'exchange': 'bybit',
+            'pair': 'BTCUSDT',
+            'type_pos': 'SHORT',
             'quantity': 0.01
         }
     ]

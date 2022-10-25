@@ -85,9 +85,14 @@ def test_get_prod_data():
         #     'list_pair': ['BTCUSDT', 'ETHUSDT', 'ADAUSDT'],
         #     'nb_candles': 300,
         # },
+        # {
+        #     'exchange': 'bybit',
+        #     'list_pair': ['BTCUSDT', 'ETHUSDT', 'ADAUSDT'],
+        #     'nb_candles': 300,
+        # },
         {
-            'exchange': 'bybit',
-            'list_pair': ['BTCUSDT', 'ETHUSDT', 'ADAUSDT'],
+            'exchange': 'ftx',
+            'list_pair': ['BTC-PERP', 'ETH-PERP', 'XRP-PERP'],
             'nb_candles': 300,
         }
     ]

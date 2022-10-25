@@ -33,9 +33,13 @@ def test_get_order_book():
         #     'exchange': 'binance',
         #     'pair': 'BTCUSDT'
         # },
+        # {
+        #     'exchange': 'bybit',
+        #     'pair': 'BTCUSDT'
+        # },
         {
-            'exchange': 'bybit',
-            'pair': 'BTCUSDT'
+            'exchange': 'ftx',
+            'pair': 'BTC-PERP'
         }
     ]
 

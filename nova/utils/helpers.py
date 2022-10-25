@@ -4,6 +4,15 @@ import time
 import re
 
 
+def milliseconds_to_interval(interval_ms: int) -> str:
+    if interval_ms < 3600000:
+        return str(int(60/(3600000/interval_ms))) + 'T'
+    elif interval_ms < 86400000:
+        return str(int(24/(86400000 / interval_ms))) + 'H'
+    else:
+        return str(int(interval_ms / 86400000)) + 'D'
+
+
 def interval_to_milliseconds(interval: str) -> Optional[int]:
     """Convert a Binance interval string to milliseconds
     Args:

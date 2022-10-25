@@ -45,14 +45,19 @@ def asserts_place_market_sl(exchange: str, pair: str, type_pos: str, quantity: f
         sl_price=sl_price
     )
 
+    p_precision = client.pairs_info[pair]['pricePrecision']
+    q_precision = client.pairs_info[pair]['quantityPrecision']
+
     assert sl_data['type'] == 'STOP_MARKET'
     assert sl_data['status'] in ['NEW', 'UNTRIGGERED']
     assert sl_data['pair'] == pair
     assert sl_data['reduce_only']
     assert sl_data['side'] == exit_side
-    assert sl_data['original_quantity'] == quantity
+    assert sl_data['price'] == 0
+    assert round(sl_price * 0.9999, p_precision) < sl_data['stop_price'] < round(sl_price * 1.0001, p_precision)
+    assert sl_data['original_quantity'] == round(quantity, q_precision)
     assert sl_data['executed_quantity'] == 0
-    assert sl_data['stop_price'] > 0
+    assert sl_data['executed_price'] == 0
 
     client.exit_market_order(
         pair=pair,

@@ -19,6 +19,8 @@ def asserts_get_last_price(
         pair=pair,
     )
 
+    print(data)
+
     assert isinstance(data, dict)
     assert data['pair'] == pair
     assert data['latest_price'] > 0
@@ -28,13 +30,17 @@ def asserts_get_last_price(
 
 def test_get_last_price():
     all_tests = [
+        # {
+        #     'exchange': 'binance',
+        #     'pair': 'BTCUSDT',
+        # },
+        # {
+        #     'exchange': 'bybit',
+        #     'pair': 'BTCUSDT'
+        # },
         {
-            'exchange': 'binance',
-            'pair': 'BTCUSDT',
-        },
-        {
-            'exchange': 'bybit',
-            'pair': 'BTCUSDT'
+            'exchange': 'ftx',
+            'pair': 'ETH-PERP'
         }
     ]
 

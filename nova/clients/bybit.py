@@ -134,6 +134,7 @@ class Bybit:
                 pairs_info[pair['name']]['pricePrecision'] = pair['price_scale']
                 pairs_info[pair['name']]['maxQuantity'] = pair['lot_size_filter']['max_trading_qty']
                 pairs_info[pair['name']]['minQuantity'] = pair['lot_size_filter']['min_trading_qty']
+                pairs_info[pair['name']]['tick_size'] = float(pair['price_filter']['tick_size'])
                 pairs_info[pair['name']]['quantityPrecision'] = str(pair['lot_size_filter']['qty_step'])[::-1].find('.')
 
         return pairs_info
@@ -338,14 +339,14 @@ class Bybit:
             "position_idx": 0
         }
 
-        data = self._send_request(
+        response = self._send_request(
             end_point=f"/private/linear/order/create",
             request_type="POST",
             params=params,
             signed=True
-        )['result']
+        )
 
-        return self._format_order(data=data)
+        return self.get_order(pair=pair, order_id=response['result']['order_id'])
 
     def exit_market_order(self, pair: str, type_pos: str, quantity: float) -> dict:
 
@@ -370,40 +371,64 @@ class Bybit:
             signed=True
         )
 
-        return self._format_order(data=response['result'])
+        return self.get_order(pair=pair, order_id=response['result']['order_id'])
 
-    @staticmethod
-    def _format_order(data: dict) -> dict:
+    def _format_order(self, data: dict) -> dict:
 
         date = datetime.strptime(data['updated_time'], '%Y-%m-%dT%H:%M:%SZ')
-        order_name = 'order_id' if 'order_id' in data.keys() else 'stop_order_id'
 
-        stop_price = 0
-        if data['order_type'] == 'TAKE_PROFIT':
-            stop_price = float(data['price'])
-        if data['order_type'] == 'STOP_MARKET':
-            stop_price = float(data['trigger_price'])
+        _order_type = data['order_type']
+        if data['order_type'] == 'Limit' and data['order_status'] in ['Untriggered', 'Deactivated', 'Triggered']:
+            _order_type = 'TAKE_PROFIT'
+        if data['order_type'] == 'Market' and data['order_status'] in ['Untriggered', 'Deactivated', 'Triggered']:
+            _order_type = 'STOP_MARKET'
 
-        executed_quantity = 0
-        if data['order_type'] == 'Market':
-            executed_quantity = data['qty']
-        elif 'cum_exec_qty' in data.keys() and data['order_type'] == 'Limit':
-            executed_quantity = data['cum_exec_qty']
+        _order_name = 'order_id' if 'order_id' in data.keys() else 'stop_order_id'
+
+        _stop_price = 0
+        _executed_quantity = 0
+        _executed_price = 0
+        _price = 0
+
+        if _order_type == 'Market':
+            _executed_quantity = data['cum_exec_qty']
+            _executed_price = data['cum_exec_value'] / data['cum_exec_qty']
+
+        elif _order_type == 'Limit':
+            _price = data['price']
+            _executed_price = data['price']
+            _executed_quantity = data['cum_exec_qty']
+
+        elif _order_type == 'TAKE_PROFIT':
+            _stop_price = data['price']
+            _executed_quantity = data['cum_exec_qty']
+            _executed_price = data['last_exec_price']
+
+        elif _order_type == 'STOP_MARKET':
+
+            _stop_price = self._send_request(
+                end_point=f"/private/linear/stop-order/search",
+                request_type="GET",
+                params={'symbol': data['symbol'], 'stop_order_id': data['order_id']},
+                signed=True
+            )['result']['trigger_price']
+            _executed_quantity = data['cum_exec_qty']
+            _executed_price = 0 if data['cum_exec_qty'] == 0 else data['cum_exec_value'] / data['cum_exec_qty']
 
         formatted = {
             'time': int(datetime.timestamp(date) * 1000),
-            'order_id': data[order_name],
+            'order_id': data[_order_name],
             'pair': data['symbol'],
             'status': data['order_status'].upper(),
-            'type': data['order_type'].upper(),
+            'type': _order_type.upper(),
             'time_in_force': data['time_in_force'],
             'reduce_only': data['reduce_only'],
             'side': data['side'].upper(),
-            'price': float(data['price']),
-            'stop_price': float(stop_price),
-            'original_quantity': float(data['qty']),
-            'executed_quantity': float(executed_quantity),
-            'executed_price': float(data['price'])
+            'price': _price,
+            'stop_price': _stop_price,
+            'original_quantity': data['qty'],
+            'executed_quantity': _executed_quantity,
+            'executed_price': _executed_price
         }
 
         return formatted
@@ -437,7 +462,7 @@ class Bybit:
         trades = self._send_request(
             end_point=f"/private/linear/trade/execution/history-list",
             request_type="GET",
-            params={"symbol": pair, "start_time": results['time']//1000},
+            params={"symbol": pair, "start_time": int(results['time'] // 1000 - 10)},
             signed=True
         )
 
@@ -479,7 +504,7 @@ class Bybit:
             "qty": float(round(quantity, self.pairs_info[pair]['quantityPrecision'])),
             "order_type": 'Limit',
             "trigger_by": "LastPrice",
-            "time_in_force": 'PostOnly',
+            "time_in_force": 'GoodTillCancel',
             "close_on_trigger": True,
             "reduce_only": True,
             "recv_window": "5000",
@@ -493,9 +518,7 @@ class Bybit:
             signed=True
         )
 
-        response['result']['order_type'] = 'TAKE_PROFIT'
-
-        return self._format_order(data=response['result'])
+        return self.get_order(pair=pair, order_id=response['result']['stop_order_id'])
 
     def place_market_sl(self, pair: str, side: str, quantity: float, sl_price: float):
 
@@ -524,9 +547,7 @@ class Bybit:
             signed=True
         )
 
-        response['result']['order_type'] = 'STOP_MARKET'
-
-        return self._format_order(data=response['result'])
+        return self.get_order(pair=pair, order_id=response['result']['stop_order_id'])
 
     def get_last_price(self, pair: str):
 
@@ -767,7 +788,13 @@ class Bybit:
             signed=True
         )
 
-        return response['result']
+        if response['ret_code'] == 0:
+            print(f'Order id : {order_id} has been Cancelled')
+        else:
+            if response['ret_code'] == 20001:
+                print(f'Order id : {order_id} has been already Cancelled')
+            else:
+                print(response['ret_msg'])
 
     def _set_margin_type(self,
                          pair: str,

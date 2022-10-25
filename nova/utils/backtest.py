@@ -22,8 +22,6 @@ class BackTest:
 
     def __init__(self,
                  exchange: str,
-                 key: str,
-                 secret: str,
                  strategy_name: str,
                  candle: str,
                  list_pair,
@@ -34,17 +32,16 @@ class BackTest:
                  max_holding: int,
                  quote_asset: str = 'USDT',
                  geometric_sizes: bool = False,
-                 lever: int = 2,
+                 leverage: int = 2,
                  save_all_pairs_charts: bool = False,
                  start_bk: float = 10000,
                  slippage: bool = False,
-                 update_data: bool = False,
-                 pass_phrase: str = ""):
+                 update_data: bool = False):
 
         self.exchange = exchange
         self.quote_asset = quote_asset
         self.strategy_name = strategy_name
-        self.positions_size = lever / max_pos
+        self.positions_size = leverage / max_pos
         self.geometric_sizes = geometric_sizes
 
         self.slippage = slippage

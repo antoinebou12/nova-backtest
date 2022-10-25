@@ -25,21 +25,33 @@ def asserts_enter_market_order(exchange: str, pair: str, type_pos: str, quantity
                 quantity=_info['position_size']
             )
 
-    market_order = client.enter_market_order(
+    order = client.enter_market_order(
         pair=pair,
         type_pos=type_pos,
         quantity=quantity
     )
 
+    assert order['status'] in ['NEW', 'CREATED']
+
     side = 'BUY' if type_pos == 'LONG' else 'SELL'
 
+    # get price
+    latest_price = client.get_last_price(pair)['latest_price']
+    q_precision = client.pairs_info[pair]['quantityPrecision']
+
+    market_order = client.get_order(pair, order['order_id'])
+
     assert market_order['type'] == 'MARKET'
-    assert market_order['status'] in ['FILLED', 'CREATED']
+    assert market_order['status'] == 'FILLED'
     assert market_order['pair'] == pair
     assert not market_order['reduce_only']
+    assert market_order['time_in_force'] in ['GTC', 'ImmediateOrCancel']
     assert market_order['side'] == side
-    assert market_order['original_quantity'] == quantity
-    assert market_order['executed_quantity'] == quantity
+    assert market_order['price'] == 0
+    assert market_order['stop_price'] == 0
+    assert market_order['original_quantity'] == round(quantity, q_precision)
+    assert market_order['executed_quantity'] == round(quantity, q_precision)
+    assert latest_price * 0.90 < market_order['executed_price'] < latest_price * 1.1
 
     client.exit_market_order(
         pair=pair,
@@ -47,14 +59,20 @@ def asserts_enter_market_order(exchange: str, pair: str, type_pos: str, quantity
         quantity=quantity
     )
 
-    print(f"Test enter_market_order for {exchange.upper()} successful")
+    print(f"Test enter_market_order {type_pos} for {exchange.upper()} successful")
 
 
 def test_enter_market_order():
 
     all_tests = [
+        # {
+        #     'exchange': 'binance',
+        #     'pair': 'BTCUSDT',
+        #     'type_pos': 'LONG',
+        #     'quantity': 0.01
+        # },
         {
-            'exchange': 'binance',
+            'exchange': 'bybit',
             'pair': 'BTCUSDT',
             'type_pos': 'LONG',
             'quantity': 0.01
@@ -62,7 +80,7 @@ def test_enter_market_order():
         {
             'exchange': 'bybit',
             'pair': 'BTCUSDT',
-            'type_pos': 'LONG',
+            'type_pos': 'SHORT',
             'quantity': 0.01
         }
     ]
