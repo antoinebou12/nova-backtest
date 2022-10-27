@@ -24,8 +24,12 @@ def asserts_get_server_time(exchange: str):
     print(f"Test get_server_time for {exchange.upper()} successful")
 
 
+# def test_get_server_time():
+#     for _exchange in ['binance', 'bybit', 'ftx', 'kraken']:
+#         asserts_get_server_time(_exchange)
+
 def test_get_server_time():
-    for _exchange in ['binance', 'bybit', 'ftx']:
+    for _exchange in ['kraken']:
         asserts_get_server_time(_exchange)
 
 
