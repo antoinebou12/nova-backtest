@@ -85,4 +85,24 @@ def test_looping_limit_order():
         )
 
 
-test_looping_limit_order()
+# test_looping_limit_order()
+
+
+
+exchange = 'ftx'
+
+client = clients(
+    exchange=exchange,
+    key=config(f"{exchange}TestAPIKey"),
+    secret=config(f"{exchange}TestAPISecret"),
+    testnet=True
+)
+
+residual, all_orders = client._looping_limit_orders(
+    pair='BTC-PERP',
+    side='BUY',
+    quantity=0.001,
+    reduce_only=False,
+    duration=60
+)
+

@@ -117,4 +117,36 @@ def test_get_tp_sl_state():
         )
 
 
-test_get_tp_sl_state()
+# test_get_tp_sl_state()
+
+exchange = 'ftx'
+
+client = clients(
+    exchange=exchange,
+    key=config(f"{exchange}TestAPIKey"),
+    secret=config(f"{exchange}TestAPISecret"),
+    testnet=True
+)
+
+
+tp_data = client.place_limit_tp(
+    pair="ETH-PERP",
+    side="SELL",
+    quantity=0.01,
+    tp_price=1650
+)
+
+
+sl_data = client.place_market_sl(
+    pair="ETH-PERP",
+    side="SELL",
+    quantity=0.01,
+    sl_price=1400
+)
+
+tp_sl_state = client.get_tp_sl_state(
+    pair="ETH-PERP",
+    tp_id=tp_data['order_id'],
+    sl_id=sl_data['order_id']
+)
+

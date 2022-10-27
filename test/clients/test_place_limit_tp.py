@@ -98,4 +98,41 @@ def test_place_limit_tp():
         )
 
 
-test_place_limit_tp()
+# test_place_limit_tp()
+
+
+exchange = 'ftx'
+
+client = clients(
+    exchange=exchange,
+    key=config(f"{exchange}TestAPIKey"),
+    secret=config(f"{exchange}TestAPISecret"),
+    testnet=True
+)
+
+# market_data = client.enter_market_order(
+#     pair="ETH-PERP",
+#     type_pos="LONG",
+#     quantity=0.01
+# )
+
+
+tp_data = client.place_limit_tp(
+    pair="ETH-PERP",
+    side="SELL",
+    quantity=0.01,
+    tp_price=1650
+)
+
+# tp_data_executed = client.place_limit_tp(
+#     pair="ETH-PERP",
+#     side="SELL",
+#     quantity=0.01,
+#     tp_price=1571
+# )
+
+
+order_tp_ex = client.get_order(pair="ETH-PERP", order_id=323380952)
+
+
+

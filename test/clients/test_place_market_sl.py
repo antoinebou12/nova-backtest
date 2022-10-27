@@ -95,4 +95,34 @@ def test_place_market_sl():
         )
 
 
-test_place_market_sl()
+# test_place_market_sl()
+
+
+exchange = 'ftx'
+
+client = clients(
+    exchange=exchange,
+    key=config(f"{exchange}TestAPIKey"),
+    secret=config(f"{exchange}TestAPISecret"),
+    testnet=True
+)
+
+# market_data = client.enter_market_order(
+#     pair="ETH-PERP",
+#     type_pos="LONG",
+#     quantity=0.01
+# )
+
+sl_data = client.place_market_sl(
+    pair="ETH-PERP",
+    side="SELL",
+    quantity=0.01,
+    sl_price=1400
+)
+
+
+
+
+{'time': 1666824321922, 'order_id': 323591317, 'pair': 'ETH-PERP', 'status': 'OPEN', 'type': 'STOP_MARKET',
+ 'time_in_force': 'GTC', 'reduce_only': True, 'side': 'SELL', 'price': 0.0, 'stop_price': 1400.0,
+ 'original_quantity': 0.01, 'executed_quantity': 0.0, 'executed_price': 0.0}

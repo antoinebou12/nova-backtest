@@ -11,8 +11,8 @@ def asserts_production_run(
 ):
     bot = RandomStrategy(
         exchange=exchange,
-        key=config(f"{exchange}TestAPIKey"),
-        secret=config(f"{exchange}TestAPISecret"),
+        key=config(f"{exchange}APIKey"),
+        secret=config(f"{exchange}APISecret"),
         passphrase='',
         nova_api_key=config("NovaAPISecret"),
         bot_id='ROBOT1',
@@ -27,6 +27,7 @@ def asserts_production_run(
         telegram_bot_token=config('token_vmc_binance_bot'),
         telegram_bot_chat_id=config('chat_vmc_binance'),
         tp_sl_delta=0.01,
+        testnet=False
     )
 
     bot.production_run()

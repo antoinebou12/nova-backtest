@@ -95,7 +95,41 @@ def test_enter_market_order():
         )
 
 
-test_enter_market_order()
+# test_enter_market_order()
 
 
+exchange = 'ftx'
 
+client = clients(
+    exchange=exchange,
+    key=config(f"{exchange}TestAPIKey"),
+    secret=config(f"{exchange}TestAPISecret"),
+    testnet=True
+)
+
+# data = client.enter_market_order(
+#     pair="ETH-PERP",
+#     type_pos="LONG",
+#     quantity=0.01
+# )
+
+# order_data = client.get_order(
+#     pair="ETH-PERP",
+#     order_id=193550433909
+# )
+
+# order_data = client.get_order_trades(
+#     pair="ETH-PERP",
+#     order_id=193550433909
+# )
+
+
+# for trade in order_data:
+#     print(trade)
+
+#
+# returned_data = {'id': 193550433909, 'clientId': None, 'market': 'ETH-PERP', 'type': 'market', 'side': 'buy',
+#                  'price': None, 'size': 0.01, 'status': 'new', 'filledSize': 0.0, 'remainingSize': 0.01,
+#                  'reduceOnly': False, 'liquidation': None, 'avgFillPrice': None, 'postOnly': False, 'ioc': True,
+#                  'createdAt': '2022-10-26T02:32:10.695169+00:00', 'future': 'ETH-PERP'
+#                  }
