@@ -98,7 +98,7 @@ def test_enter_market_order():
 # test_enter_market_order()
 
 
-exchange = 'ftx'
+exchange = 'kraken'
 
 client = clients(
     exchange=exchange,
@@ -107,16 +107,27 @@ client = clients(
     testnet=True
 )
 
-# data = client.enter_market_order(
-#     pair="ETH-PERP",
-#     type_pos="LONG",
-#     quantity=0.01
-# )
+entry_data = client.enter_market_order(
+    pair="pf_xbtusd",
+    type_pos="LONG",
+    quantity=0.1
+)
+
+exit_data = client.exit_market_order(
+    pair="pf_xbtusd",
+    type_pos="LONG",
+    quantity=0.1
+)
 
 # order_data = client.get_order(
-#     pair="ETH-PERP",
-#     order_id=193550433909
+#     pair="pf_xbtusd",
+#     order_id=entry_data['order_id']
 # )
+
+cancel_order = client.cancel_order(
+    pair="pf_xbtusd",
+    order_id=entry_data['order_id']
+)
 
 # order_data = client.get_order_trades(
 #     pair="ETH-PERP",

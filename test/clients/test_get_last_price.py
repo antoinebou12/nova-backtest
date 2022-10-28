@@ -38,9 +38,13 @@ def test_get_last_price():
         #     'exchange': 'bybit',
         #     'pair': 'BTCUSDT'
         # },
+        # {
+        #     'exchange': 'ftx',
+        #     'pair': 'ETH-PERP'
+        # },
         {
-            'exchange': 'ftx',
-            'pair': 'ETH-PERP'
+            'exchange': 'kraken',
+            'pair': 'pf_xbtusd'
         }
     ]
 

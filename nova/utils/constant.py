@@ -37,6 +37,15 @@ DATA_FORMATING = {
         "num_var": [
             'open', 'high', 'low', 'close', 'volume', 'turnover'
         ]
+    },
+    "kraken": {
+        "columns": [
+            'open_time', 'open', 'high', 'low', 'close', 'volume'
+        ],
+        "num_var": [
+            'open', 'high', 'low', 'close', 'volume',
+        ],
+        "date_var": ["open_time", "close_time"]
     }
 
 }
