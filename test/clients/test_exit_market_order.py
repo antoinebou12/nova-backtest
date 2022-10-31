@@ -77,5 +77,30 @@ def test_exit_market_order():
         )
 
 
-test_exit_market_order()
+# test_exit_market_order()
 
+
+exchange = 'ftx'
+
+client = clients(
+    exchange=exchange,
+    key=config(f"{exchange}TestAPIKey"),
+    secret=config(f"{exchange}TestAPISecret"),
+    testnet=True
+)
+
+# data = client.exit_market_order(
+#     pair="ETH-PERP",
+#     type_pos="LONG",
+#     quantity=0.01
+# )
+
+order_data = client.get_order(
+    pair="ETH-PERP",
+    order_id=193679239035
+)
+
+{'id': 193679239035, 'clientId': None, 'market': 'ETH-PERP', 'type': 'market', 'side': 'sell', 'price': None,
+ 'size': 0.01, 'status': 'new', 'filledSize': 0.0, 'remainingSize': 0.01, 'reduceOnly': True, 'liquidation': None,
+ 'avgFillPrice': None, 'postOnly': False, 'ioc': True, 'createdAt': '2022-10-26T11:19:22.196390+00:00',
+ 'future': 'ETH-PERP'}

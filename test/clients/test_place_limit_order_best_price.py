@@ -82,4 +82,25 @@ def test_place_limit_order_best_price():
         )
 
 
-test_place_limit_order_best_price()
+# test_place_limit_order_best_price()
+
+exchange = 'ftx'
+
+client = clients(
+    exchange=exchange,
+    key=config(f"{exchange}TestAPIKey"),
+    secret=config(f"{exchange}TestAPISecret"),
+    testnet=True
+)
+
+posted, data = client.place_limit_order_best_price(
+    pair='BTC-PERP',
+    side='BUY',
+    quantity=0.001,
+    reduce_only=False
+)
+#
+# order_data = client.get_order(
+#     pair="BTC-PERP",
+#     order_id=193848819865
+# )

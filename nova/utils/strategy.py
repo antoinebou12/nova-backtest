@@ -24,6 +24,7 @@ class RandomStrategy(Bot):
                  bankroll: float = 1000,
                  max_down: float = 0.3,
                  max_pos: int = 6,
+                 testnet: bool = True,
                  telegram_notification: bool = False,
                  telegram_bot_token: str = None,
                  telegram_bot_chat_id: str = None,
@@ -59,7 +60,7 @@ class RandomStrategy(Bot):
                      telegram_bot_token=telegram_bot_token,
                      telegram_bot_chat_id=telegram_bot_chat_id,
 
-                     testnet=True,
+                     testnet=testnet,
                      )
 
         # all optimized hyperparameters or set to stone

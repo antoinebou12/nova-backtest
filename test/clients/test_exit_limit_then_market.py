@@ -107,4 +107,48 @@ def test_exit_limit_then_market():
         )
 
 
-test_exit_limit_then_market()
+# test_exit_limit_then_market()
+
+
+
+exchange = 'ftx'
+
+client = clients(
+    exchange=exchange,
+    key=config(f"{exchange}TestAPIKey"),
+    secret=config(f"{exchange}TestAPISecret"),
+    testnet=True
+)
+
+pair = 'ETH-PERP'
+type_pos = "LONG"
+quantity = 0.01
+
+upper = client.get_last_price(pair=pair)['latest_price'] * 1.1
+lower = client.get_last_price(pair=pair)['latest_price'] * 0.9
+
+sl_price = lower if type_pos == 'LONG' else upper
+tp_price = upper if type_pos == 'LONG' else lower
+
+entry_orders = client._enter_limit_then_market(
+    pair=pair,
+    type_pos=type_pos,
+    quantity=quantity,
+    sl_price=sl_price,
+    tp_price=tp_price,
+)
+
+state_tp = client.get_order_trades(pair=pair, order_id=entry_orders['tp_id'])
+
+# exiting the position
+exit_orders = client._exit_limit_then_market(
+    pair=pair,
+    type_pos=type_pos,
+    quantity=quantity,
+    tp_time=state_tp['time'],
+    tp_id=entry_orders['tp_id'],
+    sl_id=entry_orders['sl_id']
+)
+
+
+
