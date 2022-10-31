@@ -36,13 +36,15 @@ class BackTest:
                  save_all_pairs_charts: bool = False,
                  start_bk: float = 10000,
                  slippage: bool = False,
-                 update_data: bool = False):
+                 update_data: bool = False,
+                 pass_phrase: str = ""):
 
         self.exchange = exchange
         self.quote_asset = quote_asset
         self.strategy_name = strategy_name
         self.positions_size = leverage / max_pos
         self.geometric_sizes = geometric_sizes
+        self.leverage = leverage
 
         self.slippage = slippage
 
@@ -122,9 +124,15 @@ class BackTest:
         Returns:
              list of all the pairs that we can trade on.
         """
-        info = self.client.get_pairs_info(quote_asset=self.quote_asset)
+        info = self.client.get_pairs_info()
+        list_pairs = []
 
-        return list(info.keys())
+        for pair, info in info.items():
+
+            if info['quote_asset'] == self.quote_asset:
+                list_pairs.append(pair)
+
+        return list_pairs
 
     def get_all_historical_data(self,
                                 pair: str,
@@ -162,7 +170,7 @@ class BackTest:
                 pair=pair,
                 interval=self.candle,
                 start_ts=int(datetime.timestamp(std_start) * 1000),
-                end_ts=int(datetime.timestamp(self.end) * 1000)
+                end_ts=int(datetime.timestamp(datetime.now()) * 1000)
             )
 
             df.to_csv(f'database/{self.exchange}/hist_{pair}_{self.candle}.csv', index=False)
@@ -170,12 +178,12 @@ class BackTest:
         for var in ['open_time', 'close_time']:
             df[var] = pd.to_datetime(df[var], unit='ms')
 
-        assert not (False in (df['open_time'] == df['open_time'].shift(1) + self.time_step).values[1:]), \
-            'Missing or duplicated row in historical DataFrame'
+        # assert not (False in (df['open_time'] == df['open_time'].shift(1) + self.time_step).values[1:]), \
+        #     'Missing or duplicated row in historical DataFrame'
 
         df = df.set_index('open_time', drop=False)
 
-        return df[(df.open_time >= self.start)]
+        return df[(df.open_time >= self.start) & (df.open_time <= self.end)]
 
     def convert_max_holding_to_candle_nb(self) -> int:
         """
@@ -284,7 +292,7 @@ class BackTest:
             df['exit_signal_date'] = df[lead_es].min(axis=1)
 
         # get the max holding date
-        df['max_hold_date'] = np.where(df.all_entry_point.notnull(), df['open_time'] + timedelta(hours=self.max_holding)
+        df['max_hold_date'] = np.where(df.all_entry_point.notnull(), df['open_time'] + timedelta(hours=int(self.max_holding))
                                        , np.datetime64('NaT'))
 
         # clean dataset
@@ -624,7 +632,7 @@ class BackTest:
         """
 
         if self.geometric_sizes:
-            row['position_size'] = min(self.actual_bk * self.positions_size, 10000)
+            row['position_size'] = min(self.actual_bk * self.positions_size, 30000)
 
         if self.slippage:
             if row['position_size'] < 5000:
@@ -637,8 +645,6 @@ class BackTest:
         row['PL_amt_realized'] = row['PL_prc_realized'] * row['position_size']
 
         self.actual_bk += row['PL_amt_realized']
-
-        assert self.actual_bk > 0, f"You'd have been broke at {row['entry_time']}"
 
         return row
 
@@ -1000,6 +1006,28 @@ class BackTest:
 
         return all_statistics
 
+    def max_stop_loss(self,
+                      df: pd.DataFrame) -> pd.DataFrame:
+        """
+        When using leverage in trading, positions ca be liquidated if margin isn't enough to refund the
+        exchange we are borrowing from. This function puts the min or max stop loss we can set before being
+        liquidated.
+
+        Returns: dataframe
+
+        """
+
+        df['all_sl'] = np.where(df['all_entry_point'] == 1,
+                                pd.DataFrame({'all_sl': df['all_sl'],
+                                              'all_entry_price': df['all_entry_price'] * (1 - 1 / self.leverage)}).max(axis=1), np.nan)
+
+        df['all_sl'] = np.where(df['all_entry_point'] == -1,
+                                pd.DataFrame({'all_sl': df['all_sl'],
+                                              'all_entry_price': df['all_entry_price'] * (1 + 1 / self.leverage)}).min(
+                                    axis=1), df['all_sl'])
+
+        return df
+
     def not_any_future_info(self):
         """
         This function is here to make sure that self.entry_strategy() and self.exit_strategy()
@@ -1087,11 +1115,17 @@ class BackTest:
 
             df = self.get_all_historical_data(pair)
 
+            if len(df) == 0:
+                print(f"No data for {pair} in the interval")
+                continue
+
             df = self.build_indicators(df)
 
             df = self.entry_strategy(df)
 
             df = self.create_entry_prices_times(df)
+
+            # df = self.max_stop_loss(df)
 
             df = self.exit_strategy(df)
 
