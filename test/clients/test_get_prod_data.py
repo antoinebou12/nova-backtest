@@ -15,6 +15,7 @@ def asserts_get_prod_data(
         exchange=exchange,
         key=config(f"{exchange}TestAPIKey"),
         secret=config(f"{exchange}TestAPISecret"),
+        passphrase=config(f"{exchange}TestPassPhrase"),
     )
 
     print('Fetching Data')
@@ -24,6 +25,8 @@ def asserts_get_prod_data(
         nb_candles=nb_candles,
         current_state=None
     ))
+
+    print(client.prod_data['BTC-USD']['data'])
 
     assert list(client.prod_data.keys()) == list_pair
 
@@ -108,6 +111,7 @@ def test_get_prod_data():
         #     'list_pair': ['pf_xbtusd', 'pf_ethusd', 'pf_atomusd'],
         #     'nb_candles': 300,
         # },
+
     ]
 
     for _test in all_tests:

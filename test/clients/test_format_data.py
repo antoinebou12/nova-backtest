@@ -3,6 +3,7 @@ import pandas as pd
 from nova.clients.clients import clients
 from decouple import config
 from nova.utils.constant import STD_CANDLE_FORMAT
+from datetime import datetime
 
 
 def asserts_format_data(exchange: str, pair: str, interval: str, start_time: int, end_time: int):
@@ -19,11 +20,6 @@ def asserts_format_data(exchange: str, pair: str, interval: str, start_time: int
         start_time=start_time,
         end_time=end_time
     )
-
-    print(len(data))
-    print(data[0])
-    print(data[-1])
-
 
     hist_data = client._format_data(
         all_data=data,
@@ -75,12 +71,19 @@ def test_format_data():
         #     'start_time': 1631210861000,
         #     'end_time': 1662746861000
         # },
+        # {
+        #     'exchange': 'ftx',
+        #     'pair': 'BTC-PERP',
+        #     'interval': '4h',
+        #     'start_time': 1563580800000,
+        #     'end_time': 1593580800000
+        # },
         {
-            'exchange': 'ftx',
-            'pair': 'BTC-PERP',
-            'interval': '4h',
-            'start_time': 1563580800000,
-            'end_time': 1593580800000
+            'exchange': 'coinbase',
+            'pair': 'BTC-USD',
+            'interval': '1h',
+            'start_time': int(datetime(2021, 1, 1).timestamp() * 1000),
+            'end_time': int(datetime(2021, 1, 3).timestamp() * 1000)
         },
     ]
 
