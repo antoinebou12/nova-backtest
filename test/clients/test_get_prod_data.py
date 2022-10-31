@@ -41,13 +41,15 @@ def asserts_get_prod_data(
 
     idx = 0
 
-    while idx < 2:
+    while idx < 15:
 
         if datetime.now().second == 0:
 
-            print('Update Production Data')
-
             t_verify = datetime.utcfromtimestamp(time.time())
+
+            print(f"----- {t_verify} -----")
+
+            print('Update Production Data')
 
             client.prod_data = asyncio.run(client.get_prod_data(
                 list_pair=list_pair,
@@ -70,9 +72,13 @@ def asserts_get_prod_data(
                 assert len(data) == nb_candles, f'DataFrame has the wrong size. {pair}'
                 assert data['time_dif'].min() == timedelta(minutes=1), f'Missing row in the DataFrame. {pair}'
                 assert data['time_dif'].max() == timedelta(minutes=1), f'Missing row in the DataFrame. {pair}'
-                # assert (data['open_time'] == t_last_open).values[-1], f'Wrong last candle. {pair}'
+                assert (data['open_time'] == t_last_open).values[-1], f'Wrong last candle. {pair}'
+
+                print('All tests passed')
 
             idx += 1
+
+            time.sleep(1)
 
     print(f"Test get_prod_data for {exchange.upper()} successful")
 
@@ -85,21 +91,23 @@ def test_get_prod_data():
         #     'list_pair': ['BTCUSDT', 'ETHUSDT', 'ADAUSDT', 'TLMUSDT'],
         #     'nb_candles': 300,
         # },
-        # {
-        #     'exchange': 'bybit',
-        #     'list_pair': ['BTCUSDT', 'ETHUSDT', 'ADAUSDT'],
-        #     'nb_candles': 300,
-        # },
+        {
+            'exchange': 'bybit',
+            'list_pair': ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'XRPUSDT', 'ADAUSDT', 'GMTUSDT', 'SANDUSDT',
+              'APEUSDT', 'LTCUSDT', 'AVAXUSDT', 'SHIB1000USDT', 'MATICUSDT', 'DOGEUSDT', 'DOTUSDT',
+              'ETCUSDT', 'NEARUSDT', 'LINKUSDT', 'GALAUSDT', 'XTZUSDT', 'AXSUSDT'],
+            'nb_candles': 400,
+        },
         # {
         #     'exchange': 'ftx',
         #     'list_pair': ['BTC-PERP', 'ETH-PERP', 'XRP-PERP'],
         #     'nb_candles': 300,
         # },
-        {
-            'exchange': 'kraken',
-            'list_pair': ['pf_xbtusd', 'pf_ethusd', 'pf_atomusd'],
-            'nb_candles': 300,
-        },
+        # {
+        #     'exchange': 'kraken',
+        #     'list_pair': ['pf_xbtusd', 'pf_ethusd', 'pf_atomusd'],
+        #     'nb_candles': 300,
+        # },
     ]
 
     for _test in all_tests:
