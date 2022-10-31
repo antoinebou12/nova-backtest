@@ -46,6 +46,15 @@ DATA_FORMATING = {
             'open', 'high', 'low', 'close', 'volume',
         ],
         "date_var": ["open_time", "close_time"]
+    },
+    "coinbase": {
+        "columns": [
+            'open_time', 'low', 'high', 'open', 'close', 'volume'
+        ],
+        "num_var": [
+            'open', 'high', 'low', 'close', 'volume',
+        ],
+        "date_var": ["open_time", "close_time"]
     }
 
 }
