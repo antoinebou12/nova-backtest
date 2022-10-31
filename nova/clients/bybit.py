@@ -1152,7 +1152,8 @@ class Bybit:
         final_dict[pair] = {}
 
         if current_pair_state is not None:
-            start_time = int(current_pair_state[pair]['latest_update'] / 1000) - interval_to_milliseconds(interval)
+            start_time = int(current_pair_state[pair]['latest_update'] / 1000) - \
+                         int(interval_to_milliseconds(interval) / 1000)
         else:
             start_time = int(time.time() - (window + 1) * interval_to_milliseconds(interval=interval) / 1000)
 
@@ -1170,7 +1171,7 @@ class Bybit:
             data = await response.json()
             df = self._format_data(data['result'], historical=False)
 
-            df = df[df['close_time'] < s_time]
+            df = df[df['close_time'] <= s_time]
 
             latest_update = df['open_time'].values[-1]
 
