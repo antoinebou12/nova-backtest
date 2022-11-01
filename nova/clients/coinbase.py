@@ -9,6 +9,7 @@ import pandas as pd
 from nova.utils.constant import DATA_FORMATING
 import asyncio
 import aiohttp
+import json
 
 
 class Coinbase:
@@ -32,12 +33,12 @@ class Coinbase:
 
         self.historical_limit = 290
 
-    def _send_request(self, end_point: str, request_type: str, params: dict = None, signed: bool = False):
+    def _send_request(self, end_point: str, request_type: str, params: dict = {}, signed: bool = False):
 
-        timestamp = str(time.time())
+        timestamp = str(int(time.time()))
 
         to_use = "https://api.pro.coinbase.com" if not signed else self.based_endpoint
-        request = Request(request_type, f'{to_use}{end_point}', params=params)
+        request = Request(request_type, f'{to_use}{end_point}', data=json.dumps(params))
         prepared = request.prepare()
 
         prepared.headers['Content-Type'] = "application/json"
@@ -45,8 +46,10 @@ class Coinbase:
         if signed:
             _params = ""
             if params is not None:
-                _params = params
+                _params = prepared.body
+
             message = ''.join([timestamp, request_type, end_point, _params])
+            print(message)
             message = message.encode('ascii')
             hmac_key = base64.b64decode(self.api_secret)
             signature = hmac.new(hmac_key, message, hashlib.sha256)
@@ -382,8 +385,6 @@ class Coinbase:
                 start_time = int(1000 * time.time() - (nb_candles + 1) * interval_to_milliseconds(interval=interval))
                 last_update = int(1000 * time.time())
 
-                print(start_time, last_update)
-
                 df = self.get_historical_data(
                     pair=pair,
                     start_ts=start_time,
@@ -420,5 +421,273 @@ class Coinbase:
                 all_data.update(info)
             return all_data
 
+    def get_token_balance(self, quote_asset: str):
+
+        data = self._send_request(
+            end_point=f"/accounts",
+            request_type="GET",
+            signed=True
+        )
+
+        balance = 0
+
+        for info in data:
+            if info['currency'] == quote_asset:
+                assert info['trading_enabled']
+                balance = float(info['available'])
+
+        print(f'The current amount is : {balance} {quote_asset}')
+
+        return round(balance, 2)
+
+    def get_order_book(self, pair: str):
+        """
+        Args:
+            pair:
+
+        Returns:
+            the current orderbook with a depth of 20 observations
+        """
+
+        data = self._send_request(
+            end_point=f'/products/{pair}/book',
+            request_type="GET",
+            signed=False,
+            params={'level': 1}
+        )
+
+        std_ob = {'bids': [], 'asks': []}
+
+        for i in range(len(data['asks'])):
+            std_ob['bids'].append({
+                'price': float(data['bids'][i][0]),
+                'size': float(data['bids'][i][1])
+            })
+
+            std_ob['asks'].append({
+                'price': float(data['asks'][i][0]),
+                'size': float(data['asks'][i][1])
+            })
+
+        return std_ob
+
+    def get_last_price(self, pair: str) -> dict:
+        """
+        Args:
+            pair: pair desired
+        Returns:
+            a dictionary containing the pair_id, latest_price, price_timestamp in timestamp
+        """
+        data = self._send_request(
+            end_point=f"/products/{pair}/ticker",
+            request_type="GET",
+            signed=False
+        )
+
+        return {
+            'pair': pair,
+            'timestamp': int(time.time()*1000),
+            'latest_price': float(data['price'])
+        }
+
+    def enter_market_order(self, pair: str, type_pos: str, quantity: float):
+
+        """
+            Args:
+                pair: pair id that we want to create the order for
+                type_pos: could be 'LONG' or 'SHORT'
+                quantity: quantity should respect the minimum precision
+
+            Returns:
+                standardized output
+        """
+
+        side = 'buy' if type_pos == 'LONG' else 'sell'
+
+        _params = {
+            "type": "market",
+            "side": side,
+            "product_id": pair,
+            "size": str(float(round(quantity, self.pairs_info[pair]['quantityPrecision']))),
+        }
+
+        response = self._send_request(
+            end_point=f"/orders",
+            request_type="POST",
+            params=_params,
+            signed=True
+        )
+
+        return response
+
+    def exit_market_order(self, pair: str, type_pos: str, quantity: float):
+
+        """
+            Args:
+                pair: pair id that we want to create the order for
+                type_pos: could be 'LONG' or 'SHORT'
+                quantity: quantity should respect the minimum precision
+
+            Returns:
+                standardized output
+        """
+
+        side = 'sell' if type_pos == 'LONG' else 'buy'
+
+        _params = {
+            "type": "market",
+            "side": side,
+            "time_in_force": "IOC",
+            "product_id": pair,
+            "size": str(float(round(quantity, self.pairs_info[pair]['quantityPrecision']))),
+        }
+
+        response = self._send_request(
+            end_point=f"/orders",
+            request_type="POST",
+            params=_params,
+            signed=True
+        )
+
+        return response
+
+    def get_order(self, pair: str, order_id: str):
+        """
+        Note : to query the conditional order, we are setting the following assumptions
+            - The position is not kept more thant 5 days
+            -
+        Args:
+            pair: pair traded in the order
+            order_id: order id
+
+        Returns:
+            order information from binance
+        """
+        data = self._send_request(
+            end_point=f"/orders/{order_id}",
+            request_type="GET",
+            signed=True
+        )
+
+        return data
+
+    @staticmethod
+    def _format_order(data: dict):
+
+        _order_type = 'STOP_MARKET' if data['type'] == 'stop' else data['type'].upper()
+
+        _price = 0.0 if _order_type in ["MARKET", "STOP_MARKET", "TAKE_PROFIT"] else data['price']
+        _stop_price = 0.0 if _order_type in ["MARKET", "LIMIT"] else data['triggerPrice']
+        _time_in_force = 'IOC' if 'ioc' in data.keys() and data['ioc'] else 'GTC'
+
+        dt = datetime.datetime.strptime(data['createdAt'], '%Y-%m-%dT%H:%M:%S.%f+00:00')
+
+        _executed_price = 0 if data['avgFillPrice'] is None else data['avgFillPrice']
+
+        formatted = {
+            'time': int(dt.timestamp() * 1000),
+            'order_id': data['id'],
+            'pair': data['market'],
+            'status': data['status'].upper(),
+            'type': _order_type,
+            'time_in_force': _time_in_force,
+            'reduce_only': data['reduceOnly'],
+            'side': data['side'].upper(),
+            'price': float(_price),
+            'stop_price': float(_stop_price),
+            'original_quantity': float(data['size']),
+            'executed_quantity': float(data['filledSize']),
+            'executed_price': float(_executed_price)
+        }
+
+        return formatted
+
+    def get_order_trades(self, pair: str, order_id: str):
+        """
+        Args:
+            pair: pair that is currently analysed
+            order_id: order_id number
+
+        Returns:
+            standardize output of the trades needed to complete an order
+        """
+
+        results = self.get_order(
+            pair=pair,
+            order_id=order_id
+        )
+
+        trades = self._send_request(
+            end_point=f"/fills?order_id={order_id}",
+            request_type="GET",
+            signed=True,
+            params={
+                'order_id': order_id
+            }
+        )
+
+        return trades
+
+    def place_limit_tp(self, pair: str, side: str, quantity: float, tp_price: float):
+        """
+        Args:
+            pair: pair id that we want to create the order for
+            side: could be 'BUY' or 'SELL'
+            quantity: for binance  quantity is not needed since the tp order "closes" the "opened" position
+            tp_price: price of the tp or sl
+        Returns:
+            Standardized output
+        """
 
 
+        _params = {
+            "type": "limit",
+            "side": side.lower(),
+            "price": str(float(round(tp_price, self.pairs_info[pair]['pricePrecision']))),
+            "stop_price": str(float(round(tp_price,  self.pairs_info[pair]['pricePrecision']))),
+            "time_in_force": "GTC",
+            "product_id": pair,
+            "size": str(float(round(quantity, self.pairs_info[pair]['quantityPrecision']))),
+        }
+
+        data = self._send_request(
+            end_point=f"/orders",
+            request_type="POST",
+            params=_params,
+            signed=True
+        )
+
+        return data
+
+    def place_market_sl(self, pair: str, side: str, quantity: float, sl_price: float):
+        """
+        Args:
+            pair: pair id that we want to create the order for
+            side: could be 'BUY' or 'SELL'
+            quantity: for binance  quantity is not needed since the tp order "closes" the "opened" position
+            sl_price: price of the tp or sl
+        Returns:
+            Standardized output
+        """
+
+        _stop = 'loss' if side == 'SELL' else 'entry'
+
+        _params = {
+            "type": "limit",
+            "stop": _stop,
+            "side": side.lower(),
+            "price": str(float(round(sl_price,  self.pairs_info[pair]['pricePrecision']))),
+            "stop_price": str(float(round(sl_price, self.pairs_info[pair]['pricePrecision']))),
+            "time_in_force": "GTC",
+            "product_id": pair,
+            "size": str(float(round(quantity, self.pairs_info[pair]['quantityPrecision']))),
+        }
+
+        data = self._send_request(
+            end_point=f"/orders",
+            request_type="POST",
+            params=_params,
+            signed=True
+        )
+
+        return data
