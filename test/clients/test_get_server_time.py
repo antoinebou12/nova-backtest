@@ -33,62 +33,66 @@ def test_get_server_time():
 # test_get_server_time()
 #
 
-exchange = 'coinbase'
+exchange = 'kucoin'
 
 client = clients(
     exchange=exchange,
-    key=config(f"{exchange}APIKey"),
-    secret=config(f"{exchange}APISecret"),
-    passphrase=config(f"{exchange}PassPhrase"),
-    testnet=False
+    key=config(f"{exchange}TestAPIKey"),
+    secret=config(f"{exchange}TestAPISecret"),
+    passphrase=config(f"{exchange}TestPassPhrase"),
+    testnet=True
 )
 
-# data = client.get_order_book(pair='BTC-USD')
-
-# data = client.get_last_price(pair='BTC-USD')
-#
-entry_ = client.enter_market_order(
-    pair='BTC-USD',
-    type_pos='LONG',
-    quantity=0.2
-)
-
-
-tp_order = client.place_limit_tp(
-    pair='BTC-USD',
-    side='SELL',
-    quantity=0.2,
-    tp_price=25000
-)
-
-sl_order = client.place_market_sl(
-    pair='BTC-USD',
-    side='SELL',
-    quantity=0.1,
-    sl_price=18000
-)
-
-
-# exit_ = client.exit_market_order(
-#     pair='BTC-USD',
-#     type_pos='LONG',
-#     quantity=0.1
+# data = client.setup_account(
+#     quote_asset='USDT',
+#     leverage=2,
+#     bankroll=500,
+#     max_down=0.2,
+#     list_pairs=['XBTUSDTM']
 # )
 #
-# order_ = client.get_order(
-#     pair='BTC-USD',
-#     order_id='398a65b0-fabf-4190-b8fb-9b4d218587e7'
-# )
+#
+data = client.enter_market_order(
+    pair='ETHUSDTM',
+    type_pos="LONG",
+    quantity=1
+)
 
-# trades_ = client.get_order_trades(
-#     pair='BTC-USD',
-#     order_id='e6f460f4-d5c0-4e46-80f3-8e7c91078e97'
-# )
+data_two = client.enter_market_order(
+    pair='XBTUSDTM',
+    type_pos="LONG",
+    quantity=10
+)
+
+
+data_three = client.enter_market_order(
+    pair='ADAUSDTM',
+    type_pos="LONG",
+    quantity=10
+)
 
 # data = client._get_candles(
-#     pair='BTC-USD',
-#     interval='1h',
-#     start_time=int(datetime(2021, 1, 1).timestamp() * 1000),
-#     end_time=int(datetime(2021, 1, 2).timestamp() * 1000),
+#     pair='BTC-USDT',
+#     interval='1d',
+#     start_time=int(datetime(2018, 3, 20).timestamp() * 1000),
+#     end_time=int(datetime(2022, 3, 30).timestamp() * 1000)
 # )
 
+# #
+# data = client._get_earliest_timestamp(
+#     pair='XBTUSDTM',
+#     interval='1h'
+# )
+
+#
+# df = client._format_data(data)
+#
+
+#
+# data = client.get_historical_data(
+#     pair='XBTUSDTM',
+#     interval='1h',
+#     start_ts=int(datetime(2018, 1, 1).timestamp() * 1000),
+#     end_ts=int(datetime(2022, 1, 1).timestamp() * 1000)
+# )
+#

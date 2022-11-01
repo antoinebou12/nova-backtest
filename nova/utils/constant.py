@@ -55,6 +55,15 @@ DATA_FORMATING = {
             'open', 'high', 'low', 'close', 'volume',
         ],
         "date_var": ["open_time", "close_time"]
+    },
+    "kucoin": {
+        "columns": [
+            'open_time', 'open', 'high', 'low', 'close', 'volume'
+        ],
+        "num_var": [
+            'open', 'high', 'low', 'close', 'volume',
+        ],
+        "date_var": ["open_time", "close_time"]
     }
 
 }
