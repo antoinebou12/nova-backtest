@@ -29,7 +29,7 @@ def asserts_get_pairs_info(exchange: str):
 
 def test_get_pairs_info():
 
-    for exchange in ['binance', 'bybit', 'ftx']:
+    for exchange in ['binance', 'bybit', 'ftx', 'kucoin']:
         asserts_get_pairs_info(exchange=exchange)
 
 

@@ -64,6 +64,15 @@ DATA_FORMATING = {
             'open', 'high', 'low', 'close', 'volume',
         ],
         "date_var": ["open_time", "close_time"]
+    },
+    "okx": {
+        "columns": [
+            'open_time', 'open', 'high', 'low', 'close', 'volume', 'volume_quote'
+        ],
+        "num_var": [
+            'open', 'high', 'low', 'close', 'volume', 'volume_quote'
+        ],
+        "date_var": ["open_time", "close_time"]
     }
 
 }
