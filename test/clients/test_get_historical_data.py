@@ -60,11 +60,17 @@ def test_get_historical_data():
         #  'start_ts': int(datetime(2018, 1, 1).timestamp() * 1000),
         #  'end_ts': int(datetime(2022, 4, 10).timestamp() * 1000)
         #  },
-        {'exchange': 'ftx',
-         'interval': '4h',
-         'pair': 'BTC-PERP',
-         'start_ts': int(datetime(2020, 3, 20).timestamp() * 1000),
-         'end_ts': int(datetime(2022, 4, 10).timestamp() * 1000)
+        # {'exchange': 'ftx',
+        #  'interval': '4h',
+        #  'pair': 'BTC-PERP',
+        #  'start_ts': int(datetime(2020, 3, 20).timestamp() * 1000),
+        #  'end_ts': int(datetime(2022, 4, 10).timestamp() * 1000)
+        #  },
+        {'exchange': 'coinbase',
+         'interval': '1h',
+         'pair': 'BTC-USD',
+         'start_ts': int(datetime(2022, 1, 1).timestamp() * 1000),
+         'end_ts': int(datetime.today().timestamp() * 1000)
          },
     ]
 

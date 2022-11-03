@@ -1,9 +1,8 @@
-import pandas as pd
-
 from nova.clients.clients import clients
 from decouple import config
 from nova.utils.constant import STD_CANDLE_FORMAT
 from datetime import datetime
+import pandas as pd
 
 
 def asserts_format_data(exchange: str, pair: str, interval: str, start_time: int, end_time: int):
@@ -82,8 +81,8 @@ def test_format_data():
             'exchange': 'coinbase',
             'pair': 'BTC-USD',
             'interval': '1h',
-            'start_time': int(datetime(2021, 1, 1).timestamp() * 1000),
-            'end_time': int(datetime(2021, 1, 3).timestamp() * 1000)
+            'start_time': int(datetime(2022, 9, 1).timestamp() * 1000),
+            'end_time': int(datetime(2022, 9, 1).timestamp() * 1000)
         },
     ]
 

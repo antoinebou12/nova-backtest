@@ -68,9 +68,15 @@ def test_update_historical():
         #  'start_ts': int(datetime(2021, 1, 1).timestamp() * 1000),
         #  'end_ts': int(datetime(2022, 4, 10).timestamp() * 1000)
         #  },
-        {'exchange': 'ftx',
-         'interval': '4h',
-         'pair': 'ETH-PERP',
+        # {'exchange': 'ftx',
+        #  'interval': '4h',
+        #  'pair': 'ETH-PERP',
+        #  'start_ts': int(datetime(2021, 1, 1).timestamp() * 1000),
+        #  'end_ts': int(datetime(2022, 4, 10).timestamp() * 1000)
+        #  },
+        {'exchange': 'coinbase',
+         'interval': '1h',
+         'pair': 'ETH-USD',
          'start_ts': int(datetime(2021, 1, 1).timestamp() * 1000),
          'end_ts': int(datetime(2022, 4, 10).timestamp() * 1000)
          },

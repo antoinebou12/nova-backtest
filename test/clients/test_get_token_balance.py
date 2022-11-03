@@ -16,6 +16,7 @@ def assert_get_token_balance(
         exchange=exchange,
         key=config(f"{exchange}TestAPIKey"),
         secret=config(f"{exchange}TestAPISecret"),
+        passphrase=config(f"{exchange}TestPassPhrase"),
         testnet=False
     )
 
@@ -35,10 +36,14 @@ def test_get_token_balance():
         # {
         #     'exchange': 'bybit',
         #     'quote_asset': 'USDT'
+        # },
+        # {
+        #     'exchange': 'ftx',
+        #     'quote_asset': 'USD'
         # }
         {
-            'exchange': 'ftx',
-            'quote_asset': 'USD'
+            'exchange': 'coinbase',
+            'quote_asset': 'USDT'
         }
     ]
 

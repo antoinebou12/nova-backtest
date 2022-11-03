@@ -94,23 +94,23 @@ def test_get_prod_data():
         #     'list_pair': ['BTCUSDT', 'ETHUSDT', 'ADAUSDT', 'TLMUSDT'],
         #     'nb_candles': 300,
         # },
-        {
-            'exchange': 'bybit',
-            'list_pair': ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'XRPUSDT', 'ADAUSDT', 'GMTUSDT', 'SANDUSDT',
-              'APEUSDT', 'LTCUSDT', 'AVAXUSDT', 'SHIB1000USDT', 'MATICUSDT', 'DOGEUSDT', 'DOTUSDT',
-              'ETCUSDT', 'NEARUSDT', 'LINKUSDT', 'GALAUSDT', 'XTZUSDT', 'AXSUSDT'],
-            'nb_candles': 400,
-        },
+        # {
+        #     'exchange': 'bybit',
+        #     'list_pair': ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'XRPUSDT', 'ADAUSDT', 'GMTUSDT', 'SANDUSDT',
+        #       'APEUSDT', 'LTCUSDT', 'AVAXUSDT', 'SHIB1000USDT', 'MATICUSDT', 'DOGEUSDT', 'DOTUSDT',
+        #       'ETCUSDT', 'NEARUSDT', 'LINKUSDT', 'GALAUSDT', 'XTZUSDT', 'AXSUSDT'],
+        #     'nb_candles': 400,
+        # },
         # {
         #     'exchange': 'ftx',
         #     'list_pair': ['BTC-PERP', 'ETH-PERP', 'XRP-PERP'],
         #     'nb_candles': 300,
         # },
-        # {
-        #     'exchange': 'kraken',
-        #     'list_pair': ['pf_xbtusd', 'pf_ethusd', 'pf_atomusd'],
-        #     'nb_candles': 300,
-        # },
+        {
+            'exchange': 'coinbase',
+            'list_pair': ['ETH-USD', 'BTC-USD', 'ADA-USD'],
+            'nb_candles': 300,
+        },
 
     ]
 

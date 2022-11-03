@@ -10,6 +10,7 @@ from nova.utils.constant import DATA_FORMATING
 import asyncio
 import aiohttp
 import json
+from typing import Union
 
 
 class Coinbase:
@@ -31,6 +32,7 @@ class Coinbase:
 
         self.pairs_info = self.get_pairs_info()
 
+        self.max_historical = 10000
         self.historical_limit = 290
 
     def _send_request(self, end_point: str, request_type: str, params: dict = {}, signed: bool = False):
@@ -49,7 +51,6 @@ class Coinbase:
                 _params = prepared.body
 
             message = ''.join([timestamp, request_type, end_point, _params])
-            print(message)
             message = message.encode('ascii')
             hmac_key = base64.b64decode(self.api_secret)
             signature = hmac.new(hmac_key, message, hashlib.sha256)
@@ -89,11 +90,11 @@ class Coinbase:
             if not pair['trading_disabled'] and pair['quote_currency'] in ['USD', 'USDT', 'USDC']:
                 pairs_info[pair['id']] = {}
                 pairs_info[pair['id']]['quote_asset'] = pair['quote_currency']
-                pairs_info[pair['id']]['pricePrecision'] = 7
                 pairs_info[pair['id']]['maxQuantity'] = float('inf')
                 pairs_info[pair['id']]['minQuantity'] = 0.0
                 pairs_info[pair['id']]['tick_size'] = float(pair['base_increment'])
-                pairs_info[pair['id']]['quantityPrecision'] = str(pair['base_increment'])[::-1].find('.')
+                pairs_info[pair['id']]['pricePrecision'] = int(str(pair['base_increment'])[::-1].find('.'))
+                pairs_info[pair['id']]['quantityPrecision'] = 6
 
         return pairs_info
 
@@ -108,24 +109,26 @@ class Coinbase:
             the none formatted candle information requested
         """
 
-        _start_time = datetime.fromtimestamp(int(start_time // 1000))
-        _end_time = datetime.fromtimestamp(int(end_time // 1000))
-        _interval = str(int(interval_to_milliseconds(interval)//1000))
+        _start_time = datetime.fromtimestamp(int(start_time // 1000)).isoformat()
+        _interval_ms = interval_to_milliseconds(interval)
+        _interval = str(int(_interval_ms//1000))
+        end_time = start_time + _interval_ms * self.historical_limit
+        _end_time = datetime.fromtimestamp(int(end_time // 1000)).isoformat()
 
-        return self._send_request(
-            end_point=f'/products/{pair}/candles',
+        data = self._send_request(
+            end_point=f'/products/{pair}/candles?start={_start_time}&end={_end_time}&granularity={_interval}',
             request_type="GET",
             params={
-                'start': _start_time.isoformat(),
-                'end': _end_time.isoformat(),
-                'granularity': _interval
+                'start': _start_time,
+                'granularity': _interval,
+                'end': _end_time
             }
         )
 
+        return data
+
     def _get_earliest_timestamp(self, pair: str, interval: str):
         """
-        Note we are using an interval of 4 days to make sure we start at the beginning
-        of the time
         Args:
             pair: Name of symbol pair
             interval: interval in string
@@ -133,29 +136,12 @@ class Coinbase:
             the earliest valid open timestamp in milliseconds
         """
 
-        start_year = 2018
+        earliest = int(datetime(2022, 1, 1).timestamp() * 1000)
+        today = int(time.time() * 1000)
 
-        while start_year <= date.today().year:
+        maximum_historical = today - self.max_historical * interval_to_milliseconds(interval)
 
-            kline = self._get_candles(
-                pair=pair,
-                interval=interval,
-                start_time=int(datetime(start_year, 1, 1).timestamp() * 1000),
-                end_time=int(datetime(start_year, 1, 2).timestamp() * 1000),
-            )
-
-            instance_type = isinstance(kline, dict)
-
-            if instance_type:
-                start_year += 1
-            elif not instance_type and len(kline) == 0:
-                start_year += 1
-            else:
-                print(f'Earliest Year Extracted for {pair} : {datetime(start_year, 1, 1)}')
-                return kline[0][0] * 1000
-
-        print(f'Earliest Year is after the beginning of the year')
-        return 0
+        return max([earliest, maximum_historical])
 
     @staticmethod
     def _format_data(all_data: list, historical: bool = True) -> pd.DataFrame:
@@ -168,6 +154,7 @@ class Coinbase:
         """
 
         df = pd.DataFrame(all_data, columns=DATA_FORMATING['coinbase']['columns'])
+        df = df.sort_values(by='open_time').reset_index(drop=True)
         df['open_time'] = df['open_time'] * 1000
         interval_ms = df['open_time'].iloc[1] - df['open_time'].iloc[0]
         df['close_time'] = df['open_time'] + interval_ms - 1
@@ -181,7 +168,7 @@ class Coinbase:
         if historical:
             df['next_open'] = df['open'].shift(-1)
 
-        return df.dropna().drop_duplicates()
+        return df.dropna().drop_duplicates('open_time')
 
     def get_historical_data(self, pair: str, interval: str, start_ts: int, end_ts: int) -> pd.DataFrame:
         """
@@ -211,17 +198,15 @@ class Coinbase:
         start_time = max(start_ts, first_valid_ts)
 
         idx = 0
-        while True:
 
-            end_t = start_time + timeframe * self.historical_limit
-            end_time = min(end_t, end_ts)
+        while True:
 
             # fetch the klines from start_ts up to max 500 entries or the end_ts if set
             temp_data = self._get_candles(
                 pair=pair,
                 interval=interval,
                 start_time=start_time,
-                end_time=end_time
+                end_time=end_ts
             )
 
             # append this loops data to our output data
@@ -231,14 +216,19 @@ class Coinbase:
             # handle the case where exactly the limit amount of data was returned last loop
             # check if we received less than the required limit and exit the loop
             if not len(temp_data) or len(temp_data) < self.historical_limit:
+                print('exit_1')
                 # exit the while loop
                 break
 
             # increment next call by our timeframe
             start_time = temp_data[0][0] * 1000 + timeframe
 
+            print(f'Request # {idx}')
+            print(start_time, end_ts)
+
             # exit loop if we reached end_ts before reaching <limit> klines
-            if end_time and start_time >= end_ts:
+            if start_time >= end_ts:
+                print('exit_2')
                 break
 
             # sleep after every 3rd call to be kind to the API
@@ -328,7 +318,7 @@ class Coinbase:
 
         async with session.get(url=url, params=params) as response:
             data = await response.json()
-            df = self._format_data(data['result'], historical=False)
+            df = self._format_data(data, historical=False)
 
             df = df[df['close_time'] < s_time]
 
@@ -436,8 +426,6 @@ class Coinbase:
                 assert info['trading_enabled']
                 balance = float(info['available'])
 
-        print(f'The current amount is : {balance} {quote_asset}')
-
         return round(balance, 2)
 
     def get_order_book(self, pair: str):
@@ -470,6 +458,39 @@ class Coinbase:
             })
 
         return std_ob
+
+    def get_actual_positions(self, pairs: Union[list, str]) -> dict:
+        """
+        Args:
+            pairs: list of pair that we want to run analysis on
+        Returns:
+            a dictionary containing all the current OPEN positions
+        """
+
+        _params = {}
+
+        if isinstance(pairs, str):
+            _params['symbol'] = pairs
+
+        all_pos = self._send_request(
+            end_point=f"/accounts",
+            request_type="GET",
+            signed=True
+        )
+
+        # position = {}
+        #
+        # for pos in all_pos:
+        #
+        #     if pos['future'] in pairs and pos['size'] != 0:
+        #         position[pos['future']] = {}
+        #         position[pos['future']]['position_size'] = abs(float(pos['size']))
+        #         position[pos['future']]['entry_price'] = float(pos['entryPrice'])
+        #         position[pos['future']]['unrealized_pnl'] = float(pos['realizedPnl'])
+        #         position[pos['future']]['type_pos'] = 'LONG' if float(pos['netSize']) > 0 else 'SHORT'
+        #         position[pos['future']]['exit_side'] = 'SELL' if float(pos['netSize']) > 0 else 'BUY'
+
+        return all_pos
 
     def get_last_price(self, pair: str) -> dict:
         """

@@ -16,6 +16,8 @@ def assert_get_earliest_timestamp(exchange: str, pair: str, interval: str):
         interval=interval
     )
 
+    print(data)
+
     assert len(str(data)) == 13
     assert data < int(time.time() * 1000)
 
@@ -35,9 +37,14 @@ def test_get_earliest_timestamp():
         #     'pair': 'BTCUSDT',
         #     'interval': '1d'
         # },
+        # {
+        #     'exchange': 'ftx',
+        #     'pair': 'BTC-PERP',
+        #     'interval': '1d'
+        # },
         {
-            'exchange': 'ftx',
-            'pair': 'BTC-PERP',
+            'exchange': 'coinbase',
+            'pair': 'BTC-USD',
             'interval': '1d'
         }
     ]
