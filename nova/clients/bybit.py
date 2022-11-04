@@ -754,8 +754,12 @@ class Bybit:
             if _trades['executed_quantity'] > 0:
                 final_data['entry_fees'] += _trades['tx_fee_in_quote_asset']
                 final_data['original_position_size'] += _trades['executed_quantity']
-                final_data['current_position_size'] += _trades['executed_quantity']
                 _price_information.append({'price': _trades['executed_price'], 'qty': _trades['executed_quantity']})
+
+        # Can be small differences due to float approximations, so we have to round position size
+        final_data['original_position_size'] = round(final_data['original_position_size'],
+                                                     self.pairs_info[final_data['pair']]['quantityPrecision'])
+        final_data['current_position_size'] = final_data['original_position_size']
 
         for _info in _price_information:
             _avg_price += _info['price'] * (_info['qty'] / final_data['current_position_size'])
