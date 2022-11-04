@@ -11,6 +11,7 @@ def asserts_get_actual_positions(
         exchange=exchange,
         key=config(f"{exchange}TestAPIKey"),
         secret=config(f"{exchange}TestAPISecret"),
+        passphrase=config(f"{exchange}TestPassPhrase"),
         testnet=True
     )
 
@@ -97,7 +98,21 @@ def test_get_actual_positions():
                 'BTCUSDT': {'type_pos': 'LONG', 'quantity': 0.01},
                 'ETHUSDT': {'type_pos': 'SHORT', 'quantity': 0.1}
             }
-        }
+        },
+        {
+            'exchange': 'ftx',
+            'info': {
+                'BTC-PERP': {'type_pos': 'LONG', 'quantity': 0.001},
+                'ETH-PERP': {'type_pos': 'SHORT', 'quantity': 0.01}
+            }
+        },
+        {
+            'exchange': 'okx',
+            'info': {
+                'BTC-USDT': {'type_pos': 'LONG', 'quantity': 0.001},
+                'ETH-USDT': {'type_pos': 'SHORT', 'quantity': 0.01}
+            }
+        },
     ]
 
     for _test in all_tests:
@@ -112,19 +127,4 @@ def test_get_actual_positions():
 # test_get_actual_positions()
 
 
-# no testnet tests
 
-exchange = 'ftx'
-
-client = clients(
-    exchange=exchange,
-    key=config(f"{exchange}TestAPIKey"),
-    secret=config(f"{exchange}TestAPISecret"),
-    testnet=True
-)
-
-positions = client.get_actual_positions(
-    pairs=['BTC-PERP', 'ETH-PERP']
-)
-
-positions

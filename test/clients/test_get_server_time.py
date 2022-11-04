@@ -1,7 +1,6 @@
 from nova.clients.clients import clients
 from decouple import config
 import time
-from datetime import datetime
 
 
 def asserts_get_server_time(exchange: str):
@@ -10,7 +9,7 @@ def asserts_get_server_time(exchange: str):
         exchange=exchange,
         key=config(f"{exchange}TestAPIKey"),
         secret=config(f"{exchange}TestAPISecret"),
-        testnet=True
+        testnet=False
     )
 
     server_time = client.get_server_time()
@@ -26,38 +25,8 @@ def asserts_get_server_time(exchange: str):
 
 
 def test_get_server_time():
-    for _exchange in ['binance', 'bybit', 'ftx', 'kraken', 'kucoin']:
+    for _exchange in ['binance', 'bybit', 'ftx', 'okx', 'kucoin', 'coinbase', 'kraken']:
         asserts_get_server_time(_exchange)
 
-#
-# test_get_server_time()
-#
 
-exchange = 'coinbase'
-
-client = clients(
-    exchange=exchange,
-    key=config(f"{exchange}TestAPIKey"),
-    secret=config(f"{exchange}TestAPISecret"),
-    passphrase=config(f"{exchange}TestPassPhrase"),
-    testnet=True
-)
-
-data = client.setup_account(
-    quote_asset='USD',
-    leverage=2,
-    list_pairs=['BTC-USD'],
-    bankroll=5000,
-    max_down=0.2
-)
-
-
-
-# data = client._get_candles(
-#     pair='BTC-USD',
-#     interval='1h',
-#     start_time=int(datetime(2021, 1, 1).timestamp() * 1000),
-#     end_time=int(datetime(2021, 1, 2).timestamp() * 1000),
-# )
-
-
+test_get_server_time()

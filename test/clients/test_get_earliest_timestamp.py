@@ -35,9 +35,19 @@ def test_get_earliest_timestamp():
         #     'pair': 'BTCUSDT',
         #     'interval': '1d'
         # },
+        # {
+        #     'exchange': 'ftx',
+        #     'pair': 'BTC-PERP',
+        #     'interval': '1d'
+        # },
+        # {
+        #     'exchange': 'coinbase',
+        #     'pair': 'BTC-USD',
+        #     'interval': '1d'
+        # },
         {
-            'exchange': 'ftx',
-            'pair': 'BTC-PERP',
+            'exchange': 'okx',
+            'pair': 'BTC-USDT',
             'interval': '1d'
         }
     ]

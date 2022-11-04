@@ -13,6 +13,51 @@ def milliseconds_to_interval(interval_ms: int) -> str:
         return str(int(interval_ms / 86400000)) + 'D'
 
 
+def interval_to_minutes_str(interval: str) -> str:
+    """Convert a Binance interval string to milliseconds
+    Args:
+        interval: interval string, e.g.: 1m, 3m, 5m, 15m, 30m, 1h, 2h, 4h, 6h, 8h, 12h, 1d, 3d, 1w
+    Returns:
+         int value of interval in milliseconds
+         None if interval prefix is not a decimal integer
+         None if interval suffix is not one of m, h, d, w
+    """
+    if 'm' in interval:
+        interval += 'in'
+
+    if 'h' in interval:
+        interval += 'our'
+
+    if 'd' in interval:
+        interval += 'ay'
+
+    if 'w' in interval:
+        interval += 'eek'
+
+    return interval
+
+
+def interval_to_minutes(interval: str) -> Optional[int]:
+    """Convert a Binance interval string to milliseconds
+    Args:
+        interval: interval string, e.g.: 1m, 3m, 5m, 15m, 30m, 1h, 2h, 4h, 6h, 8h, 12h, 1d, 3d, 1w
+    Returns:
+         int value of interval in milliseconds
+         None if interval prefix is not a decimal integer
+         None if interval suffix is not one of m, h, d, w
+    """
+    minutes_per_unit: Dict[str, int] = {
+        "m": 1,
+        "h": 60,
+        "d": 24 * 60,
+        "w": 7 * 24 * 60,
+    }
+    try:
+        return int(interval[:-1]) * minutes_per_unit[interval[-1]]
+    except (ValueError, KeyError):
+        return None
+
+
 def interval_to_milliseconds(interval: str) -> Optional[int]:
     """Convert a Binance interval string to milliseconds
     Args:

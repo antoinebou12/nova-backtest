@@ -9,6 +9,8 @@ import pandas as pd
 from nova.utils.constant import DATA_FORMATING
 import asyncio
 import aiohttp
+import json
+from typing import Union
 
 
 class Coinbase:
@@ -30,14 +32,15 @@ class Coinbase:
 
         self.pairs_info = self.get_pairs_info()
 
+        self.max_historical = 10000
         self.historical_limit = 290
 
-    def _send_request(self, end_point: str, request_type: str, params: dict = None, signed: bool = False):
+    def _send_request(self, end_point: str, request_type: str, params: dict = {}, signed: bool = False):
 
-        timestamp = str(time.time())
+        timestamp = str(int(time.time()))
 
         to_use = "https://api.pro.coinbase.com" if not signed else self.based_endpoint
-        request = Request(request_type, f'{to_use}{end_point}', params=params)
+        request = Request(request_type, f'{to_use}{end_point}', data=json.dumps(params))
         prepared = request.prepare()
 
         prepared.headers['Content-Type'] = "application/json"
@@ -45,7 +48,8 @@ class Coinbase:
         if signed:
             _params = ""
             if params is not None:
-                _params = params
+                _params = prepared.body
+
             message = ''.join([timestamp, request_type, end_point, _params])
             message = message.encode('ascii')
             hmac_key = base64.b64decode(self.api_secret)
@@ -86,11 +90,11 @@ class Coinbase:
             if not pair['trading_disabled'] and pair['quote_currency'] in ['USD', 'USDT', 'USDC']:
                 pairs_info[pair['id']] = {}
                 pairs_info[pair['id']]['quote_asset'] = pair['quote_currency']
-                pairs_info[pair['id']]['pricePrecision'] = 7
                 pairs_info[pair['id']]['maxQuantity'] = float('inf')
                 pairs_info[pair['id']]['minQuantity'] = 0.0
                 pairs_info[pair['id']]['tick_size'] = float(pair['base_increment'])
-                pairs_info[pair['id']]['quantityPrecision'] = str(pair['base_increment'])[::-1].find('.')
+                pairs_info[pair['id']]['pricePrecision'] = int(str(pair['base_increment'])[::-1].find('.'))
+                pairs_info[pair['id']]['quantityPrecision'] = 6
 
         return pairs_info
 
@@ -105,24 +109,26 @@ class Coinbase:
             the none formatted candle information requested
         """
 
-        _start_time = datetime.fromtimestamp(int(start_time // 1000))
-        _end_time = datetime.fromtimestamp(int(end_time // 1000))
-        _interval = str(int(interval_to_milliseconds(interval)//1000))
+        _start_time = datetime.fromtimestamp(int(start_time // 1000)).isoformat()
+        _interval_ms = interval_to_milliseconds(interval)
+        _interval = str(int(_interval_ms//1000))
+        end_time = start_time + _interval_ms * self.historical_limit
+        _end_time = datetime.fromtimestamp(int(end_time // 1000)).isoformat()
 
-        return self._send_request(
-            end_point=f'/products/{pair}/candles',
+        data = self._send_request(
+            end_point=f'/products/{pair}/candles?start={_start_time}&end={_end_time}&granularity={_interval}',
             request_type="GET",
             params={
-                'start': _start_time.isoformat(),
-                'end': _end_time.isoformat(),
-                'granularity': _interval
+                'start': _start_time,
+                'granularity': _interval,
+                'end': _end_time
             }
         )
 
+        return data
+
     def _get_earliest_timestamp(self, pair: str, interval: str):
         """
-        Note we are using an interval of 4 days to make sure we start at the beginning
-        of the time
         Args:
             pair: Name of symbol pair
             interval: interval in string
@@ -130,29 +136,12 @@ class Coinbase:
             the earliest valid open timestamp in milliseconds
         """
 
-        start_year = 2018
+        earliest = int(datetime(2022, 1, 1).timestamp() * 1000)
+        today = int(time.time() * 1000)
 
-        while start_year <= date.today().year:
+        maximum_historical = today - self.max_historical * interval_to_milliseconds(interval)
 
-            kline = self._get_candles(
-                pair=pair,
-                interval=interval,
-                start_time=int(datetime(start_year, 1, 1).timestamp() * 1000),
-                end_time=int(datetime(start_year, 1, 2).timestamp() * 1000),
-            )
-
-            instance_type = isinstance(kline, dict)
-
-            if instance_type:
-                start_year += 1
-            elif not instance_type and len(kline) == 0:
-                start_year += 1
-            else:
-                print(f'Earliest Year Extracted for {pair} : {datetime(start_year, 1, 1)}')
-                return kline[0][0] * 1000
-
-        print(f'Earliest Year is after the beginning of the year')
-        return 0
+        return max([earliest, maximum_historical])
 
     @staticmethod
     def _format_data(all_data: list, historical: bool = True) -> pd.DataFrame:
@@ -165,6 +154,7 @@ class Coinbase:
         """
 
         df = pd.DataFrame(all_data, columns=DATA_FORMATING['coinbase']['columns'])
+        df = df.sort_values(by='open_time').reset_index(drop=True)
         df['open_time'] = df['open_time'] * 1000
         interval_ms = df['open_time'].iloc[1] - df['open_time'].iloc[0]
         df['close_time'] = df['open_time'] + interval_ms - 1
@@ -178,7 +168,7 @@ class Coinbase:
         if historical:
             df['next_open'] = df['open'].shift(-1)
 
-        return df.dropna().drop_duplicates()
+        return df.dropna().drop_duplicates('open_time')
 
     def get_historical_data(self, pair: str, interval: str, start_ts: int, end_ts: int) -> pd.DataFrame:
         """
@@ -208,17 +198,15 @@ class Coinbase:
         start_time = max(start_ts, first_valid_ts)
 
         idx = 0
-        while True:
 
-            end_t = start_time + timeframe * self.historical_limit
-            end_time = min(end_t, end_ts)
+        while True:
 
             # fetch the klines from start_ts up to max 500 entries or the end_ts if set
             temp_data = self._get_candles(
                 pair=pair,
                 interval=interval,
                 start_time=start_time,
-                end_time=end_time
+                end_time=end_ts
             )
 
             # append this loops data to our output data
@@ -228,14 +216,19 @@ class Coinbase:
             # handle the case where exactly the limit amount of data was returned last loop
             # check if we received less than the required limit and exit the loop
             if not len(temp_data) or len(temp_data) < self.historical_limit:
+                print('exit_1')
                 # exit the while loop
                 break
 
             # increment next call by our timeframe
             start_time = temp_data[0][0] * 1000 + timeframe
 
+            print(f'Request # {idx}')
+            print(start_time, end_ts)
+
             # exit loop if we reached end_ts before reaching <limit> klines
-            if end_time and start_time >= end_ts:
+            if start_time >= end_ts:
+                print('exit_2')
                 break
 
             # sleep after every 3rd call to be kind to the API
@@ -325,7 +318,7 @@ class Coinbase:
 
         async with session.get(url=url, params=params) as response:
             data = await response.json()
-            df = self._format_data(data['result'], historical=False)
+            df = self._format_data(data, historical=False)
 
             df = df[df['close_time'] < s_time]
 
@@ -382,8 +375,6 @@ class Coinbase:
                 start_time = int(1000 * time.time() - (nb_candles + 1) * interval_to_milliseconds(interval=interval))
                 last_update = int(1000 * time.time())
 
-                print(start_time, last_update)
-
                 df = self.get_historical_data(
                     pair=pair,
                     start_ts=start_time,
@@ -420,5 +411,304 @@ class Coinbase:
                 all_data.update(info)
             return all_data
 
+    def get_token_balance(self, quote_asset: str):
+
+        data = self._send_request(
+            end_point=f"/accounts",
+            request_type="GET",
+            signed=True
+        )
+
+        balance = 0
+
+        for info in data:
+            if info['currency'] == quote_asset:
+                assert info['trading_enabled']
+                balance = float(info['available'])
+
+        return round(balance, 2)
+
+    def get_order_book(self, pair: str):
+        """
+        Args:
+            pair:
+
+        Returns:
+            the current orderbook with a depth of 20 observations
+        """
+
+        data = self._send_request(
+            end_point=f'/products/{pair}/book',
+            request_type="GET",
+            signed=False,
+            params={'level': 1}
+        )
+
+        std_ob = {'bids': [], 'asks': []}
+
+        for i in range(len(data['asks'])):
+            std_ob['bids'].append({
+                'price': float(data['bids'][i][0]),
+                'size': float(data['bids'][i][1])
+            })
+
+            std_ob['asks'].append({
+                'price': float(data['asks'][i][0]),
+                'size': float(data['asks'][i][1])
+            })
+
+        return std_ob
+
+    def get_actual_positions(self, pairs: Union[list, str]) -> dict:
+        """
+        Args:
+            pairs: list of pair that we want to run analysis on
+        Returns:
+            a dictionary containing all the current OPEN positions
+        """
+
+        _params = {}
+
+        if isinstance(pairs, str):
+            _params['symbol'] = pairs
+
+        all_pos = self._send_request(
+            end_point=f"/accounts",
+            request_type="GET",
+            signed=True
+        )
+
+        # position = {}
+        #
+        # for pos in all_pos:
+        #
+        #     if pos['future'] in pairs and pos['size'] != 0:
+        #         position[pos['future']] = {}
+        #         position[pos['future']]['position_size'] = abs(float(pos['size']))
+        #         position[pos['future']]['entry_price'] = float(pos['entryPrice'])
+        #         position[pos['future']]['unrealized_pnl'] = float(pos['realizedPnl'])
+        #         position[pos['future']]['type_pos'] = 'LONG' if float(pos['netSize']) > 0 else 'SHORT'
+        #         position[pos['future']]['exit_side'] = 'SELL' if float(pos['netSize']) > 0 else 'BUY'
+
+        return all_pos
+
+    def get_last_price(self, pair: str) -> dict:
+        """
+        Args:
+            pair: pair desired
+        Returns:
+            a dictionary containing the pair_id, latest_price, price_timestamp in timestamp
+        """
+        data = self._send_request(
+            end_point=f"/products/{pair}/ticker",
+            request_type="GET",
+            signed=False
+        )
+
+        return {
+            'pair': pair,
+            'timestamp': int(time.time()*1000),
+            'latest_price': float(data['price'])
+        }
+
+    def enter_market_order(self, pair: str, type_pos: str, quantity: float):
+
+        """
+            Args:
+                pair: pair id that we want to create the order for
+                type_pos: could be 'LONG' or 'SHORT'
+                quantity: quantity should respect the minimum precision
+
+            Returns:
+                standardized output
+        """
+
+        side = 'buy' if type_pos == 'LONG' else 'sell'
+
+        _params = {
+            "type": "market",
+            "side": side,
+            "product_id": pair,
+            "size": str(float(round(quantity, self.pairs_info[pair]['quantityPrecision']))),
+        }
+
+        response = self._send_request(
+            end_point=f"/orders",
+            request_type="POST",
+            params=_params,
+            signed=True
+        )
+
+        return response
+
+    def exit_market_order(self, pair: str, type_pos: str, quantity: float):
+
+        """
+            Args:
+                pair: pair id that we want to create the order for
+                type_pos: could be 'LONG' or 'SHORT'
+                quantity: quantity should respect the minimum precision
+
+            Returns:
+                standardized output
+        """
+
+        side = 'sell' if type_pos == 'LONG' else 'buy'
+
+        _params = {
+            "type": "market",
+            "side": side,
+            "time_in_force": "IOC",
+            "product_id": pair,
+            "size": str(float(round(quantity, self.pairs_info[pair]['quantityPrecision']))),
+        }
+
+        response = self._send_request(
+            end_point=f"/orders",
+            request_type="POST",
+            params=_params,
+            signed=True
+        )
+
+        return response
+
+    def get_order(self, pair: str, order_id: str):
+        """
+        Note : to query the conditional order, we are setting the following assumptions
+            - The position is not kept more thant 5 days
+            -
+        Args:
+            pair: pair traded in the order
+            order_id: order id
+
+        Returns:
+            order information from binance
+        """
+        data = self._send_request(
+            end_point=f"/orders/{order_id}",
+            request_type="GET",
+            signed=True
+        )
+
+        return data
+
+    @staticmethod
+    def _format_order(data: dict):
+
+        _order_type = 'STOP_MARKET' if data['type'] == 'stop' else data['type'].upper()
+
+        _price = 0.0 if _order_type in ["MARKET", "STOP_MARKET", "TAKE_PROFIT"] else data['price']
+        _stop_price = 0.0 if _order_type in ["MARKET", "LIMIT"] else data['triggerPrice']
+        _time_in_force = 'IOC' if 'ioc' in data.keys() and data['ioc'] else 'GTC'
+
+        dt = datetime.datetime.strptime(data['createdAt'], '%Y-%m-%dT%H:%M:%S.%f+00:00')
+
+        _executed_price = 0 if data['avgFillPrice'] is None else data['avgFillPrice']
+
+        formatted = {
+            'time': int(dt.timestamp() * 1000),
+            'order_id': data['id'],
+            'pair': data['market'],
+            'status': data['status'].upper(),
+            'type': _order_type,
+            'time_in_force': _time_in_force,
+            'reduce_only': data['reduceOnly'],
+            'side': data['side'].upper(),
+            'price': float(_price),
+            'stop_price': float(_stop_price),
+            'original_quantity': float(data['size']),
+            'executed_quantity': float(data['filledSize']),
+            'executed_price': float(_executed_price)
+        }
+
+        return formatted
+
+    def get_order_trades(self, pair: str, order_id: str):
+        """
+        Args:
+            pair: pair that is currently analysed
+            order_id: order_id number
+
+        Returns:
+            standardize output of the trades needed to complete an order
+        """
+
+        results = self.get_order(
+            pair=pair,
+            order_id=order_id
+        )
+
+        trades = self._send_request(
+            end_point=f"/fills?order_id={order_id}",
+            request_type="GET",
+            signed=True,
+            params={
+                'order_id': order_id
+            }
+        )
+
+        return trades
+
+    def place_limit_tp(self, pair: str, side: str, quantity: float, tp_price: float):
+        """
+        Args:
+            pair: pair id that we want to create the order for
+            side: could be 'BUY' or 'SELL'
+            quantity: for binance  quantity is not needed since the tp order "closes" the "opened" position
+            tp_price: price of the tp or sl
+        Returns:
+            Standardized output
+        """
 
 
+        _params = {
+            "type": "limit",
+            "side": side.lower(),
+            "price": str(float(round(tp_price, self.pairs_info[pair]['pricePrecision']))),
+            "stop_price": str(float(round(tp_price,  self.pairs_info[pair]['pricePrecision']))),
+            "time_in_force": "GTC",
+            "product_id": pair,
+            "size": str(float(round(quantity, self.pairs_info[pair]['quantityPrecision']))),
+        }
+
+        data = self._send_request(
+            end_point=f"/orders",
+            request_type="POST",
+            params=_params,
+            signed=True
+        )
+
+        return data
+
+    def place_market_sl(self, pair: str, side: str, quantity: float, sl_price: float):
+        """
+        Args:
+            pair: pair id that we want to create the order for
+            side: could be 'BUY' or 'SELL'
+            quantity: for binance  quantity is not needed since the tp order "closes" the "opened" position
+            sl_price: price of the tp or sl
+        Returns:
+            Standardized output
+        """
+
+        _stop = 'loss' if side == 'SELL' else 'entry'
+
+        _params = {
+            "type": "limit",
+            "stop": _stop,
+            "side": side.lower(),
+            "price": str(float(round(sl_price,  self.pairs_info[pair]['pricePrecision']))),
+            "stop_price": str(float(round(sl_price, self.pairs_info[pair]['pricePrecision']))),
+            "time_in_force": "GTC",
+            "product_id": pair,
+            "size": str(float(round(quantity, self.pairs_info[pair]['quantityPrecision']))),
+        }
+
+        data = self._send_request(
+            end_point=f"/orders",
+            request_type="POST",
+            params=_params,
+            signed=True
+        )
+
+        return data

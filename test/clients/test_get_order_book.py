@@ -8,6 +8,7 @@ def asserts_get_order_book(exchange: str, pair: str):
         exchange=exchange,
         key=config(f"{exchange}TestAPIKey"),
         secret=config(f"{exchange}TestAPISecret"),
+        passphrase=config(f"{exchange}TestPassPhrase"),
         testnet=True
     )
 
@@ -37,10 +38,18 @@ def test_get_order_book():
         #     'exchange': 'bybit',
         #     'pair': 'BTCUSDT'
         # },
+        # {
+        #     'exchange': 'ftx',
+        #     'pair': 'BTC-PERP'
+        # },
+        # {
+        #     'exchange': 'coinbase',
+        #     'pair': 'BTC-USD'
+        # },
         {
-            'exchange': 'ftx',
-            'pair': 'BTC-PERP'
-        }
+            'exchange': 'okx',
+            'pair': 'BTC-USDT'
+        },
     ]
 
     for _test in all_tests:
