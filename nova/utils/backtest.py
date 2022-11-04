@@ -37,6 +37,7 @@ class BackTest:
                  start_bk: float = 10000,
                  slippage: bool = False,
                  update_data: bool = False,
+                 plot_exposure: bool = True,
                  pass_phrase: str = ""):
 
         self.exchange = exchange
@@ -71,6 +72,7 @@ class BackTest:
         self.max_holding = max_holding
         self.save_all_pairs_charts = save_all_pairs_charts
         self.update_data = update_data
+        self.plot_exposure = plot_exposure
         self.time_step = self.get_timedelta_unit()
 
         # Get the list of pairs on which we perform the back test
@@ -98,7 +100,8 @@ class BackTest:
         frequency = self.candle.replace('m', 'min') if 'm' in self.candle else self.candle
 
         self.df_pos['open_time'] = pd.date_range(start=start, end=end, freq=frequency)
-        for var in ['all_positions', 'total_profit_all_pairs', 'long_profit_all_pairs', 'short_profit_all_pairs']:
+        for var in ['all_positions', 'total_profit_all_pairs', 'long_profit_all_pairs', 'short_profit_all_pairs',
+                    'wallet_exposure']:
             self.df_pos[var] = 0
 
         self.position_cols = []
@@ -476,7 +479,7 @@ class BackTest:
         """
 
         # create entering and exiting dataset
-        entering = df[['entry_time', 'entry_point']]
+        entering = df[['entry_time', 'entry_point', 'entry_price', 'tp', 'sl', 'position_size']]
         exiting = df[['exit_time', 'exit_point', 'PL_amt_realized']]
 
         # add to the main dataframe the 'entry_point', 'PL_amt_realized' and 'exit_point'
@@ -502,6 +505,13 @@ class BackTest:
                                                       np.where(condition_exit, 0, np.nan))
         self.df_pos[f'in_position_{pair}'] = self.df_pos[f'in_position_{pair}'].fillna(method='ffill').fillna(0)
 
+        # Pair exposure
+        pair_exposure = self.df_pos['position_size'] * (self.df_pos['entry_price'] - self.df_pos['sl']) / self.df_pos['entry_price']
+        pair_exposure = pair_exposure.abs()
+        self.df_pos[f'{pair}_exposure'] = np.where(condition_enter, pair_exposure,
+                                                      np.where(condition_exit, 0, np.nan))
+        self.df_pos[f'{pair}_exposure'] = self.df_pos[f'{pair}_exposure'].fillna(method='ffill').fillna(0)
+
         self.df_pos['all_positions'] = self.df_pos['all_positions'] + self.df_pos[f'in_position_{pair}'].abs()
 
         # Create the cumulative total profit for the pair
@@ -522,7 +532,7 @@ class BackTest:
 
         # clean the variables not needed
         to_drop = ['Short_PL_amt_realized', 'Long_PL_amt_realized', f'PL_amt_realized_{pair}', 'PL_amt_realized',
-                   'entry_time', 'entry_point', 'exit_time', 'exit_point']
+                   'entry_time', 'entry_point', 'exit_time', 'exit_point', 'entry_price', 'tp', 'sl', 'position_size']
         self.df_pos.drop(to_drop, axis=1, inplace=True)
 
         # update the bot total profit or all token
@@ -532,11 +542,14 @@ class BackTest:
         self.df_pos['short_profit_all_pairs'] = self.df_pos['short_profit_all_pairs'] + self.df_pos[
             f'short_profit_{pair}']
 
+        # update bot total exposure
+        self.df_pos['wallet_exposure'] = self.df_pos['wallet_exposure'] + self.df_pos[f'{pair}_exposure']
+
         if not self.save_all_pairs_charts:
             self.df_pos = self.df_pos.drop([f'total_profit_{pair}', f'long_profit_{pair}', f'short_profit_{pair}'],
                                            axis=1)
 
-    def get_performance_graph(self, pair: str):
+    def plot_performance_graph(self, pair: str):
         """
         Args:
             pair: string that represents the pair.
@@ -556,6 +569,21 @@ class BackTest:
         plt.legend()
         plt.title(f"Backtest {self.strategy_name} strategy for {pair}")
         plt.show()
+
+    def plot_wallet_exposure_graph(self):
+
+        begin = np.where(self.df_pos[f'wallet_exposure'] != 0)[0].tolist()[0] - 1
+
+        plt.figure(figsize=(10, 10))
+        plt.bar(self.df_pos.open_time[self.df_pos.index > begin],
+                self.df_pos[f'wallet_exposure'][self.df_pos.index > begin], label='Wallet exposure ($)', width=0.1,
+                color='k')
+
+        plt.legend()
+        plt.title(f"Wallet exposure {self.strategy_name} strategy")
+        plt.show()
+
+        return 0
 
     def get_pair_stats(self, df: pd.DataFrame, pair: str):
         """
@@ -1152,7 +1180,9 @@ class BackTest:
         # Keep only positions such that number of pos < max nb positions
         print(f'Creating all positions and timeserie graph', "\U000023F3", end="\r")
         self.all_pairs_real_positions()
-        self.get_performance_graph('all_pairs')
+        self.plot_performance_graph('all_pairs')
+        if self.plot_exposure:
+            self.plot_wallet_exposure_graph()
         print(f'Creating all positions and timeserie graph', "\U00002705")
 
         print(f'Computing all statistics', "\U000023F3", end="\r")
