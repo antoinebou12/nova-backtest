@@ -383,6 +383,9 @@ class Bybit:
         if data['order_type'] == 'Market' and data['order_status'] in ['Untriggered', 'Deactivated', 'Triggered']:
             _order_type = 'STOP_MARKET'
 
+        if data['order_status'] == 'PartiallyFilled':
+            data['order_status'] = 'PARTIALLY_FILLED'
+
         _order_name = 'order_id' if 'order_id' in data.keys() else 'stop_order_id'
 
         _stop_price = 0
