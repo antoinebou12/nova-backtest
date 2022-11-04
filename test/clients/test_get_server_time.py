@@ -9,7 +9,7 @@ def asserts_get_server_time(exchange: str):
         exchange=exchange,
         key=config(f"{exchange}TestAPIKey"),
         secret=config(f"{exchange}TestAPISecret"),
-        testnet=True
+        testnet=False
     )
 
     server_time = client.get_server_time()
@@ -25,7 +25,7 @@ def asserts_get_server_time(exchange: str):
 
 
 def test_get_server_time():
-    for _exchange in ['binance', 'bybit', 'ftx', 'okx', 'kucoin', 'coinbase']:
+    for _exchange in ['binance', 'bybit', 'ftx', 'okx', 'kucoin', 'coinbase', 'kraken']:
         asserts_get_server_time(_exchange)
 
 

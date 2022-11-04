@@ -42,9 +42,13 @@ def test_get_order_book():
         #     'exchange': 'ftx',
         #     'pair': 'BTC-PERP'
         # },
+        # {
+        #     'exchange': 'coinbase',
+        #     'pair': 'BTC-USD'
+        # },
         {
-            'exchange': 'coinbase',
-            'pair': 'BTC-USD'
+            'exchange': 'okx',
+            'pair': 'BTC-USDT'
         },
     ]
 

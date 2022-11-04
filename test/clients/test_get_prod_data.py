@@ -26,8 +26,6 @@ def asserts_get_prod_data(
         current_state=None
     ))
 
-    print(client.prod_data['BTC-USD']['data'])
-
     assert list(client.prod_data.keys()) == list_pair
 
     for _pair in list_pair:
@@ -106,9 +104,14 @@ def test_get_prod_data():
         #     'list_pair': ['BTC-PERP', 'ETH-PERP', 'XRP-PERP'],
         #     'nb_candles': 300,
         # },
+        # {
+        #     'exchange': 'coinbase',
+        #     'list_pair': ['ETH-USD', 'BTC-USD', 'ADA-USD'],
+        #     'nb_candles': 300,
+        # },
         {
-            'exchange': 'coinbase',
-            'list_pair': ['ETH-USD', 'BTC-USD', 'ADA-USD'],
+            'exchange': 'okx',
+            'list_pair': ['ETH-USDT', 'BTC-USDT', 'ADA-USDT'],
             'nb_candles': 300,
         },
 

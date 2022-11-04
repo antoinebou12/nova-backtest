@@ -19,11 +19,10 @@ class OKX:
                  secret: str,
                  pass_phrase: str,
                  testnet: bool):
+
         self.api_key = key
         self.api_secret = secret
         self.pass_phrase = pass_phrase
-
-        self.historical_limit = 100
 
         self.based_endpoint = "https://www.okx.com"
         self._session = Session()
@@ -31,6 +30,8 @@ class OKX:
         self.quote_asset = 'USDT'
 
         self.pairs_info = self.get_pairs_info()
+
+        self.historical_limit = 90
 
     def _send_request(self, end_point: str, request_type: str, params: Union[dict, list] = None, signed: bool = False):
 
@@ -87,14 +88,19 @@ class OKX:
 
         for pair in data:
 
-            if pair['state'] == 'live':
+            if pair['quoteCcy'] == 'USDT' and pair['state'] == 'live' and pair['instType'] == 'MARGIN':
+
                 pairs_info[pair['instId']] = {}
                 pairs_info[pair['instId']]['quote_asset'] = pair['quoteCcy']
-                pairs_info[pair['instId']]['pricePrecision'] = int(str(pair['tickSz'])[::-1].find('.'))
-                pairs_info[pair['instId']]['maxQuantity'] = float(pair['maxMktSz'])
+                pairs_info[pair['instId']]['maxQuantity'] = float('inf')
                 pairs_info[pair['instId']]['minQuantity'] = float(pair['minSz'])
                 pairs_info[pair['instId']]['tick_size'] = float(pair['tickSz'])
-                pairs_info[pair['instId']]['quantityPrecision'] = int(str(pair['minSz'])[::-1].find('.'))
+                pairs_info[pair['instId']]['pricePrecision'] = int(str(pair['tickSz'])[::-1].find('.'))
+
+                qty_precision = int(str(pair['minSz'])[::-1].find('.')) if float(pair['minSz']) > 1 else 0
+                pairs_info[pair['instId']]['quantityPrecision'] = qty_precision
+
+                pairs_info[pair['instId']]['earliest_timestamp'] = int(pair['listTime'])
 
         return pairs_info
 
@@ -127,23 +133,7 @@ class OKX:
             the earliest valid open timestamp in milliseconds
         """
 
-        starting_year = 2018
-
-        while starting_year <= date.today().year:
-            kline = self._get_candles(
-                pair=pair,
-                interval=interval,
-                start_time=int(datetime(starting_year, 1, 1).timestamp() * 1000),
-                end_time=0
-            )
-
-            if len(kline) > 0:
-
-                print(f'Starting Year date {starting_year}')
-
-                return int(kline[-1][0])
-
-        return time.time() * 1000
+        return self.pairs_info[pair]['earliest_timestamp']
 
     @staticmethod
     def _format_data(all_data: list, historical: bool = True) -> pd.DataFrame:
@@ -156,6 +146,7 @@ class OKX:
         """
 
         df = pd.DataFrame(all_data, columns=DATA_FORMATING['okx']['columns'])
+        df = df.sort_values(by='open_time').reset_index(drop=True)
 
         for var in DATA_FORMATING['okx']['num_var']:
             df[var] = pd.to_numeric(df[var], downcast="float")
@@ -172,7 +163,7 @@ class OKX:
 
         df['close_time'] = df['open_time'] + interval_ms - 1
 
-        return df.dropna()
+        return df.dropna().drop_duplicates('open_time')
 
     def get_historical_data(self, pair: str, interval: str, start_ts: int, end_ts: int) -> pd.DataFrame:
         """
@@ -215,7 +206,8 @@ class OKX:
                 end_time=end_time
             )
 
-            print(start_time, end_time)
+            if len(temp_data) == 0:
+                break
 
             # append this loops data to our output data
             if temp_data:
@@ -223,18 +215,12 @@ class OKX:
 
             # handle the case where exactly the limit amount of data was returned last loop
             # check if we received less than the required limit and exit the loop
-            if not len(temp_data) or len(temp_data) < self.historical_limit:
-                print('inside 1')
-                # exit the while loop
-                break
 
             # increment next call by our timeframe
-            start_time = int(float(temp_data[0][0]) + timeframe)
+            start_time = int(temp_data[0][0])
 
             # exit loop if we reached end_ts before reaching <limit> klines
-            if end_time and start_time >= end_ts:
-                print('inside 2')
-
+            if start_time >= end_ts:
                 break
 
             # sleep after every 3rd call to be kind to the API
@@ -306,41 +292,33 @@ class OKX:
             window: int,
             current_pair_state: dict = None
     ):
-        milli_sec = interval_to_milliseconds(interval) // 1000
-        end_time = int(time.time())
-        start_time = int(end_time - (window + 1) * milli_sec)
 
-        input_req = f"api/markets/{pair}/candles?resolution={milli_sec}&start_time={start_time}&end_time={end_time}"
+        ts_ms = interval_to_milliseconds(interval)
 
-        url = f"{self.based_endpoint}{input_req}"
+        end_time = int(1000 * time.time())
+        start_time = int(end_time - (self.historical_limit + 1) * ts_ms)
+        _bar = interval if 'm' in interval else interval.upper()
+
+        input_req = f"/api/v5/market/candles?instId={pair}&bar={_bar}&before={start_time}&after={end_time}"
 
         final_dict = {}
         final_dict[pair] = {}
 
         if current_pair_state is not None:
-            limit = 3
             final_dict[pair]['data'] = current_pair_state[pair]['data']
             final_dict[pair]['latest_update'] = current_pair_state[pair]['latest_update']
-        else:
-            limit = window
 
-        params = dict(symbol=pair, interval=interval, limit=limit)
-
-        # Compute the server time
-        s_time = int(1000 * time.time())
-
-        async with session.get(url=url, params=params) as response:
+        async with session.get(url=f"{self.based_endpoint}{input_req}") as response:
             data = await response.json()
 
-            df = self._format_data(all_data=data['result'], historical=False)
-
-            df = df[df['close_time'] < s_time]
+            df = self._format_data(all_data=data['data'], historical=False)
+            df = df[df['close_time'] < end_time]
 
             for var in ['open_time', 'close_time']:
                 df[var] = pd.to_datetime(df[var], unit='ms')
 
             if current_pair_state is None:
-                final_dict[pair]['latest_update'] = s_time
+                final_dict[pair]['latest_update'] = end_time
                 final_dict[pair]['data'] = df
 
             else:
@@ -349,7 +327,7 @@ class OKX:
                     by=['open_time'],
                     ascending=True
                 )
-                final_dict[pair]['latest_update'] = s_time
+                final_dict[pair]['latest_update'] = end_time
                 final_dict[pair]['data'] = df_new.tail(window)
 
             return final_dict
@@ -372,6 +350,33 @@ class OKX:
         !! Command to run async function: asyncio.run(self.get_prod_data(list_pair=list_pair)) !!
         """
 
+        # If we need more than 200 candles (which is the API's limit) we call self.get_historical_data instead
+        if nb_candles > self.historical_limit and current_state is None:
+
+            final_dict = {}
+
+            for pair in list_pair:
+                final_dict[pair] = {}
+                start_time = int(1000 * time.time() - (nb_candles + 1) * interval_to_milliseconds(interval=interval))
+                last_update = int(1000 * time.time())
+
+                df = self.get_historical_data(
+                    pair=pair,
+                    start_ts=start_time,
+                    interval=interval,
+                    end_ts=last_update
+                )
+
+                df = df[df['close_time'] < last_update]
+                latest_update = df['open_time'].values[-1]
+                for var in ['open_time', 'close_time']:
+                    df[var] = pd.to_datetime(df[var], unit='ms')
+
+                final_dict[pair]['latest_update'] = latest_update
+                final_dict[pair]['data'] = df
+
+            return final_dict
+
         async with aiohttp.ClientSession(connector=aiohttp.TCPConnector(ssl=False)) as session:
             tasks = []
             for pair in list_pair:
@@ -390,6 +395,43 @@ class OKX:
             for info in all_info:
                 all_data.update(info)
             return all_data
+
+    def get_actual_positions(self, pairs: Union[list, str]) -> dict:
+        """
+        Args:
+            pairs: list of pair that we want to run analysis on
+        Returns:
+            a dictionary containing all the current OPEN positions
+        """
+
+        _params = {}
+
+        if isinstance(pairs, str):
+            _params['symbol'] = pairs
+
+        all_pos = self._send_request(
+            end_point=f"/api/v5/account/positions?instType=MARGIN",
+            request_type="GET",
+            params={"instType": "MARGIN"},
+            signed=True
+        )['data']
+
+        position = {}
+
+        for pos in all_pos:
+
+            if pos['instId'] in pairs:
+
+                _size = abs(float(pos['liab'])) if pos['posCcy'] == self.quote_asset else abs(float(pos['pos']))
+
+                position[pos['instId']] = {}
+                position[pos['instId']]['position_size'] = _size
+                position[pos['instId']]['entry_price'] = float(pos['avgPx'])
+                position[pos['instId']]['unrealized_pnl'] = float(pos['upl'])
+                position[pos['instId']]['type_pos'] = 'SHORT' if pos['posCcy'] == self.quote_asset else 'LONG'
+                position[pos['instId']]['exit_side'] = 'BUY' if pos['posCcy'] == self.quote_asset else 'SELL'
+
+        return position
 
     def get_token_balance(self, quote_asset: str):
 
@@ -474,25 +516,24 @@ class OKX:
             last_price = self.get_last_price(pair=pair)
             quote_size = last_price['latest_price'] * quantity
 
-        _quantity = quantity if side == 'sell' else quote_size
+        _quantity = quote_size if side == 'buy' else quantity
 
         _params = {
             "instId": pair,
-            "tdMode": "cross",
-            "ccy": "USDT",
+            "tdMode": "isolated",
             "side": side,
-            "sz": str(float(round(_quantity, self.pairs_info[pair]['quantityPrecision']))),
+            "sz": _quantity,
             "ordType": "market",
         }
 
-        response = self._send_request(
+        data = self._send_request(
             end_point=f"/api/v5/trade/order",
             request_type="POST",
             params=_params,
             signed=True
-        )
+        )['data']
 
-        return response
+        return data
 
     def exit_market_order(self, pair: str, type_pos: str, quantity: float):
 
@@ -506,23 +547,22 @@ class OKX:
                 standardized output
         """
 
-        side = 'sell' if type_pos == 'LONG' else 'buy'
+        side = 'buy' if type_pos == 'LONG' else 'sell'
 
         quote_size = 0
 
         if side == 'buy':
             last_price = self.get_last_price(pair=pair)
-            quote_size = last_price['latest_price'] * quantity * 1.02
+            quote_size = last_price['latest_price'] * quantity
 
-        _quantity = quantity if side == 'sell' else quote_size
+        _quantity = quote_size if side == 'buy' else quantity
 
         _params = {
             "instId": pair,
-            "tdMode": "cross",
-            "ccy": self.quote_asset,
+            "tdMode": "isolate",
             "reduceOnly": True,
             "side": side,
-            "sz": str(float(round(_quantity, self.pairs_info[pair]['quantityPrecision']))),
+            "sz": _quantity,
             "ordType": "market",
         }
 
@@ -555,30 +595,25 @@ class OKX:
                 "ordId": order_id,
             },
             signed=True
-        )
+        )['data'][0]
 
         return data
+
+        # return self._format_order(data=data)
 
     @staticmethod
     def _format_order(data: dict):
 
-        _order_type = 'STOP_MARKET' if data['type'] == 'stop' else data['type'].upper()
-
-        _price = 0.0 if _order_type in ["MARKET", "STOP_MARKET", "TAKE_PROFIT"] else data['price']
-        _stop_price = 0.0 if _order_type in ["MARKET", "LIMIT"] else data['triggerPrice']
-        _time_in_force = 'IOC' if 'ioc' in data.keys() and data['ioc'] else 'GTC'
-
-        dt = datetime.strptime(data['createdAt'], '%Y-%m-%dT%H:%M:%S.%f+00:00')
-
-        _executed_price = 0 if data['avgFillPrice'] is None else data['avgFillPrice']
+        time_force = 'IOC' if data['ordType'] == 'market' else 'GTC'
+        # pos['posCcy'] == self.quote_asset
 
         formatted = {
-            'time': int(dt.timestamp() * 1000),
-            'order_id': data['id'],
-            'pair': data['market'],
-            'status': data['status'].upper(),
-            'type': _order_type,
-            'time_in_force': _time_in_force,
+            'time': int(data['cTime']),
+            'order_id': data['ordId'],
+            'pair': data['instId'],
+            'status': data['state'].upper(),
+            'type': data['ordType'].upper(),
+            'time_in_force': time_force,
             'reduce_only': data['reduceOnly'],
             'side': data['side'].upper(),
             'price': float(_price),

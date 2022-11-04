@@ -8,7 +8,8 @@ def asserts_enter_market_order(exchange: str, pair: str, type_pos: str, quantity
         exchange=exchange,
         key=config(f"{exchange}TestAPIKey"),
         secret=config(f"{exchange}TestAPISecret"),
-        testnet=True
+        passphrase=config(f"{exchange}TestPassPhrase"),
+        testnet=False
     )
 
     positions = client.get_actual_positions(
@@ -69,19 +70,19 @@ def test_enter_market_order():
         #     'exchange': 'binance',
         #     'pair': 'BTCUSDT',
         #     'type_pos': 'LONG',
-        #     'quantity': 0.01
+        #     'quantity': 0.001
+        # },
+        # {
+        #     'exchange': 'bybit',
+        #     'pair': 'BTCUSDT',
+        #     'type_pos': 'LONG',
+        #     'quantity': 0.001
         # },
         {
             'exchange': 'bybit',
             'pair': 'BTCUSDT',
-            'type_pos': 'LONG',
-            'quantity': 0.01
-        },
-        {
-            'exchange': 'bybit',
-            'pair': 'BTCUSDT',
             'type_pos': 'SHORT',
-            'quantity': 0.01
+            'quantity': 0.001
         }
     ]
 
@@ -98,49 +99,34 @@ def test_enter_market_order():
 # test_enter_market_order()
 
 
-exchange = 'kraken'
+exchange = 'okx'
 
 client = clients(
     exchange=exchange,
     key=config(f"{exchange}TestAPIKey"),
     secret=config(f"{exchange}TestAPISecret"),
-    testnet=True
+    passphrase=config(f"{exchange}TestPassPhrase"),
+    testnet=False
 )
-
-entry_data = client.enter_market_order(
-    pair="pf_xbtusd",
-    type_pos="LONG",
-    quantity=0.1
-)
-
-exit_data = client.exit_market_order(
-    pair="pf_xbtusd",
-    type_pos="LONG",
-    quantity=0.1
-)
-
-# order_data = client.get_order(
-#     pair="pf_xbtusd",
-#     order_id=entry_data['order_id']
-# )
-
-cancel_order = client.cancel_order(
-    pair="pf_xbtusd",
-    order_id=entry_data['order_id']
-)
-
-# order_data = client.get_order_trades(
-#     pair="ETH-PERP",
-#     order_id=193550433909
-# )
-
-
-# for trade in order_data:
-#     print(trade)
-
 #
-# returned_data = {'id': 193550433909, 'clientId': None, 'market': 'ETH-PERP', 'type': 'market', 'side': 'buy',
-#                  'price': None, 'size': 0.01, 'status': 'new', 'filledSize': 0.0, 'remainingSize': 0.01,
-#                  'reduceOnly': False, 'liquidation': None, 'avgFillPrice': None, 'postOnly': False, 'ioc': True,
-#                  'createdAt': '2022-10-26T02:32:10.695169+00:00', 'future': 'ETH-PERP'
-#                  }
+# enter_long = client.enter_market_order(
+#     pair='BTC-USDT',
+#     type_pos="LONG",
+#     quantity=0.001
+# )
+
+enter_short = client.enter_market_order(
+    pair='ETH-USDT',
+    type_pos="SHORT",
+    quantity=0.01
+)
+
+order_long = client.get_order(
+    pair="BTC-USDT",
+    order_id='508493081751207945'
+)
+
+# order_short = client.get_order(
+#     pair="ETH-USDT",
+#     order_id='508493081751207945'
+# )

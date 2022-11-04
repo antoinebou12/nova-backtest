@@ -16,7 +16,8 @@ def asserts_setup_account(
         exchange=exchange,
         key=config(f"{exchange}TestAPIKey"),
         secret=config(f"{exchange}TestAPISecret"),
-        testnet=True
+        passphrase=config(f"{exchange}TestPassPhrase"),
+        testnet=False
     )
 
     client.setup_account(
@@ -28,7 +29,6 @@ def asserts_setup_account(
     )
 
     print(f"Test setup_account for {exchange.upper()} successful")
-
 
 
 def test_setup_account():
@@ -50,11 +50,19 @@ def test_setup_account():
         #     'bankroll': 1000,
         #     'max_down': 0.3
         # },
+        # {
+        #     'exchange': 'ftx',
+        #     'quote_asset': 'USD',
+        #     'leverage': 5,
+        #     'list_pairs': ['BTC-PERP', 'ETH-PERP'],
+        #     'bankroll': 50,
+        #     'max_down': 0.2
+        # },
         {
-            'exchange': 'ftx',
-            'quote_asset': 'USD',
+            'exchange': 'okx',
+            'quote_asset': 'USDT',
             'leverage': 5,
-            'list_pairs': ['BTC-PERP', 'ETH-PERP'],
+            'list_pairs': ['BTC-USDT', 'ETH-USDT'],
             'bankroll': 50,
             'max_down': 0.2
         }

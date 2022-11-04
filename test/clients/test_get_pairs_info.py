@@ -13,6 +13,8 @@ def asserts_get_pairs_info(exchange: str):
 
     data = client.get_pairs_info()
 
+    print(data)
+
     for key, value in data.items():
 
         assert type(key) == str
@@ -29,7 +31,7 @@ def asserts_get_pairs_info(exchange: str):
 
 def test_get_pairs_info():
 
-    for exchange in ['binance', 'bybit', 'ftx', 'coinbase']:
+    for exchange in ['binance', 'bybit', 'ftx', 'coinbase', 'okx']:
         asserts_get_pairs_info(exchange=exchange)
 
 

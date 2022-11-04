@@ -98,7 +98,21 @@ def test_get_actual_positions():
                 'BTCUSDT': {'type_pos': 'LONG', 'quantity': 0.01},
                 'ETHUSDT': {'type_pos': 'SHORT', 'quantity': 0.1}
             }
-        }
+        },
+        {
+            'exchange': 'ftx',
+            'info': {
+                'BTC-PERP': {'type_pos': 'LONG', 'quantity': 0.001},
+                'ETH-PERP': {'type_pos': 'SHORT', 'quantity': 0.01}
+            }
+        },
+        {
+            'exchange': 'okx',
+            'info': {
+                'BTC-USDT': {'type_pos': 'LONG', 'quantity': 0.001},
+                'ETH-USDT': {'type_pos': 'SHORT', 'quantity': 0.01}
+            }
+        },
     ]
 
     for _test in all_tests:
@@ -113,32 +127,4 @@ def test_get_actual_positions():
 # test_get_actual_positions()
 
 
-# no testnet tests
 
-exchange = 'coinbase'
-
-client = clients(
-    exchange=exchange,
-    key=config(f"{exchange}TestAPIKey"),
-    secret=config(f"{exchange}TestAPISecret"),
-    passphrase=config(f"{exchange}TestPassPhrase"),
-    testnet=False
-)
-
-# enter_btc = client.enter_market_order(
-#     pair='BTC-USDT',
-#     type_pos='LONG',
-#     quantity=0.001
-# )
-
-# {'id': '414325c4-1403-4013-a967-402c21931bad', 'size': '0.001', 'product_id': 'BTC-USDT', 'side': 'buy', 'stp': 'dc',
-# 'funds': '387.33719702', 'type': 'market', 'post_only': False, 'created_at': '2022-11-03T11:59:45.51686Z',
-# 'fill_fees': '0', 'filled_size': '0', 'executed_value': '0', 'status': 'pending', 'settled': False}
-
-enter_eth = client.enter_market_order(
-    pair='ETH-USDT',
-    type_pos='SHORT',
-    quantity=0.01
-)
-
-client.get_actual_positions(pairs=['BTC-USDT'])
