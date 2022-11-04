@@ -29,9 +29,9 @@ class RandomStrategy(Bot):
                  telegram_bot_token: str = None,
                  telegram_bot_chat_id: str = None,
                  bot_id: str = "RANDOM_BOT_1",
-                 entry_l_prob: float = 0.5,
-                 entry_s_prob: float = 0.5,
-                 exit_prob: float = 0.5,
+                 entry_l_prob: float = 0.2,
+                 entry_s_prob: float = 0.2,
+                 exit_prob: float = 0.2,
                  tp_sl_delta: float = 0.005
                  ):
 
@@ -54,7 +54,7 @@ class RandomStrategy(Bot):
                      geometric_size=False,
                      max_pos=max_pos,
                      max_down=max_down,
-                     max_hold=1 / 2,
+                     max_hold=1 / 10,
 
                      telegram_notification=telegram_notification,
                      telegram_bot_token=telegram_bot_token,
