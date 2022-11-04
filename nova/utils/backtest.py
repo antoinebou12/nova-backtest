@@ -104,6 +104,15 @@ class BackTest:
         self.position_cols = []
         self.df_all_pairs_positions = pd.DataFrame()
 
+    def build_indicators(self, df: pd.DataFrame) -> pd.DataFrame:
+        pass
+
+    def entry_strategy(self, df: pd.DataFrame) -> pd.DataFrame:
+        pass
+
+    def exit_strategy(self, df: pd.DataFrame) -> pd.DataFrame:
+        pass
+
     def get_timedelta_unit(self) -> timedelta:
         """
         Returns: a tuple that contains the unit and the multiplier needed to extract the data
@@ -1019,7 +1028,7 @@ class BackTest:
 
         df['all_sl'] = np.where(df['all_entry_point'] == 1,
                                 pd.DataFrame({'all_sl': df['all_sl'],
-                                              'all_entry_price': df['all_entry_price'] * (1 - 1 / self.leverage)}).max(axis=1), np.nan)
+                                              'all_entry_price': df['all_entry_price'] * (1 - 1 / self.leverage)}).max(axis=1), df['all_sl'])
 
         df['all_sl'] = np.where(df['all_entry_point'] == -1,
                                 pd.DataFrame({'all_sl': df['all_sl'],
@@ -1125,7 +1134,7 @@ class BackTest:
 
             df = self.create_entry_prices_times(df)
 
-            # df = self.max_stop_loss(df)
+            df = self.max_stop_loss(df)
 
             df = self.exit_strategy(df)
 
