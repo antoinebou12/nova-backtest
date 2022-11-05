@@ -513,6 +513,9 @@ class Bot(TelegramBOT):
                     # check entry signals and perform actions
                     self.entering_positions()
 
+                    # If the previous code takes less than 1 second to execute, it will be executed again
+                    time.sleep(1)
+
             except Exception as e:
 
                 print(f'{self.bot_name} crashed with the error:\n{str(e)[:100]}')
@@ -535,4 +538,3 @@ class Bot(TelegramBOT):
                 last_crashed_time = datetime.utcnow()
 
                 time.sleep(60)
-

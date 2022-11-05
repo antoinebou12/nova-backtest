@@ -357,8 +357,8 @@ class Bybit:
             "symbol": pair,
             "qty": float(round(quantity, self.pairs_info[pair]['quantityPrecision'])),
             "order_type": 'Market',
-            "time_in_force": 'GoodTillCancel',
-            "close_on_trigger": False,
+            "time_in_force": 'ImmediateOrCancel',
+            "close_on_trigger": True,
             "reduce_only": True,
             "recv_window": "5000",
             "position_idx": 0
@@ -383,6 +383,9 @@ class Bybit:
         if data['order_type'] == 'Market' and data['order_status'] in ['Untriggered', 'Deactivated', 'Triggered']:
             _order_type = 'STOP_MARKET'
 
+        if data['order_status'] == 'PartiallyFilled':
+            data['order_status'] = 'PARTIALLY_FILLED'
+
         _order_name = 'order_id' if 'order_id' in data.keys() else 'stop_order_id'
 
         _stop_price = 0
@@ -390,7 +393,7 @@ class Bybit:
         _executed_price = 0
         _price = 0
 
-        if _order_type == 'Market':
+        if _order_type == 'Market' and data['cum_exec_qty'] != 0:
             _executed_quantity = data['cum_exec_qty']
             _executed_price = data['cum_exec_value'] / data['cum_exec_qty']
 
@@ -442,7 +445,9 @@ class Bybit:
             signed=True
         )
 
-        return self._format_order(data=response['result'])
+        formated_order = self._format_order(data=response['result'])
+
+        return formated_order
 
     def get_order_trades(self, pair: str, order_id: str):
         """
@@ -472,12 +477,13 @@ class Bybit:
         results['nb_of_trades'] = 0
         results['is_buyer'] = None
 
-        for trade in trades['result']['data']:
-            if trade['order_id'] == order_id:
-                if results['is_buyer'] is None:
-                    results['is_buyer'] = True if trade['side'] == 'Buy' else False
-                results['tx_fee_in_quote_asset'] += float(trade['exec_fee'])
-                results['nb_of_trades'] += 1
+        if trades['result']['data']:
+            for trade in trades['result']['data']:
+                if trade['order_id'] == order_id:
+                    if results['is_buyer'] is None:
+                        results['is_buyer'] = True if trade['side'] == 'Buy' else False
+                    results['tx_fee_in_quote_asset'] += float(trade['exec_fee'])
+                    results['nb_of_trades'] += 1
 
         return results
 
@@ -493,18 +499,13 @@ class Bybit:
             response of the API call
         """
 
-        multi = 0.995 if side == 'SELL' else 1.005
-
         params = {
             "side": 'Buy' if side == 'BUY' else 'Sell',
             "symbol": pair,
             "price": float(round(tp_price, self.pairs_info[pair]['pricePrecision'])),
-            "base_price": float(round(tp_price * multi, self.pairs_info[pair]['pricePrecision'])),
-            "stop_px": float(round(tp_price, self.pairs_info[pair]['pricePrecision'])),
             "qty": float(round(quantity, self.pairs_info[pair]['quantityPrecision'])),
             "order_type": 'Limit',
-            "trigger_by": "LastPrice",
-            "time_in_force": 'GoodTillCancel',
+            "time_in_force": 'PostOnly',
             "close_on_trigger": True,
             "reduce_only": True,
             "recv_window": "5000",
@@ -512,13 +513,13 @@ class Bybit:
         }
 
         response = self._send_request(
-            end_point=f"/private/linear/stop-order/create",
+            end_point=f"/private/linear/order/create",
             request_type="POST",
             params=params,
             signed=True
         )
 
-        return self.get_order(pair=pair, order_id=response['result']['stop_order_id'])
+        return self.get_order(pair=pair, order_id=response['result']['order_id'])
 
     def place_market_sl(self, pair: str, side: str, quantity: float, sl_price: float):
 
@@ -601,12 +602,12 @@ class Bybit:
         if not response['result']:
             return False, ''
 
-        limit_order_posted = self._verify_limit_posted(
+        limit_order_posted, order_data = self._verify_limit_posted(
             order_id=response['result']['order_id'],
             pair=pair
         )
 
-        return limit_order_posted, self._format_order(response['result'])
+        return limit_order_posted, order_data
 
     def _verify_limit_posted(self, pair: str, order_id: str):
         """
@@ -627,7 +628,7 @@ class Bybit:
         t_start = time.time()
 
         # Keep trying to get order status during 30s
-        while time.time() - t_start < 5:
+        while time.time() - t_start < 3:
 
             time.sleep(1)
 
@@ -756,8 +757,12 @@ class Bybit:
             if _trades['executed_quantity'] > 0:
                 final_data['entry_fees'] += _trades['tx_fee_in_quote_asset']
                 final_data['original_position_size'] += _trades['executed_quantity']
-                final_data['current_position_size'] += _trades['executed_quantity']
                 _price_information.append({'price': _trades['executed_price'], 'qty': _trades['executed_quantity']})
+
+        # Can be small differences due to float approximations, so we have to round position size
+        final_data['original_position_size'] = round(final_data['original_position_size'],
+                                                     self.pairs_info[final_data['pair']]['quantityPrecision'])
+        final_data['current_position_size'] = final_data['original_position_size']
 
         for _info in _price_information:
             _avg_price += _info['price'] * (_info['qty'] / final_data['current_position_size'])
