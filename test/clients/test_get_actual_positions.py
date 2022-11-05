@@ -120,7 +120,6 @@ def test_get_actual_positions():
         asserts_get_actual_positions(
             exchange=_test['exchange'],
             info=_test['info']
-
         )
 
 

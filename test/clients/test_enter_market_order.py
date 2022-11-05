@@ -108,25 +108,108 @@ client = clients(
     passphrase=config(f"{exchange}TestPassPhrase"),
     testnet=False
 )
-#
+
+
+# enter_limit = client.place_limit_order_best_price(
+#     pair='BTC-USDT',
+#     side="BUY",
+#     quantity=0.001,
+#     reduce_only=False
+# )
+
+
+# enter_limit_loop = client._looping_limit_orders(
+#     pair='BTC-USDT',
+#     side="BUY",
+#     quantity=0.001,
+#     reduce_only=False,
+#     duration=60
+# )
+
+
+# enter_limit_loop = client._enter_limit_then_market(
+#     pair='ETH-USDT',
+#     type_pos="LONG",
+#     quantity=0.01,
+#     sl_price=1550,
+#     tp_price=1700
+# )
+
 # enter_long = client.enter_market_order(
 #     pair='BTC-USDT',
 #     type_pos="LONG",
 #     quantity=0.001
 # )
 
-enter_short = client.enter_market_order(
-    pair='ETH-USDT',
-    type_pos="SHORT",
-    quantity=0.01
-)
-
-order_long = client.get_order(
-    pair="BTC-USDT",
-    order_id='508493081751207945'
-)
-
-# order_short = client.get_order(
-#     pair="ETH-USDT",
-#     order_id='508493081751207945'
+# enter_short = client.enter_market_order(
+#     pair='ETH-USDT',
+#     type_pos="SHORT",
+#     quantity=0.01
 # )
+
+#
+# exit_long = client.exit_market_order(
+#     pair='BTC-USDT',
+#     type_pos="LONG",
+#     quantity=0.001
+# )
+
+# exit_short = client.exit_market_order(
+#     pair='ETH-USDT',
+#     type_pos="SHORT",
+#     quantity=0.01
+# )
+#
+#
+# place_limit_tp = client.place_limit_tp(
+#     pair='BTC-USDT',
+#     side="SELL",
+#     quantity=0.001,
+#     tp_price=21360
+# )
+#
+#
+
+
+# tp_order = client.get_order(pair='BTC-USDT', order_id='508910380719161349')
+# sl_order = client.get_order(pair='BTC-USDT', order_id='508910412591677440')
+
+
+# enter_short = client.enter_market_order(
+#     pair='ETH-USDT',
+#     type_pos="SHORT",
+#     quantity=0.01
+# )
+
+#
+# exit_long = client.exit_market_order(
+#     pair='BTC-USDT',
+#     type_pos="LONG",
+#     quantity=0.001
+# )
+
+# exit_short = client.exit_market_order(
+#     pair='ETH-USDT',
+#     type_pos="SHORT",
+#     quantity=0.01
+# )
+#
+
+# place_limit_tp = client.place_limit_tp(
+#     pair='BTC-USDT',
+#     side="SELL",
+#     quantity=0.001,
+#     tp_price=21160
+# )
+
+# place_market_sl = client.place_market_sl(
+#     pair='BTC-USDT',
+#     side="SELL",
+#     quantity=0.001,
+#     sl_price=21140
+# )
+#
+
+# tp_order = client.get_order(pair='BTC-USDT', order_id='508910380719161349')
+# sl_order = client.get_order(pair='BTC-USDT', order_id='508910412591677440')
+
