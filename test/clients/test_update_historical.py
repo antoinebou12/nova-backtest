@@ -74,17 +74,17 @@ def test_update_historical():
         #  'start_ts': int(datetime(2021, 1, 1).timestamp() * 1000),
         #  'end_ts': int(datetime(2022, 4, 10).timestamp() * 1000)
         #  },
-        # {'exchange': 'coinbase',
+        # {'exchange': 'okx',
         #  'interval': '1h',
-        #  'pair': 'ETH-USD',
-        #  'start_ts': int(datetime(2021, 1, 1).timestamp() * 1000),
+        #  'pair': 'ETH-USDT',
+        #  'start_ts': int(datetime(2021, 9, 1).timestamp() * 1000),
         #  'end_ts': int(datetime(2022, 4, 10).timestamp() * 1000)
         #  },
-        {'exchange': 'okx',
+        {'exchange': 'kucoin',
          'interval': '1h',
-         'pair': 'ETH-USDT',
+         'pair': 'ETHUSDTM',
          'start_ts': int(datetime(2021, 9, 1).timestamp() * 1000),
-         'end_ts': int(datetime(2022, 4, 10).timestamp() * 1000)
+         'end_ts': int(datetime.now().timestamp() * 1000)
          },
     ]
 

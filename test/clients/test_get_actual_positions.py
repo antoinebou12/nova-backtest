@@ -12,7 +12,7 @@ def asserts_get_actual_positions(
         key=config(f"{exchange}TestAPIKey"),
         secret=config(f"{exchange}TestAPISecret"),
         passphrase=config(f"{exchange}TestPassPhrase"),
-        testnet=True
+        testnet=False
     )
 
     # Check the current positions
@@ -113,6 +113,13 @@ def test_get_actual_positions():
                 'ETH-USDT': {'type_pos': 'SHORT', 'quantity': 0.01}
             }
         },
+        {
+            'exchange': 'kucoin',
+            'info': {
+                'XBTUSDTM': {'type_pos': 'LONG', 'quantity': 0.001},
+                'ETHUSDTM': {'type_pos': 'SHORT', 'quantity': 0.01}
+            }
+        },
     ]
 
     for _test in all_tests:
@@ -124,6 +131,4 @@ def test_get_actual_positions():
 
 
 # test_get_actual_positions()
-
-
 

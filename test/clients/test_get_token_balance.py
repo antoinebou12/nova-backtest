@@ -42,11 +42,11 @@ def test_get_token_balance():
         #     'quote_asset': 'USD'
         # }
         # {
-        #     'exchange': 'coinbase',
+        #     'exchange': 'okx',
         #     'quote_asset': 'USDT'
         # },
         {
-            'exchange': 'okx',
+            'exchange': 'kucoin',
             'quote_asset': 'USDT'
         }
     ]

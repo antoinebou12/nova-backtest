@@ -58,11 +58,19 @@ def test_setup_account():
         #     'bankroll': 50,
         #     'max_down': 0.2
         # },
+        # {
+        #     'exchange': 'okx',
+        #     'quote_asset': 'USDT',
+        #     'leverage': 5,
+        #     'list_pairs': ['BTC-USDT', 'ETH-USDT'],
+        #     'bankroll': 50,
+        #     'max_down': 0.2
+        # },
         {
-            'exchange': 'okx',
+            'exchange': 'kucoin',
             'quote_asset': 'USDT',
             'leverage': 5,
-            'list_pairs': ['BTC-USDT', 'ETH-USDT'],
+            'list_pairs': ['XBTUSDTM', 'ETHUSDTM'],
             'bankroll': 50,
             'max_down': 0.2
         }
