@@ -12,7 +12,8 @@ import aiohttp
 from multiprocessing import Pool
 from datetime import datetime
 from typing import Union
-
+import random
+import string
 
 class Bybit:
 
@@ -378,13 +379,12 @@ class Bybit:
         date = datetime.strptime(data['updated_time'], '%Y-%m-%dT%H:%M:%SZ')
 
         _order_type = data['order_type']
-        if data['order_type'] == 'Limit' and data['order_status'] in ['Untriggered', 'Deactivated', 'Triggered']:
+        if data['order_type'] == 'Limit' and data['reduce_only'] and data['order_link_id'][:2] == 'TP':
             _order_type = 'TAKE_PROFIT'
         if data['order_type'] == 'Market' and data['order_status'] in ['Untriggered', 'Deactivated', 'Triggered']:
             _order_type = 'STOP_MARKET'
 
-        if data['order_status'] == 'PartiallyFilled':
-            data['order_status'] = 'PARTIALLY_FILLED'
+        data['order_status'] = 'PARTIALLY_FILLED' if data['order_status'] == 'PartiallyFilled' else data['order_status']
 
         _order_name = 'order_id' if 'order_id' in data.keys() else 'stop_order_id'
 
@@ -509,7 +509,8 @@ class Bybit:
             "close_on_trigger": True,
             "reduce_only": True,
             "recv_window": "5000",
-            "position_idx": 0
+            "position_idx": 0,
+            "order_link_id": 'TP_' + ''.join(random.choice(string.ascii_lowercase) for i in range(25))
         }
 
         response = self._send_request(
@@ -1267,4 +1268,3 @@ class Bybit:
             for info in all_info:
                 all_data.update(info)
             return all_data
-
