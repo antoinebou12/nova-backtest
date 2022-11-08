@@ -99,7 +99,7 @@ def test_enter_market_order():
 # test_enter_market_order()
 
 
-exchange = 'okx'
+exchange = 'kucoin'
 
 client = clients(
     exchange=exchange,
@@ -108,25 +108,8 @@ client = clients(
     passphrase=config(f"{exchange}TestPassPhrase"),
     testnet=False
 )
-#
-# enter_long = client.enter_market_order(
-#     pair='BTC-USDT',
-#     type_pos="LONG",
-#     quantity=0.001
-# )
 
-enter_short = client.enter_market_order(
-    pair='ETH-USDT',
-    type_pos="SHORT",
-    quantity=0.01
-)
 
-order_long = client.get_order(
-    pair="BTC-USDT",
-    order_id='508493081751207945'
-)
 
-# order_short = client.get_order(
-#     pair="ETH-USDT",
-#     order_id='508493081751207945'
-# )
+
+

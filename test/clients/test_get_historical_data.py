@@ -69,9 +69,15 @@ def test_get_historical_data():
         #  'start_ts': int(datetime(2022, 1, 1).timestamp() * 1000),
         #  'end_ts': int(datetime.today().timestamp() * 1000)
         #  },
-        {'exchange': 'okx',
+        # {'exchange': 'okx',
+        #  'interval': '1h',
+        #  'pair': 'BTC-USDT',
+        #  'start_ts': int(datetime(2022, 1, 1).timestamp() * 1000),
+        #  'end_ts': int(datetime.today().timestamp() * 1000)
+        #  },
+        {'exchange': 'kucoin',
          'interval': '1h',
-         'pair': 'BTC-USDT',
+         'pair': 'XBTUSDTM',
          'start_ts': int(datetime(2022, 1, 1).timestamp() * 1000),
          'end_ts': int(datetime.today().timestamp() * 1000)
          },
@@ -90,3 +96,25 @@ def test_get_historical_data():
 
 test_get_historical_data()
 
+
+# exchange = 'kucoin'
+#
+# client = clients(
+#     exchange=exchange,
+#     key=config(f"{exchange}TestAPIKey"),
+#     secret=config(f"{exchange}TestAPISecret"),
+# )
+#
+# df = client.get_historical_data(
+#     pair='XBTUSDTM',
+#     interval='1h',
+#     start_ts=int(datetime(2022, 1, 1).timestamp() * 1000),
+#     end_ts=int(datetime.today().timestamp() * 1000)
+# )
+#
+# df['open_time_difference'] = df['open_time'] - df['open_time'].shift(1)
+#
+# df['open_time_difference'].max()
+# df['open_time_difference'].min()
+#
+# df[df['open_time_difference'] == 10800000]

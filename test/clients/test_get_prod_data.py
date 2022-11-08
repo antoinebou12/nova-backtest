@@ -105,13 +105,13 @@ def test_get_prod_data():
         #     'nb_candles': 300,
         # },
         # {
-        #     'exchange': 'coinbase',
-        #     'list_pair': ['ETH-USD', 'BTC-USD', 'ADA-USD'],
+        #     'exchange': 'okx',
+        #     'list_pair': ['ETH-USDT', 'BTC-USDT', 'ADA-USDT'],
         #     'nb_candles': 300,
         # },
         {
-            'exchange': 'okx',
-            'list_pair': ['ETH-USDT', 'BTC-USDT', 'ADA-USDT'],
+            'exchange': 'kucoin',
+            'list_pair': ['XBTUSDTM', 'ETHUSDTM', 'LINKUSDTM'],
             'nb_candles': 300,
         },
 

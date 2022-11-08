@@ -30,7 +30,6 @@ def asserts_format_data(exchange: str, pair: str, interval: str, start_time: int
         historical=False
     )
 
-
     assert type(hist_data) == pd.DataFrame
     assert type(data_not_hist) == pd.DataFrame
 
@@ -85,12 +84,19 @@ def test_format_data():
         #     'start_time': int(datetime(2022, 9, 1).timestamp() * 1000),
         #     'end_time': int(datetime(2022, 9, 1).timestamp() * 1000)
         # },
+        # {
+        #     'exchange': 'okx',
+        #     'pair': 'BTC-USDT',
+        #     'interval': '1h',
+        #     'start_time': int(datetime(2022, 9, 1).timestamp() * 1000),
+        #     'end_time': int(datetime(2022, 9, 2).timestamp() * 1000)
+        # },
         {
-            'exchange': 'okx',
-            'pair': 'BTC-USDT',
+            'exchange': 'kucoin',
+            'pair': 'XBTUSDTM',
             'interval': '1h',
-            'start_time': int(datetime(2022, 9, 1).timestamp() * 1000),
-            'end_time': int(datetime(2022, 9, 2).timestamp() * 1000)
+            'start_time': int(datetime(2022, 11, 1).timestamp() * 1000),
+            'end_time': 0
         },
     ]
 
@@ -105,38 +111,5 @@ def test_format_data():
         )
 
 
-# test_format_data()
-
-
-
-import time
-from nova.utils.helpers import interval_to_milliseconds
-from nova.clients.clients import clients
-from decouple import config
-
-exchange = 'okx'
-
-client = clients(
-    exchange=exchange,
-    key=config(f"{exchange}TestAPIKey"),
-    secret=config(f"{exchange}TestAPISecret"),
-)
-
-interval = '1h'
-pair = 'BTC-USDT'
-
-ts_seconds = interval_to_milliseconds(interval)
-
-end_time = int(1000 * time.time())
-start_time = int(end_time - (client.historical_limit) * ts_seconds)
-
-_bar = interval if 'm' in interval else interval.upper()
-
-_endpoint = f"/api/v5/market/history-candles?instId={pair}&bar={_bar}&before={start_time}&after={end_time}"
-
-
-response = client._send_request(
-    end_point=_endpoint,
-    request_type="GET",
-)
+test_format_data()
 
