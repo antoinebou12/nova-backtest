@@ -637,7 +637,7 @@ class Bybit:
                 order_id=order_id
             )
 
-            if not order_data['status'] in ['NEW', 'FILLED', 'PARTIALLY_FILLED']:
+            if order_data['status'] in ['NEW', 'FILLED', 'PARTIALLY_FILLED']:
                 return True, order_data
 
         print(f'Failed to get order: {order_id}')
@@ -1267,6 +1267,4 @@ class Bybit:
             for info in all_info:
                 all_data.update(info)
             return all_data
-
-
 
