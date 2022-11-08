@@ -627,8 +627,8 @@ class Bybit:
 
         t_start = time.time()
 
-        # Keep trying to get order status during 30s
-        while time.time() - t_start < 12:
+        # Keep trying to get order status during 10s
+        while time.time() - t_start < 10:
 
             time.sleep(1)
 
@@ -637,7 +637,7 @@ class Bybit:
                 order_id=order_id
             )
 
-            if order_data['status'] == 'NEW':
+            if not order_data['status'] in ['NEW', 'FILLED', 'PARTIALLY_FILLED']:
                 return True, order_data
 
         print(f'Failed to get order: {order_id}')
@@ -1267,3 +1267,14 @@ class Bybit:
             for info in all_info:
                 all_data.update(info)
             return all_data
+
+from decouple import config
+self = Bybit(key=config('BYBIT_KEY'), secret=config('BYBIT_SECRET'), testnet=False)
+
+
+order = self.get_order(pair='MATICUSDT', order_id='f9c342fb-1a84-4604-b331-456b76d3bc4e')
+
+
+
+
+
