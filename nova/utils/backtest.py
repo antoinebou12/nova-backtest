@@ -518,11 +518,13 @@ class BackTest:
         self.df_pos[f'PL_amt_realized_{pair}'] = self.df_pos['PL_amt_realized'].fillna(0)
         self.df_pos[f'total_profit_{pair}'] = self.df_pos[f'PL_amt_realized_{pair}'].cumsum()
 
-        condition_long_pl = (self.df_pos[f'in_position_{pair}'] == 0) & (
-                self.df_pos[f'in_position_{pair}'].shift(1) == 1)
+        condition_long_pl = ((self.df_pos[f'in_position_{pair}'] == 0) & (
+                self.df_pos[f'in_position_{pair}'].shift(1) == 1)) | ((
+                self.df_pos[f'in_position_{pair}'] == 1) & condition_exit)
 
         condition_short_pl = (self.df_pos[f'in_position_{pair}'] == 0) & (
-                self.df_pos[f'in_position_{pair}'].shift(1) == -1)
+                self.df_pos[f'in_position_{pair}'].shift(1) == -1) | ((
+                self.df_pos[f'in_position_{pair}'] == -1) & condition_exit)
 
         # add the long profit and short profit for plot
         self.df_pos['Long_PL_amt_realized'] = np.where(condition_long_pl, self.df_pos[f'PL_amt_realized_{pair}'], 0)
