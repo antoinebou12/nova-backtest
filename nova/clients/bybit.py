@@ -1268,13 +1268,5 @@ class Bybit:
                 all_data.update(info)
             return all_data
 
-from decouple import config
-self = Bybit(key=config('BYBIT_KEY'), secret=config('BYBIT_SECRET'), testnet=False)
-
-
-order = self.get_order(pair='MATICUSDT', order_id='f9c342fb-1a84-4604-b331-456b76d3bc4e')
-
-
-
 
 
