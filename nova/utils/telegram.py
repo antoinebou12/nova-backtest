@@ -35,9 +35,10 @@ class TelegramBOT:
         bot_message = f"Total realized Pnl = {round(pnl, 2)} $"
         self.telegram_bot_send_text(bot_message=bot_message)
 
-    def telegram_exit_position(self, pair: str, pnl: float):
+    def telegram_exit_position(self, pair: str, pnl: float, exit_price: float):
 
         bot_message = f"Exit {pair} position \U0001F645" \
+                      f"\nExit price = {exit_price} $" \
                       f"\nProfit = {pnl} $"
 
         self.telegram_bot_send_text(bot_message=bot_message)
