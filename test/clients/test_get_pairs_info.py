@@ -40,10 +40,7 @@ def asserts_get_pairs_info(exchange: str):
 
 def test_get_pairs_info():
 
-    # for exchange in ['binance', 'bybit', 'ftx', 'okx', 'kucoin']:
-    #     asserts_get_pairs_info(exchange=exchange)
-
-    for exchange in ['okx']:
+    for exchange in ['binance', 'bybit', 'ftx', 'okx', 'kucoin']:
         asserts_get_pairs_info(exchange=exchange)
 
 

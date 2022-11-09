@@ -90,9 +90,6 @@ class FTX:
 
         for pair in data:
 
-            if pair['name'] == 'ADA-PERP':
-                print(pair)
-
             if 'PERP' in pair['name']:
 
                 _name = pair['name']
