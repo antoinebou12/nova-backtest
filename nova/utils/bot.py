@@ -110,19 +110,15 @@ class Bot(TelegramBOT):
         Returns:
              the position amount from the balance that will be used for the transaction
         """
-        max_in_pos = self.bankroll
         if self.geometric_size:
-            pos_size = self.position_size * (self.bankroll + self.unrealizedPNL)
-            max_in_pos += self.unrealizedPNL
+            pos_size = self.position_size * (self.bankroll + self.realizedPNL)
+            print(f"Position size usd {pos_size}")
+
         else:
             pos_size = self.position_size * self.bankroll
 
-        available = self.client.get_token_balance(quote_asset=self.quote_asset)
 
-        if (available < pos_size / self.leverage) or (max_in_pos - self.current_positions_amt - pos_size < 0):
-            return 0
-        else:
-            return pos_size
+        return pos_size
 
     def entering_positions(self):
         """
@@ -153,17 +149,24 @@ class Bot(TelegramBOT):
 
             if entry_signal['action'] != 0:
 
+                size_usd = self.get_position_size()
+                available = self.client.get_token_balance(quote_asset=self.quote_asset)
+                actual_price = self.client.get_last_price(pair=pair)['latest_price']
+
                 _action = {'pair': pair}
                 _action['type_pos'] = 'LONG' if entry_signal['action'] == 1 else 'SHORT'
 
-                actual_price = self.client.get_last_price(pair=pair)['latest_price']
-                _action['quantity'] = (self.bankroll * self.position_size) / actual_price
+                _action['quantity'] = size_usd / actual_price
                 _action['sl_price'] = entry_signal['sl_price']
                 _action['tp_price'] = entry_signal['tp_price']
-                print(f"Enter in position {_action['type_pos']} on {pair}")
 
-                all_entries.append(_action)
-                remaining_position -= 1
+                print(f"{_action['type_pos']} signel on {pair}")
+
+                if available < (1.01 * size_usd / self.leverage):
+                    print('Not enough balance to enter in position')
+                else:
+                    all_entries.append(_action)
+                    remaining_position -= 1
 
         completed_entries = self.client.enter_limit_then_market(
             orders=all_entries,
@@ -448,13 +451,6 @@ class Bot(TelegramBOT):
 
         print(f'Nova L@bs {self.bot_name} starting')
 
-        if self.telegram_notification:
-            self.telegram_bot_starting(
-                bot_name=self.bot_name,
-                exchange=self.exchange
-            )
-            print(f'Telegram Messages', "\U00002705")
-
         # start account
         print(f'Setting up account', "\U000023F3", end="\r")
         self.client.setup_account(
@@ -465,6 +461,14 @@ class Bot(TelegramBOT):
             list_pairs=self.list_pair
         )
         print(f'Account set', "\U00002705")
+
+        # send telegram message
+        if self.telegram_notification:
+            self.telegram_bot_starting(
+                bot_name=self.bot_name,
+                exchange=self.exchange
+            )
+            print(f'Telegram Messages', "\U00002705")
 
         # get historical price (and volume) evolution
         print(f'Fetching historical data', "\U000023F3", end="\r")
