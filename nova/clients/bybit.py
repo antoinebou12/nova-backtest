@@ -15,6 +15,7 @@ from typing import Union
 import random
 import string
 
+
 class Bybit:
 
     def __init__(self,
@@ -75,7 +76,7 @@ class Bybit:
             the timestamp in milliseconds
         """
         ts = self._send_request(
-            end_point=f"/public/time",
+            end_point=f"/v2/public/time",
             request_type="GET"
         )['time_now']
         return int(float(ts) * 1000)
@@ -132,11 +133,20 @@ class Bybit:
             if tradable:
                 pairs_info[pair['name']] = {}
                 pairs_info[pair['name']]['quote_asset'] = pair['quote_currency']
-                pairs_info[pair['name']]['pricePrecision'] = pair['price_scale']
-                pairs_info[pair['name']]['maxQuantity'] = pair['lot_size_filter']['max_trading_qty']
-                pairs_info[pair['name']]['minQuantity'] = pair['lot_size_filter']['min_trading_qty']
+
+                pairs_info[pair['name']]['maxQuantity'] = float(pair['lot_size_filter']['max_trading_qty'])
+                pairs_info[pair['name']]['minQuantity'] = float(pair['lot_size_filter']['min_trading_qty'])
+
                 pairs_info[pair['name']]['tick_size'] = float(pair['price_filter']['tick_size'])
-                pairs_info[pair['name']]['quantityPrecision'] = str(pair['lot_size_filter']['qty_step'])[::-1].find('.')
+                pairs_info[pair['name']]['pricePrecision'] = pair['price_scale']
+
+                pairs_info[pair['name']]['step_size'] = float(pair['lot_size_filter']['qty_step'])
+
+                if float(pair['lot_size_filter']['qty_step']) < 1:
+                    step_size = str(pair['lot_size_filter']['qty_step'])[::-1].find('.')
+                    pairs_info[pair['name']]['quantityPrecision'] = int(step_size)
+                else:
+                    pairs_info[pair['name']]['quantityPrecision'] = 1
 
         return pairs_info
 
@@ -385,6 +395,7 @@ class Bybit:
             _order_type = 'STOP_MARKET'
 
         data['order_status'] = 'PARTIALLY_FILLED' if data['order_status'] == 'PartiallyFilled' else data['order_status']
+        data['order_status'] = 'CANCELED' if data['order_status'] == 'Cancelled' else data['order_status']
 
         _order_name = 'order_id' if 'order_id' in data.keys() else 'stop_order_id'
 
@@ -510,7 +521,7 @@ class Bybit:
             "reduce_only": True,
             "recv_window": "5000",
             "position_idx": 0,
-            "order_link_id": 'TP_' + ''.join(random.choice(string.ascii_lowercase) for i in range(25))
+            "order_link_id": 'TP_' + ''.join(random.choice(string.ascii_lowercase) for i in range(33))
         }
 
         response = self._send_request(
@@ -533,7 +544,7 @@ class Bybit:
             "order_type": 'Market',
             "qty": float(round(quantity, self.pairs_info[pair]['quantityPrecision'])),
             "base_price": float(round(sl_price * multi, self.pairs_info[pair]['pricePrecision'])),
-            "stop_px":  float(round(sl_price, self.pairs_info[pair]['pricePrecision'])),
+            "stop_px": float(round(sl_price, self.pairs_info[pair]['pricePrecision'])),
             "trigger_by": "LastPrice",
             "time_in_force": 'GoodTillCancel',
             "close_on_trigger": True,
@@ -640,6 +651,10 @@ class Bybit:
 
             if order_data['status'] in ['NEW', 'FILLED', 'PARTIALLY_FILLED']:
                 return True, order_data
+
+            elif order_data['status'] in ['REJECTED', 'CANCELED']:
+                print(f'Limit order rejected or canceled: {order_id}')
+                return False, None
 
         print(f'Failed to get order: {order_id}')
 
@@ -796,14 +811,6 @@ class Bybit:
             signed=True
         )
 
-        if response['ret_code'] == 0:
-            print(f'Order id : {order_id} has been Cancelled')
-        else:
-            if response['ret_code'] == 20001:
-                print(f'Order id : {order_id} has been already Cancelled')
-            else:
-                print(response['ret_msg'])
-
     def _set_margin_type(self,
                          pair: str,
                          margin: str = 'ISOLATED',
@@ -913,8 +920,8 @@ class Bybit:
         # Check with the account has enough bk
         balance = self.get_token_balance(quote_asset=quote_asset)
 
-        assert balance >= bankroll * (1 + max_down), f"The account has only {round(balance, 2)} {quote_asset}. " \
-                                                     f"{round(bankroll * (1 + max_down), 2)} {quote_asset} is required"
+        assert balance >= bankroll, f"The account has only {round(balance, 2)} {quote_asset}. " \
+                                    f"{round(bankroll, 2)} {quote_asset} is required"
 
     def get_actual_positions(self, pairs: Union[list, str]) -> dict:
 

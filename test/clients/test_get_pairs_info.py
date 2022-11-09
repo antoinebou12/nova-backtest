@@ -18,11 +18,22 @@ def asserts_get_pairs_info(exchange: str):
         assert type(key) == str
         assert type(value) == dict
 
-        assert 'pricePrecision' in list(value.keys())
-        assert 'quote_asset' in list(value.keys())
-        assert 'quantityPrecision' in list(value.keys())
-        assert 'maxQuantity' in list(value.keys())
-        assert 'minQuantity' in list(value.keys())
+        assert isinstance(value['quote_asset'], str)
+
+        assert isinstance(value['maxQuantity'], float)
+        assert value['maxQuantity'] > 0
+        assert isinstance(value['minQuantity'], float)
+        assert value['minQuantity'] > 0
+        assert isinstance(value['tick_size'], float)
+        assert value['tick_size'] > 0
+        assert isinstance(value['pricePrecision'], int)
+        assert value['pricePrecision'] >= 0
+        assert isinstance(value['step_size'], float)
+        assert value['step_size'] > 0
+        assert isinstance(value['quantityPrecision'], int)
+        assert value['quantityPrecision'] >= 0
+
+    print(f'Completed for {len(data)} pairs')
 
     print(f"Test get_pairs_info for {exchange.upper()} successful")
 
@@ -34,3 +45,4 @@ def test_get_pairs_info():
 
 
 test_get_pairs_info()
+

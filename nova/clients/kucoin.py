@@ -93,17 +93,32 @@ class Kucoin:
 
             if pair['status'] == "Open":
 
-                _min_quantity = pair['lotSize'] * pair['multiplier']
-                precision_quantity = str(_min_quantity)[::-1].find('.') if _min_quantity < 1 else 0
+                if pair['multiplier'] > 0:
+                    step_size = pair['lotSize'] * pair['multiplier']
+                else:
+                    step_size = pair['lotSize']
 
                 pairs_info[pair['symbol']] = {}
                 pairs_info[pair['symbol']]['quote_asset'] = pair['quoteCurrency']
-                pairs_info[pair['symbol']]['maxQuantity'] = pair['maxOrderQty']
-                pairs_info[pair['symbol']]['minQuantity'] = _min_quantity
-                pairs_info[pair['symbol']]['tick_size'] = pair['tickSize']
-                pairs_info[pair['symbol']]['pricePrecision'] = str(pair['tickSize'])[::-1].find('.')
-                pairs_info[pair['symbol']]['quantityPrecision'] = precision_quantity
-                pairs_info[pair['symbol']]['earliest_time'] = pair['firstOpenDate']
+
+                price_increment = np.format_float_positional(pair["tickSize"], trim='-')
+
+                pairs_info[pair['symbol']]['maxQuantity'] = float(pair['maxOrderQty'])
+                pairs_info[pair['symbol']]['minQuantity'] = float(step_size)
+
+                pairs_info[pair['symbol']]['tick_size'] = float(pair['tickSize'])
+
+                if float(pair['tickSize']) < 1:
+                    pairs_info[pair['symbol']]['pricePrecision'] = int(str(price_increment)[::-1].find('.'))
+                else:
+                    pairs_info[pair['symbol']]['pricePrecision'] = 1
+
+                pairs_info[pair['symbol']]['step_size'] = float(step_size)
+                if step_size < 1:
+                    pairs_info[pair['symbol']]['quantityPrecision'] = int(str(step_size)[::-1].find('.'))
+                else:
+                    pairs_info[pair['symbol']]['quantityPrecision'] = 1
+
                 pairs_info[pair['symbol']]['multiplier'] = pair['multiplier']
 
         return pairs_info

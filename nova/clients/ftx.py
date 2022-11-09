@@ -91,13 +91,29 @@ class FTX:
         for pair in data:
 
             if 'PERP' in pair['name']:
-                pairs_info[pair['name']] = {}
-                pairs_info[pair['name']]['quote_asset'] = 'USD'
-                pairs_info[pair['name']]['pricePrecision'] = str(pair['priceIncrement'])[::-1].find('.')
-                pairs_info[pair['name']]['maxQuantity'] = pair['largeOrderThreshold']
-                pairs_info[pair['name']]['minQuantity'] = pair['sizeIncrement']
-                pairs_info[pair['name']]['tick_size'] = pair['priceIncrement']
-                pairs_info[pair['name']]['quantityPrecision'] = str(pair['sizeIncrement'])[::-1].find('.')
+
+                _name = pair['name']
+
+                pairs_info[_name] = {}
+                pairs_info[_name]['quote_asset'] = 'USD'
+
+                size_increment = np.format_float_positional(pair["sizeIncrement"], trim='-')
+                price_increment = np.format_float_positional(pair["priceIncrement"], trim='-')
+
+                pairs_info[_name]['maxQuantity'] = float(pair['largeOrderThreshold'])
+                pairs_info[_name]['minQuantity'] = float(size_increment)
+
+                pairs_info[_name]['tick_size'] = float(price_increment)
+                if float(pair['priceIncrement']) < 1:
+                    pairs_info[_name]['pricePrecision'] = int(str(price_increment)[::-1].find('.'))
+                else:
+                    pairs_info[_name]['pricePrecision'] = 1
+
+                pairs_info[_name]['step_size'] = float(size_increment)
+                if float(pair['sizeIncrement']) < 1:
+                    pairs_info[_name]['quantityPrecision'] = int(str(size_increment)[::-1].find('.'))
+                else:
+                    pairs_info[_name]['quantityPrecision'] = 1
 
         return pairs_info
 

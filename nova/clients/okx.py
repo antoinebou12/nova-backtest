@@ -7,6 +7,7 @@ from nova.utils.helpers import interval_to_milliseconds
 import time
 from nova.utils.constant import DATA_FORMATING
 import pandas as pd
+import numpy as np
 import aiohttp
 import asyncio
 from typing import Union
@@ -93,12 +94,19 @@ class OKX:
 
                 pairs_info[pair['instId']] = {}
                 pairs_info[pair['instId']]['quote_asset'] = pair['quoteCcy']
+
+                size_increment = np.format_float_positional(float(pair["lotSz"]), trim='-')
+                price_increment = np.format_float_positional(float(pair["tickSz"]), trim='-')
+
                 pairs_info[pair['instId']]['maxQuantity'] = float('inf')
                 pairs_info[pair['instId']]['minQuantity'] = float(pair['minSz'])
-                pairs_info[pair['instId']]['tick_size'] = float(pair['tickSz'])
-                pairs_info[pair['instId']]['pricePrecision'] = int(str(pair['tickSz'])[::-1].find('.'))
 
-                qty_precision = int(str(pair['minSz'])[::-1].find('.')) if float(pair['minSz']) > 1 else 0
+                price_precision = int(str(price_increment)[::-1].find('.')) if float(pair['tickSz']) < 1 else 1
+                pairs_info[pair['instId']]['tick_size'] = float(pair['tickSz'])
+                pairs_info[pair['instId']]['pricePrecision'] = price_precision
+
+                qty_precision = int(str(size_increment)[::-1].find('.')) if float(pair['minSz']) < 1 else 1
+                pairs_info[pair['instId']]['step_size'] = float(pair['minSz'])
                 pairs_info[pair['instId']]['quantityPrecision'] = qty_precision
 
                 pairs_info[pair['instId']]['earliest_timestamp'] = int(pair['listTime'])
