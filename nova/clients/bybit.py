@@ -15,6 +15,7 @@ from typing import Union
 import random
 import string
 
+
 class Bybit:
 
     def __init__(self,
@@ -543,7 +544,7 @@ class Bybit:
             "order_type": 'Market',
             "qty": float(round(quantity, self.pairs_info[pair]['quantityPrecision'])),
             "base_price": float(round(sl_price * multi, self.pairs_info[pair]['pricePrecision'])),
-            "stop_px":  float(round(sl_price, self.pairs_info[pair]['pricePrecision'])),
+            "stop_px": float(round(sl_price, self.pairs_info[pair]['pricePrecision'])),
             "trigger_by": "LastPrice",
             "time_in_force": 'GoodTillCancel',
             "close_on_trigger": True,
@@ -919,8 +920,8 @@ class Bybit:
         # Check with the account has enough bk
         balance = self.get_token_balance(quote_asset=quote_asset)
 
-        assert balance >= bankroll * (1 + max_down), f"The account has only {round(balance, 2)} {quote_asset}. " \
-                                                     f"{round(bankroll * (1 + max_down), 2)} {quote_asset} is required"
+        assert balance >= bankroll, f"The account has only {round(balance, 2)} {quote_asset}. " \
+                                    f"{round(bankroll, 2)} {quote_asset} is required"
 
     def get_actual_positions(self, pairs: Union[list, str]) -> dict:
 
