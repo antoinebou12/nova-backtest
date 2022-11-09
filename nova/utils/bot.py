@@ -112,7 +112,6 @@ class Bot(TelegramBOT):
         """
         if self.geometric_size:
             pos_size = self.position_size * (self.bankroll + self.realizedPNL)
-            print(f"Position size usd {pos_size}")
 
         else:
             pos_size = self.position_size * self.bankroll
@@ -160,10 +159,10 @@ class Bot(TelegramBOT):
                 _action['sl_price'] = entry_signal['sl_price']
                 _action['tp_price'] = entry_signal['tp_price']
 
-                print(f"{_action['type_pos']} signel on {pair}")
+                print(f"{_action['type_pos']} signal on {pair}")
 
                 if available < (1.01 * size_usd / self.leverage):
-                    print('Not enough balance to enter in position')
+                    print(f'Not enough balance to enter in position on {pair}')
                 else:
                     all_entries.append(_action)
                     remaining_position -= 1
