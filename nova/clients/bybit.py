@@ -394,6 +394,7 @@ class Bybit:
             _order_type = 'STOP_MARKET'
 
         data['order_status'] = 'PARTIALLY_FILLED' if data['order_status'] == 'PartiallyFilled' else data['order_status']
+        data['order_status'] = 'CANCELED' if data['order_status'] == 'Cancelled' else data['order_status']
 
         _order_name = 'order_id' if 'order_id' in data.keys() else 'stop_order_id'
 
@@ -519,7 +520,7 @@ class Bybit:
             "reduce_only": True,
             "recv_window": "5000",
             "position_idx": 0,
-            "order_link_id": 'TP_' + ''.join(random.choice(string.ascii_lowercase) for i in range(25))
+            "order_link_id": 'TP_' + ''.join(random.choice(string.ascii_lowercase) for i in range(33))
         }
 
         response = self._send_request(
@@ -649,6 +650,10 @@ class Bybit:
 
             if order_data['status'] in ['NEW', 'FILLED', 'PARTIALLY_FILLED']:
                 return True, order_data
+
+            elif order_data['status'] in ['REJECTED', 'CANCELED']:
+                print(f'Limit order rejected or canceled: {order_id}')
+                return False, None
 
         print(f'Failed to get order: {order_id}')
 
@@ -804,14 +809,6 @@ class Bybit:
                     "order_id": order_id},
             signed=True
         )
-
-        if response['ret_code'] == 0:
-            print(f'Order id : {order_id} has been Cancelled')
-        else:
-            if response['ret_code'] == 20001:
-                print(f'Order id : {order_id} has been already Cancelled')
-            else:
-                print(response['ret_msg'])
 
     def _set_margin_type(self,
                          pair: str,
