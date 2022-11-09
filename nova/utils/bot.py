@@ -307,7 +307,8 @@ class Bot(TelegramBOT):
             if self.telegram_notification:
                 self.telegram_exit_position(
                     pair=_pair_,
-                    pnl=self.position_opened[_pair_]['realized_pnl']
+                    pnl=self.position_opened[_pair_]['realized_pnl'],
+                    exit_price=self.position_opened[_pair_]['exit_price']
                 )
 
             # 8 - update bot state (PnL; current_positions_amt; etc) + delete position
