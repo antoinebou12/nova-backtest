@@ -292,12 +292,6 @@ class Binance:
             if x['asset'] == "BNB" and float(x["availableBalance"]) == 0:
                 print(f"You can save Tx Fees if you transfer BNB in your Future Account")
 
-    def get_exchange_info(self):
-        return self._send_request(
-            end_point=f"/fapi/v1/exchangeInfo",
-            request_type="GET",
-        )
-
     def change_position_mode(self, dual_position: str):
         response = self._send_request(
             end_point=f"/fapi/v1/positionSide/dual",
@@ -331,29 +325,42 @@ class Binance:
             a dict where the key is equal to the pair symbol and the value is a dict that contains
             the following information "quantityPrecision" and "quantityPrecision".
         """
-        info = self.get_exchange_info()
+        info = self._send_request(
+            end_point=f"/fapi/v1/exchangeInfo",
+            request_type="GET",
+        )
 
         output = {}
 
         for symbol in info['symbols']:
             if symbol['contractType'] == 'PERPETUAL':
-                output[symbol['symbol']] = {}
 
-                output[symbol['symbol']]['quote_asset'] = symbol['quoteAsset']
+                pair = symbol['symbol']
+
+                output[pair] = {}
+                output[pair]['quote_asset'] = symbol['quoteAsset']
 
                 for fil in symbol['filters']:
                     if fil['filterType'] == 'PRICE_FILTER':
-                        tick_size = str(float(fil['tickSize']))
-                        output[symbol['symbol']]['pricePrecision'] = min(tick_size[::-1].find('.'),
-                                                                         symbol['pricePrecision'])
-                    if fil['filterType'] == 'LOT_SIZE':
-                        step_size = str(float(fil['stepSize']))
-                        output[symbol['symbol']]['quantityPrecision'] = min(step_size[::-1].find('.'),
-                                                                            symbol['quantityPrecision'])
-                        output[symbol['symbol']]['minQuantity'] = float(fil['minQty'])
+                        output[pair]['tick_size'] = float(fil['tickSize'])
 
-                    if fil['filterType'] == 'MARKET_LOT_SIZE':
-                        output[symbol['symbol']]['maxQuantity'] = float(fil['maxQty'])
+                        if output[pair]['tick_size'] < 1:
+                            tick_size = int(str(fil['tickSize'])[::-1].find('.'))
+                            output[pair]['pricePrecision'] = int(min(tick_size, symbol['pricePrecision']))
+                        else:
+                            output[pair]['pricePrecision'] = int(symbol['pricePrecision'])
+
+                    if fil['filterType'] == 'LOT_SIZE':
+                        output[pair]['step_size'] = float(fil['stepSize'])
+
+                        if output[pair]['step_size'] < 1:
+                            step_size = int(str(fil['stepSize'])[::-1].find('.'))
+                            output[pair]['quantityPrecision'] = int(min(step_size, symbol['quantityPrecision']))
+                        else:
+                            output[pair]['quantityPrecision'] = int(symbol['quantityPrecision'])
+
+                        output[pair]['minQuantity'] = float(fil['minQty'])
+                        output[pair]['maxQuantity'] = float(fil['maxQty'])
 
         return output
 

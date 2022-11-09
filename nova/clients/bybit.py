@@ -75,7 +75,7 @@ class Bybit:
             the timestamp in milliseconds
         """
         ts = self._send_request(
-            end_point=f"/public/time",
+            end_point=f"/v2/public/time",
             request_type="GET"
         )['time_now']
         return int(float(ts) * 1000)
@@ -132,11 +132,20 @@ class Bybit:
             if tradable:
                 pairs_info[pair['name']] = {}
                 pairs_info[pair['name']]['quote_asset'] = pair['quote_currency']
-                pairs_info[pair['name']]['pricePrecision'] = pair['price_scale']
-                pairs_info[pair['name']]['maxQuantity'] = pair['lot_size_filter']['max_trading_qty']
-                pairs_info[pair['name']]['minQuantity'] = pair['lot_size_filter']['min_trading_qty']
+
+                pairs_info[pair['name']]['maxQuantity'] = float(pair['lot_size_filter']['max_trading_qty'])
+                pairs_info[pair['name']]['minQuantity'] = float(pair['lot_size_filter']['min_trading_qty'])
+
                 pairs_info[pair['name']]['tick_size'] = float(pair['price_filter']['tick_size'])
-                pairs_info[pair['name']]['quantityPrecision'] = str(pair['lot_size_filter']['qty_step'])[::-1].find('.')
+                pairs_info[pair['name']]['pricePrecision'] = pair['price_scale']
+
+                pairs_info[pair['name']]['step_size'] = float(pair['lot_size_filter']['qty_step'])
+
+                if float(pair['lot_size_filter']['qty_step']) < 1:
+                    step_size = str(pair['lot_size_filter']['qty_step'])[::-1].find('.')
+                    pairs_info[pair['name']]['quantityPrecision'] = int(step_size)
+                else:
+                    pairs_info[pair['name']]['quantityPrecision'] = 1
 
         return pairs_info
 

@@ -69,13 +69,13 @@ def test_cancel_order():
             'exchange': 'binance',
             'pair': 'XRPUSDT',
             'type_pos': 'LONG',
-            'quantity': 200
+            'quantity': 10
         },
         {
             'exchange': 'bybit',
             'pair': 'BTCUSDT',
             'type_pos': 'SHORT',
-            'quantity': 0.1
+            'quantity': 0.001
         },
 
     ]
@@ -90,50 +90,4 @@ def test_cancel_order():
 
 
 # test_cancel_order()
-
-
-
-
-
-exchange = 'ftx'
-
-client = clients(
-    exchange=exchange,
-    key=config(f"{exchange}TestAPIKey"),
-    secret=config(f"{exchange}TestAPISecret"),
-    testnet=True
-)
-
-# market_data = client.enter_market_order(
-#     pair="ETH-PERP",
-#     type_pos="LONG",
-#     quantity=0.01
-# )
-
-
-tp_data = client.place_limit_tp(
-    pair="ETH-PERP",
-    side="SELL",
-    quantity=0.01,
-    tp_price=1650
-)
-
-
-sl_data = client.place_market_sl(
-    pair="ETH-PERP",
-    side="SELL",
-    quantity=0.01,
-    sl_price=1400
-)
-
-
-client.cancel_order(
-    pair="ETH-PERP",
-    order_id=tp_data['order_id']
-)
-
-client.cancel_order(
-    pair="ETH-PERP",
-    order_id=sl_data['order_id']
-)
 

@@ -1,6 +1,7 @@
 from nova.clients.clients import clients
 from decouple import config
 import time
+from datetime import datetime
 
 
 def asserts_get_server_time(exchange: str):
@@ -21,7 +22,10 @@ def asserts_get_server_time(exchange: str):
     assert (server_time > min_dif) and (server_time < max_dif)
     assert len(str(server_time)) == 13
 
-    print(f"Test get_server_time for {exchange.upper()} successful")
+    server_date = datetime.utcfromtimestamp(server_time//1000)
+
+    print(f"Date: {server_date} -- Timestamp (ms): {server_time}")
+    print(f"Test get_server_time for {exchange.upper()} SUCCESSFUL")
 
 
 def test_get_server_time():
