@@ -32,7 +32,8 @@ class RandomStrategy(Bot):
                  entry_l_prob: float = 0.2,
                  entry_s_prob: float = 0.2,
                  exit_prob: float = 0.2,
-                 tp_sl_delta: float = 0.005
+                 tp_sl_delta: float = 0.005,
+                 geometric_size: bool = False
                  ):
 
         Bot.__init__(self,
@@ -51,7 +52,7 @@ class RandomStrategy(Bot):
                      bankroll=bankroll,
                      leverage=leverage,
 
-                     geometric_size=False,
+                     geometric_size=geometric_size,
                      max_pos=max_pos,
                      max_down=max_down,
                      max_hold=1 / 10,
