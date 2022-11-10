@@ -134,6 +134,8 @@ class Bot(TelegramBOT):
 
         actual_pos = self.client.get_actual_positions(pairs=self.list_pair)
 
+        size_usd = self.get_position_size()
+
         for pair in self.list_pair:
 
             if remaining_position == 0:
@@ -148,8 +150,6 @@ class Bot(TelegramBOT):
 
             if entry_signal['action'] != 0:
 
-                size_usd = self.get_position_size()
-                available = self.client.get_token_balance(quote_asset=self.quote_asset)
                 actual_price = self.client.get_last_price(pair=pair)['latest_price']
 
                 _action = {'pair': pair}
@@ -161,11 +161,14 @@ class Bot(TelegramBOT):
 
                 print(f"{_action['type_pos']} signal on {pair}")
 
-                if available < (1.01 * size_usd / self.leverage):
-                    print(f'Not enough balance to enter in position on {pair}')
-                else:
-                    all_entries.append(_action)
-                    remaining_position -= 1
+                all_entries.append(_action)
+                remaining_position -= 1
+
+        # Check available balance and drop some entries if not enough cash to perform all entries
+        available_usd = self.client.get_token_balance(quote_asset=self.quote_asset)
+        while available_usd < 1.01 * len(all_entries) * (size_usd / self.leverage):
+            # Not enough balance to enter all positions => delete 1 signal
+            all_entries.pop(0)
 
         completed_entries = self.client.enter_limit_then_market(
             orders=all_entries,
