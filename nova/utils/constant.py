@@ -67,7 +67,7 @@ DATA_FORMATING = {
     },
     "okx": {
         "columns": [
-            'open_time', 'open', 'high', 'low', 'close', 'volume', 'volume_quote'
+            'open_time', 'open', 'high', 'low', 'close', 'volume', 'volume_quote', 'volume_ccy_quote'
         ],
         "num_var": [
             'open', 'high', 'low', 'close', 'volume', 'volume_quote'

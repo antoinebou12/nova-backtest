@@ -44,6 +44,7 @@ def asserts_format_data(exchange: str, pair: str, interval: str, start_time: int
 
     assert 'next_open' not in list(data_not_hist.columns)
 
+    # verify the open and closing time
     for df in [data_not_hist, hist_data]:
         assert len(str(df.loc[0, 'open_time'])) == 13
         assert len(str(df.loc[0, 'close_time'])) == 13
@@ -56,41 +57,34 @@ def asserts_format_data(exchange: str, pair: str, interval: str, start_time: int
 def test_format_data():
 
     all_tests = [
-        # {
-        #     'exchange': 'binance',
-        #     'pair': 'BTCUSDT',
-        #     'interval': '1d',
-        #     'start_time': 1631210861000,
-        #     'end_time': 1662746861000
-        # },
-        # {
-        #     'exchange': 'bybit',
-        #     'pair': 'BTCUSDT',
-        #     'interval': '1d',
-        #     'start_time': 1631210861000,
-        #     'end_time': 1662746861000
-        # },
-        # {
-        #     'exchange': 'ftx',
-        #     'pair': 'BTC-PERP',
-        #     'interval': '4h',
-        #     'start_time': 1563580800000,
-        #     'end_time': 1593580800000
-        # },
-        # {
-        #     'exchange': 'coinbase',
-        #     'pair': 'BTC-USD',
-        #     'interval': '1h',
-        #     'start_time': int(datetime(2022, 9, 1).timestamp() * 1000),
-        #     'end_time': int(datetime(2022, 9, 1).timestamp() * 1000)
-        # },
-        # {
-        #     'exchange': 'okx',
-        #     'pair': 'BTC-USDT',
-        #     'interval': '1h',
-        #     'start_time': int(datetime(2022, 9, 1).timestamp() * 1000),
-        #     'end_time': int(datetime(2022, 9, 2).timestamp() * 1000)
-        # },
+        {
+            'exchange': 'binance',
+            'pair': 'BTCUSDT',
+            'interval': '1d',
+            'start_time': int(datetime(2020, 9, 1).timestamp() * 1000),
+            'end_time': int(datetime(2022, 9, 1).timestamp() * 1000)
+        },
+        {
+            'exchange': 'bybit',
+            'pair': 'BTCUSDT',
+            'interval': '1d',
+            'start_time': int(datetime(2020, 9, 1).timestamp() * 1000),
+            'end_time': int(datetime(2022, 9, 1).timestamp() * 1000)
+        },
+        {
+            'exchange': 'ftx',
+            'pair': 'BTC-PERP',
+            'interval': '4h',
+            'start_time': int(datetime(2020, 9, 1).timestamp() * 1000),
+            'end_time': int(datetime(2022, 9, 1).timestamp() * 1000)
+        },
+        {
+            'exchange': 'okx',
+            'pair': 'BTC-USDT',
+            'interval': '1h',
+            'start_time': int(datetime(2022, 9, 1).timestamp() * 1000),
+            'end_time': int(datetime(2022, 9, 2).timestamp() * 1000)
+        },
         {
             'exchange': 'kucoin',
             'pair': 'XBTUSDTM',
