@@ -161,7 +161,7 @@ class Bot(TelegramBOT):
 
                 print(f"{_action['type_pos']} signal on {pair}")
 
-                if available < (1.01 * size_usd / self.leverage):
+                if available < (1.05 * size_usd / self.leverage):
                     print(f'Not enough balance to enter in position on {pair}')
                 else:
                     all_entries.append(_action)
