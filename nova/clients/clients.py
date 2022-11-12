@@ -9,6 +9,7 @@ from nova.clients.gemini import Gemini
 from nova.clients.gate import Gate
 from nova.clients.cryptocom import Cryptocom
 from nova.clients.bybit import Bybit
+from nova.clients.oanda import Oanda
 
 
 def clients(
@@ -41,5 +42,7 @@ def clients(
         return Cryptocom(key=key, secret=secret, testnet=testnet)
     elif exchange == 'bybit':
         return Bybit(key=key, secret=secret, testnet=testnet)
+    elif exchange == 'oanda':
+        return Oanda(key=key, secret=secret, testnet=testnet)
 
 

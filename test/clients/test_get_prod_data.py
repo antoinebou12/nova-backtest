@@ -8,7 +8,8 @@ from decouple import config
 def asserts_get_prod_data(
         exchange: str,
         list_pair: list,
-        nb_candles: int
+        nb_candles: int,
+        testnet: bool
 ):
 
     client = clients(
@@ -16,6 +17,7 @@ def asserts_get_prod_data(
         key=config(f"{exchange}TestAPIKey"),
         secret=config(f"{exchange}TestAPISecret"),
         passphrase=config(f"{exchange}TestPassPhrase"),
+        testnet=testnet
     )
 
     print('First Fetching Data')
@@ -88,6 +90,7 @@ def test_get_prod_data():
             'exchange': 'binance',
             'list_pair': ['BTCUSDT', 'ETHUSDT', 'ADAUSDT', 'TLMUSDT', 'DOGEUSDT', 'LTCUSDT', 'ETCUSDT'],
             'nb_candles': 400,
+            'testnet': False
         },
         {
             'exchange': 'bybit',
@@ -95,21 +98,31 @@ def test_get_prod_data():
                           'APEUSDT', 'LTCUSDT', 'AVAXUSDT', 'SHIB1000USDT', 'MATICUSDT', 'DOGEUSDT', 'DOTUSDT',
                           'ETCUSDT', 'NEARUSDT', 'LINKUSDT', 'GALAUSDT', 'XTZUSDT', 'AXSUSDT'],
             'nb_candles': 400,
+            'testnet': False
         },
         {
             'exchange': 'ftx',
             'list_pair': ['BTC-PERP', 'ETH-PERP', 'XRP-PERP', 'FTT-PERP', 'SOL-PERP'],
             'nb_candles': 400,
+            'testnet': False
         },
         {
             'exchange': 'okx',
             'list_pair': ['ETH-USDT', 'BTC-USDT', 'ADA-USDT', 'SOL-USDT', 'DOGE-USDT'],
             'nb_candles': 300,
+            'testnet': False
         },
         {
             'exchange': 'kucoin',
             'list_pair': ['XBTUSDTM', 'ETHUSDTM', 'LINKUSDTM', 'SOLUSDTM'],
             'nb_candles': 300,
+            'testnet': False
+        },
+        {
+            'exchange': 'oanda',
+            'list_pair': ['EUR_USD', 'AUD_NZD', 'EUR_JPY'],
+            'nb_candles': 400,
+            'testnet': True
         },
     ]
 
@@ -118,7 +131,8 @@ def test_get_prod_data():
         asserts_get_prod_data(
             exchange=_test['exchange'],
             list_pair=_test['list_pair'],
-            nb_candles=_test['nb_candles']
+            nb_candles=_test['nb_candles'],
+            testnet=_test['testnet']
         )
 
 
