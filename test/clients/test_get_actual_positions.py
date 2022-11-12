@@ -4,7 +4,8 @@ from decouple import config
 
 def asserts_get_actual_positions(
         exchange: str,
-        info: dict
+        info: dict,
+        is_exact_quantity: tuple
 ):
 
     client = clients(
@@ -53,7 +54,11 @@ def asserts_get_actual_positions(
         positions_ = client.get_actual_positions(pairs=info.keys())
 
         assert len(positions_.keys()) == nb_pos
-        assert positions_[pair]['position_size'] == value["quantity"]
+        if is_exact_quantity[0]:
+            assert positions_[pair]['position_size'] == value["quantity"]
+        else:
+            assert positions_[pair]['position_size'] > value["quantity"] * (1 - is_exact_quantity[1])
+            assert positions_[pair]['position_size'] < value["quantity"] * (1 + is_exact_quantity[1])
         assert positions_[pair]['type_pos'] == value['type_pos']
 
         assert isinstance(positions_[pair]['entry_price'], float)
@@ -88,37 +93,45 @@ def test_get_actual_positions():
         {
             'exchange': 'binance',
             'info': {
-                'BTCUSDT': {'type_pos': 'LONG', 'quantity': 0.01},
-                'ETHUSDT': {'type_pos': 'SHORT', 'quantity': 0.1}
-            }
+                'BTCUSDT': {'type_pos': 'LONG', 'quantity': 0.001},
+                'ETHUSDT': {'type_pos': 'SHORT', 'quantity': 0.01},
+                'DOGEUSDT': {'type_pos': 'SHORT', 'quantity': 200}
+            },
+            'is_exact_quantity': (True, None)
         },
-        {
-            'exchange': 'bybit',
-            'info': {
-                'BTCUSDT': {'type_pos': 'LONG', 'quantity': 0.01},
-                'ETHUSDT': {'type_pos': 'SHORT', 'quantity': 0.1}
-            }
-        },
-        {
-            'exchange': 'ftx',
-            'info': {
-                'BTC-PERP': {'type_pos': 'LONG', 'quantity': 0.001},
-                'ETH-PERP': {'type_pos': 'SHORT', 'quantity': 0.01}
-            }
-        },
+        # {
+        #     'exchange': 'bybit',
+        #     'info': {
+        #         'BTCUSDT': {'type_pos': 'LONG', 'quantity': 0.001},
+        #         'ETHUSDT': {'type_pos': 'SHORT', 'quantity': 0.01}
+        #     },
+        #     'is_exact_quantity': (True, None)
+        # },
+        # {
+        #     'exchange': 'ftx',
+        #     'info': {
+        #         'BTC-PERP': {'type_pos': 'LONG', 'quantity': 0.001},
+        #         'ETH-PERP': {'type_pos': 'SHORT', 'quantity': 0.01}
+        #     },
+        #     'is_exact_quantity': (True, None)
+        # },
         {
             'exchange': 'okx',
             'info': {
                 'BTC-USDT': {'type_pos': 'LONG', 'quantity': 0.001},
-                'ETH-USDT': {'type_pos': 'SHORT', 'quantity': 0.01}
-            }
+                'ETH-USDT': {'type_pos': 'SHORT', 'quantity': 0.01},
+                'DOGE-USDT': {'type_pos': 'SHORT', 'quantity': 200}
+            },
+            'is_exact_quantity': (False, 0.01)
         },
         {
             'exchange': 'kucoin',
             'info': {
                 'XBTUSDTM': {'type_pos': 'LONG', 'quantity': 0.001},
-                'ETHUSDTM': {'type_pos': 'SHORT', 'quantity': 0.01}
-            }
+                'ETHUSDTM': {'type_pos': 'SHORT', 'quantity': 0.01},
+                'DOGEUSDTM': {'type_pos': 'SHORT', 'quantity': 200}
+            },
+            'is_exact_quantity': (True, None)
         },
     ]
 
@@ -126,9 +139,9 @@ def test_get_actual_positions():
 
         asserts_get_actual_positions(
             exchange=_test['exchange'],
-            info=_test['info']
+            info=_test['info'],
+            is_exact_quantity=_test['is_exact_quantity']
         )
 
 
-# test_get_actual_positions()
-
+test_get_actual_positions()

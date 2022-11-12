@@ -643,39 +643,3 @@ class Oanda:
             print(f'{pair} order_id {order_id} --> is Cancelled')
 
 
-
-from decouple import config
-
-client = Oanda(
-    key=config(f"oandaTestAPIKey"),
-    secret=config(f"oandaTestAPISecret"),
-    testnet=True
-)
-
-
-data = client.get_actual_positions(pairs=['EUR_USD', 'AUD_USD'])
-
-
-data = client.enter_market_order(
-    pair='GBP_USD',
-    type_pos='SHORT',
-    quantity=1000
-)
-
-# data = client._get_candles(
-#         pair='EUR_USD',
-#         interval='15m',
-#         start_time=1666268570000,
-#         end_time=1668132570000
-# )
-#
-# df = client._format_data(data['candles'])
-
-# earliest = client.get_historical_data(
-#     pair='EUR_USD',
-#     interval='15m',
-#     start_ts=int(datetime(2019, 1, 1).timestamp() * 1000),
-#     end_ts=int(datetime(2022, 1, 1).timestamp() * 1000),
-#
-# )
-

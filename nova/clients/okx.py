@@ -628,12 +628,6 @@ class OKX:
             },
             signed=True
         )
-        print({
-                "instId": pair,
-                "ordId": order_id,
-            })
-
-        print(data)
 
         if data['msg'] == 'Order does not exist':
 
@@ -668,7 +662,6 @@ class OKX:
                     print('No Order Found')
                     return {}
 
-        print(data)
         return self._format_order(data=data['data'][0])
 
     @staticmethod
@@ -812,8 +805,6 @@ class OKX:
             params=_params,
             signed=True
         )['data'][0]
-
-        print(data)
 
         return self.get_order(pair=pair, order_id=data['algoId'])
 
