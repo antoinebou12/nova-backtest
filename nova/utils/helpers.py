@@ -156,5 +156,12 @@ def compute_time_difference(
         return (end_time_s - start_time_s) / (3600 * 24)
 
 
+def interval_to_oanda_granularity(interval: str):
+
+    _number = interval[:-1]
+    _letter = interval[-1].upper()
+
+    return f"{_letter}{_number}" if _letter in ['M', 'H'] else f'{_letter}'
 
 
+interval_to_oanda_granularity('15m')

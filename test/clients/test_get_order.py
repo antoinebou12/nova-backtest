@@ -187,3 +187,12 @@ def test_get_order():
 
 test_get_order()
 
+
+exchange = "oanda"
+
+client = clients(
+    exchange=exchange,
+    key=config(f"{exchange}TestAPIKey"),
+    secret=config(f"{exchange}TestAPISecret"),
+    testnet=True
+)

@@ -1,6 +1,7 @@
 from nova.clients.clients import clients
 from decouple import config
 import time
+from datetime import datetime
 
 
 def assert_get_earliest_timestamp(exchange: str, pair: str, interval: str):
@@ -16,38 +17,41 @@ def assert_get_earliest_timestamp(exchange: str, pair: str, interval: str):
         interval=interval
     )
 
+    server_date = datetime.utcfromtimestamp(data//1000)
+
     assert len(str(data)) == 13
     assert data < int(time.time() * 1000)
 
+    print(f"Earliest Date: {server_date} -- Timestamp (ms): {data}")
     print(f"Test _get_earliest_timestamp for {exchange.upper()} successful")
 
 
 def test_get_earliest_timestamp():
 
     all_test = [
-        # {
-        #     'exchange': 'binance',
-        #     'pair': 'BTCUSDT',
-        #     'interval': '1d'
-        # },
-        # {
-        #     'exchange': 'bybit',
-        #     'pair': 'BTCUSDT',
-        #     'interval': '1d'
-        # },
-        # {
-        #     'exchange': 'ftx',
-        #     'pair': 'BTC-PERP',
-        #     'interval': '1d'
-        # },
-        # {
-        #     'exchange': 'coinbase',
-        #     'pair': 'BTC-USD',
-        #     'interval': '1d'
-        # },
+        {
+            'exchange': 'binance',
+            'pair': 'BTCUSDT',
+            'interval': '1d'
+        },
+        {
+            'exchange': 'bybit',
+            'pair': 'BTCUSDT',
+            'interval': '1d'
+        },
+        {
+            'exchange': 'ftx',
+            'pair': 'BTC-PERP',
+            'interval': '1d'
+        },
         {
             'exchange': 'okx',
             'pair': 'BTC-USDT',
+            'interval': '1d'
+        },
+        {
+            'exchange': 'kucoin',
+            'pair': 'XNTUSDTM',
             'interval': '1d'
         }
     ]

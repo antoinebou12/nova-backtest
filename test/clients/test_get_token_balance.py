@@ -29,10 +29,10 @@ def assert_get_token_balance(
 
 def test_get_token_balance():
     all_tests = [
-        # {
-        #     'exchange': 'binance',
-        #     'quote_asset': 'USDT'
-        # },
+        {
+            'exchange': 'binance',
+            'quote_asset': 'USDT'
+        },
         # {
         #     'exchange': 'bybit',
         #     'quote_asset': 'USDT'
@@ -40,11 +40,11 @@ def test_get_token_balance():
         # {
         #     'exchange': 'ftx',
         #     'quote_asset': 'USD'
-        # }
-        # {
-        #     'exchange': 'okx',
-        #     'quote_asset': 'USDT'
         # },
+        {
+            'exchange': 'okx',
+            'quote_asset': 'USDT'
+        },
         {
             'exchange': 'kucoin',
             'quote_asset': 'USDT'
