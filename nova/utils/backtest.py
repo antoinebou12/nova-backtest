@@ -803,6 +803,10 @@ class BackTest:
                 axis=1
             )
 
+        if not self.geometric_sizes:
+            self.df_all_pairs_positions['PL_amt_realized'] = self.df_all_pairs_positions['position_size'] * \
+                                                             self.df_all_pairs_positions['PL_prc_realized']
+
         self.df_all_pairs_positions['cumulative_profit'] = self.df_all_pairs_positions['PL_amt_realized'].cumsum()
 
         self.df_all_pairs_positions['bankroll_size'] = self.df_all_pairs_positions['cumulative_profit'] + self.start_bk
