@@ -777,20 +777,19 @@ class BackTest:
                 exit_times += real_entry_t['exit_time'].tolist()
 
             elif nb_signals != 0:
-
                 actual_nb_pos += nb_signals
 
                 # Append exit times
                 exit_times += entry_t['exit_time'].tolist()
 
-                # Compute position size
-                if self.geometric_sizes:
-                    self.df_all_pairs_positions = self.df_all_pairs_positions.apply(
-                        lambda row: self.compute_geometric_sizes(row,
-                                                                 t,
-                                                                 current_bk),
-                        axis=1
-                    )
+            # Compute position size
+            if self.geometric_sizes and (nb_signals > 0):
+                self.df_all_pairs_positions = self.df_all_pairs_positions.apply(
+                    lambda row: self.compute_geometric_sizes(row,
+                                                             t,
+                                                             current_bk),
+                    axis=1
+                )
 
             t = t + timedelta(hours=hours_step)
 
