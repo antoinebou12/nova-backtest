@@ -160,9 +160,11 @@ class Bot(TelegramBOT):
 
                 _action['sl_price'] = entry_signal['sl_price']
                 # Compute liquidation price and place SL just before liquid price
-                liquid_price = (1 - direction * (1 / self.leverage - 0.01)) * actual_price
+                tick_size = self.client.pairs_info[pair]['tick_size']
+                liquid_price = (1 - direction * (1 / self.leverage)) * actual_price
+                farther_price = liquid_price + direction * (10 * tick_size)
                 _action['sl_price'] = abs(max(direction * _action['sl_price'],
-                                              direction * liquid_price))
+                                              direction * farther_price))
 
                 _action['tp_price'] = entry_signal['tp_price']
 
