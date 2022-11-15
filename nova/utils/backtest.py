@@ -35,7 +35,6 @@ class BackTest:
                  leverage: int = 2,
                  save_all_pairs_charts: bool = False,
                  start_bk: float = 10000,
-                 slippage: bool = False,
                  update_data: bool = False,
                  plot_exposure: bool = True,
                  pass_phrase: str = ""):
@@ -46,16 +45,6 @@ class BackTest:
         self.positions_size = leverage / max_pos
         self.geometric_sizes = geometric_sizes
         self.leverage = leverage
-
-        self.slippage = slippage
-
-        if self.slippage:
-            from tensorflow.keras import models
-            directory_fin = __file__.replace("utils/backtest.py", "models")
-
-            self.scaler_x = joblib.load(f'{directory_fin}/slippage/scaler_x.gz')
-            self.scaler_y = joblib.load(f'{directory_fin}/slippage/scaler_y.gz')
-            self.model = models.load_model(f'{directory_fin}/slippage/model_slippage_3.h5')
 
         self.client = clients(exchange=exchange)
 
@@ -408,67 +397,6 @@ class BackTest:
 
         return df
 
-    def compute_slippage(self, pair: str):
-        """
-
-        Args:
-            pair:
-
-        Returns:
-
-        """
-
-        # todo: compute slippage
-
-        if f'hist_{pair}_1m.csv' in os.listdir(f'{os.getcwd()}/database/{self.exchange}'):
-            df_1m = pd.read_csv(f'database/{self.exchange}/hist_{pair}_1m.csv')
-        else:
-            print(f'DOWNLOAD {pair} 1m')
-            klines = self.client.get_historical(
-                pair=pair,
-                interval='1m',
-                start_time=self.start,
-                end_time=self.end
-            )
-
-            df_1m = klines.dropna()
-
-            df_1m.to_csv(f'database/{self.exchange}/hist_{pair}_1m.csv', index=False)
-
-            df_1m = df_1m.set_index('timestamp')
-
-        df_1m['open_time'] = pd.to_datetime(df_1m.open_time)
-        df_1m['last_24h_volume'] = df_1m['quote_asset_volume'].rolling(min_periods=1, window=60 * 24).sum()
-
-        all_pos_pair = self.df_all_positions[pair]
-        all_pos_pair['entry_time_1m'] = all_pos_pair['entry_time'] - timedelta(minutes=1)
-
-        all_pos_pair = pd.merge(
-            all_pos_pair,
-            df_1m,
-            how='left',
-            left_on='entry_time_1m',
-            right_on='open_time')
-
-        all_pos_pair = all_pos_pair.dropna(subset=['volume'])
-
-        features_data = all_pos_pair[
-            ['entry_point', 'quote_asset_volume', 'taker_quote_volume', 'nb_of_trades', 'last_24h_volume']]
-        features_data['side'] = np.where(features_data['entry_point'] == -1, 0, 1)
-        features_data = features_data[
-            ['side', 'quote_asset_volume', 'taker_quote_volume', 'nb_of_trades', 'last_24h_volume']]
-
-        xs = self.scaler_x.transform(features_data)
-
-        y_pred = self.model.predict(xs)
-        y_pred = self.scaler_y.inverse_transform(y_pred)
-
-        y_pred = pd.DataFrame(y_pred, columns=['slip_5k', 'slipp_10k'])
-
-        all_pos_pair = all_pos_pair.merge(y_pred, left_index=True, right_index=True)
-
-        self.df_all_positions[pair] = all_pos_pair
-
     def create_timeseries(self, df: pd.DataFrame, pair: str):
         """
         Args:
@@ -664,33 +592,6 @@ class BackTest:
         stat_perf = pd.DataFrame([perf_dict], columns=list(perf_dict.keys()))
         self.df_pairs_stat = pd.concat([self.df_pairs_stat, stat_perf])
 
-    def compute_slippage_effect(self,
-                                row):
-        """
-        Used only if we backtest with geometric profits: the size of our positions increase (or decrease) as the
-        bankroll increase (or decrease). The proportion of each position size compared to the size of the bankroll
-        is self.position_size.
-        Ex: if you have a bankroll of 2500$ and self.positions_size equals to 1/10, each positions would have a size
-        of 250$.
-        """
-
-        # if self.geometric_sizes:
-        #     row['position_size'] = min(self.actual_bk * self.positions_size, 30000)
-
-        if self.slippage:
-            if row['position_size'] < 5000:
-                slipp = (row['slip_5k'] / 5000) * row['position_size']
-            else:
-                slipp = row['slip_5k'] + ((row['slipp_10k'] - row['slip_5k']) / 5000) * (row['position_size'] - 5000)
-
-            row['PL_prc_realized'] = row['PL_prc_realized'] - abs(2 * slipp) / 100
-
-            row['PL_amt_realized'] = row['PL_prc_realized'] * row['position_size']
-
-        # self.actual_bk += row['PL_amt_realized']
-
-        return row
-
     def compute_geometric_sizes(self,
                                 row,
                                 t,
@@ -777,31 +678,25 @@ class BackTest:
                 exit_times += real_entry_t['exit_time'].tolist()
 
             elif nb_signals != 0:
-
                 actual_nb_pos += nb_signals
 
                 # Append exit times
                 exit_times += entry_t['exit_time'].tolist()
 
-                # Compute position size
-                if self.geometric_sizes:
-                    self.df_all_pairs_positions = self.df_all_pairs_positions.apply(
-                        lambda row: self.compute_geometric_sizes(row,
-                                                                 t,
-                                                                 current_bk),
-                        axis=1
-                    )
+            # Compute position size
+            if self.geometric_sizes and (nb_signals > 0):
+                self.df_all_pairs_positions = self.df_all_pairs_positions.apply(
+                    lambda row: self.compute_geometric_sizes(row,
+                                                             t,
+                                                             current_bk),
+                    axis=1
+                )
 
             t = t + timedelta(hours=hours_step)
 
-        #  Compute real positions sizes and profits
-        if self.slippage:
-            self.df_all_pairs_positions = self.df_all_pairs_positions.dropna(subset=['slip_5k', 'slipp_10k'])
-
-            self.df_all_pairs_positions = self.df_all_pairs_positions.apply(
-                lambda row: self.compute_slippage_effect(row),
-                axis=1
-            )
+        if not self.geometric_sizes:
+            self.df_all_pairs_positions['PL_amt_realized'] = self.df_all_pairs_positions['position_size'] * \
+                                                             self.df_all_pairs_positions['PL_prc_realized']
 
         self.df_all_pairs_positions['cumulative_profit'] = self.df_all_pairs_positions['PL_amt_realized'].cumsum()
 
@@ -1205,9 +1100,6 @@ class BackTest:
             df = self.create_all_exit_point(df)
 
             self.create_position_df(df, pair)
-
-            if self.slippage:
-                self.compute_slippage(pair)
 
             print(f'BACK TESTING {pair}', "\U00002705")
 
