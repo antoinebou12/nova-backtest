@@ -1,12 +1,12 @@
 from decouple import config
-from nova.utils.strategy import RandomStrategy
+from nova.random.bot import RANDOM_BOT
 
 
 def asserts_get_position_size(exchange: str,
                               quote_asset: str,
                               list_pair: list):
 
-    bot = RandomStrategy(
+    bot = RANDOM_BOT(
         exchange=exchange,
         key=config(f"{exchange}TestAPIKey"),
         secret=config(f"{exchange}TestAPISecret"),

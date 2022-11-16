@@ -5,7 +5,7 @@ from nova.utils.bot import Bot
 from typing import Union
 
 
-class RandomStrategy(Bot):
+class RANDOM_BOT(Bot):
     """
     Note: The random strategy will always be used in the testing environment since
     there is no volume.
@@ -106,10 +106,11 @@ class RandomStrategy(Bot):
 
         del df
 
-        return {'action': action, 'tp_price': take_profit_price,
-                'sl_price': stop_loss_price}
+        return {
+            'action': action, 
+            'tp_price': take_profit_price,
+            'sl_price': stop_loss_price
+        }
 
-    def exit_signals_prod(self,
-                          pair: str,
-                          type_pos: str):
+    def exit_signals_prod(self, pair: str, type_pos: str):
         return random.random() > 1 - self.exit_probability

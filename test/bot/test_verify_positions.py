@@ -1,5 +1,5 @@
 from decouple import config
-from nova.utils.strategy import RandomStrategy
+from nova.random.bot import RANDOM_BOT
 from nova.utils.helpers import is_opening_candle
 import asyncio
 from multiprocessing import set_start_method
@@ -12,7 +12,7 @@ def asserts_verify_positions(
         list_pair: list
 ):
 
-    bot = RandomStrategy(
+    bot = RANDOM_BOT(
         exchange=exchange,
         key=config(f"{exchange}TestAPIKey"),
         secret=config(f"{exchange}TestAPISecret"),
