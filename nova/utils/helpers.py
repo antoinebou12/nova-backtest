@@ -4,6 +4,34 @@ import time
 import re
 
 
+def convert_max_holding_to_candle_nb(interval: str, holding_hour: int) -> int:
+    """
+    Return:
+        the number maximum of candle we can hold a position
+    """
+    multi = int(float(re.findall(r'\d+', interval)[0]))
+    if 'm' in interval:
+        return int(60 / multi * holding_hour)
+    if 'h' in interval:
+        return int(1 / multi * holding_hour)
+    if 'd' in interval:
+        return int(1 / (multi * 24) * holding_hour)
+
+
+def get_timedelta_unit(interval: str) -> timedelta:
+    """
+    Returns: a tuple that contains the unit and the multiplier needed to extract the data
+    """
+    multi = int(float(re.findall(r'\d+', interval)[0]))
+
+    if 'm' in interval:
+        return timedelta(minutes=multi)
+    elif 'h' in interval:
+        return timedelta(hours=multi)
+    elif 'd' in interval:
+        return timedelta(days=multi)
+
+
 def milliseconds_to_interval(interval_ms: int) -> str:
     if interval_ms < 3600000:
         return str(int(60/(3600000/interval_ms))) + 'T'
@@ -162,6 +190,3 @@ def interval_to_oanda_granularity(interval: str):
     _letter = interval[-1].upper()
 
     return f"{_letter}{_number}" if _letter in ['M', 'H'] else f'{_letter}'
-
-
-interval_to_oanda_granularity('15m')
