@@ -155,7 +155,7 @@ class BackTest:
             df = pd.read_csv(f'database/{self.exchange}/hist_{pair}_{self.candle}.csv')
 
             if self.update_data and (df['open_time'].max() < 1000 * (int(time.time()) - self.time_step.seconds)):
-                print("Update data: ", pair)
+                print(f'UPDATING HISTORICAL DATA {pair}', "\U000023F3", end="\r")
                 df = self.client.update_historical(
                     pair=pair,
                     interval=self.candle,
@@ -164,7 +164,12 @@ class BackTest:
 
                 df.to_csv(f'database/{self.exchange}/hist_{pair}_{self.candle}.csv', index=False)
 
+                print(f'HISTORICAL DATA {pair} UPDATED', "\U00002705")
+
         else:
+
+            print(f'DOWNLOADING HISTORICAL DATA {pair}', "\U000023F3", end="\r")
+
             std_start = datetime(2019, 1, 1)
 
             df = self.client.get_historical_data(
@@ -175,6 +180,8 @@ class BackTest:
             )
 
             df.to_csv(f'database/{self.exchange}/hist_{pair}_{self.candle}.csv', index=False)
+
+            print(f'HISTORICAL DATA {pair} DOWNLOADED', "\U00002705")
 
         for var in ['open_time', 'close_time']:
             df[var] = pd.to_datetime(df[var], unit='ms')
