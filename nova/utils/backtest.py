@@ -3,14 +3,15 @@ import pandas as pd
 from datetime import datetime, timedelta
 import matplotlib.pyplot as plt
 import os
+import re
 import random
 import math
 import json
+import joblib
 import time
 
 from nova.utils.constant import VAR_NEEDED_FOR_POSITION
 from nova.clients.clients import clients
-from nova.utils.helpers import get_timedelta_unit, convert_max_holding_to_candle_nb
 
 from warnings import simplefilter
 
@@ -36,9 +37,7 @@ class BackTest:
                  start_bk: float = 10000,
                  update_data: bool = False,
                  plot_exposure: bool = True,
-                 key: str = "",
-                 secret: str = "",
-                 passphrase: str = ""):
+                 pass_phrase: str = ""):
 
         self.exchange = exchange
         self.quote_asset = quote_asset
@@ -47,7 +46,7 @@ class BackTest:
         self.geometric_sizes = geometric_sizes
         self.leverage = leverage
 
-        self.client = clients(exchange=exchange, key=key, secret=secret, passphrase=passphrase)
+        self.client = clients(exchange=exchange)
 
         self.start_bk = start_bk
         self.actual_bk = self.start_bk
@@ -63,7 +62,7 @@ class BackTest:
         self.save_all_pairs_charts = save_all_pairs_charts
         self.update_data = update_data
         self.plot_exposure = plot_exposure
-        self.time_step = get_timedelta_unit(interval=candle)
+        self.time_step = self.get_timedelta_unit()
 
         # Get the list of pairs on which we perform the back test
         if type(self.list_pair).__name__ == 'str':
@@ -88,6 +87,7 @@ class BackTest:
         self.df_pos = pd.DataFrame()
 
         frequency = self.candle.replace('m', 'min') if 'm' in self.candle else self.candle
+
         self.df_pos['open_time'] = pd.date_range(start=start, end=end, freq=frequency)
         for var in ['all_positions', 'total_profit_all_pairs', 'long_profit_all_pairs', 'short_profit_all_pairs',
                     'wallet_exposure']:
@@ -105,6 +105,19 @@ class BackTest:
     def exit_strategy(self, df: pd.DataFrame) -> pd.DataFrame:
         pass
 
+    def get_timedelta_unit(self) -> timedelta:
+        """
+        Returns: a tuple that contains the unit and the multiplier needed to extract the data
+        """
+        multi = int(float(re.findall(r'\d+', self.candle)[0]))
+
+        if 'm' in self.candle:
+            return timedelta(minutes=multi)
+        elif 'h' in self.candle:
+            return timedelta(hours=multi)
+        elif 'd' in self.candle:
+            return timedelta(days=multi)
+
     def get_list_pair(self) -> list:
         """
         Note:
@@ -114,12 +127,17 @@ class BackTest:
         """
         info = self.client.get_pairs_info()
         list_pairs = []
+
         for pair, info in info.items():
+
             if info['quote_asset'] == self.quote_asset:
                 list_pairs.append(pair)
+
         return list_pairs
 
-    def get_all_historical_data(self, pair: str) -> pd.DataFrame:
+    def get_all_historical_data(self,
+                                pair: str,
+                                ) -> pd.DataFrame:
         """
         Note:
             We automatically request data from January 1st 2019 for the first query.
@@ -166,13 +184,27 @@ class BackTest:
             print(f'HISTORICAL DATA {pair} DOWNLOADED', "\U00002705")
 
         for var in ['open_time', 'close_time']:
-
             df[var] = pd.to_datetime(df[var], unit='ms')
+
+        # assert not (False in (df['open_time'] == df['open_time'].shift(1) + self.time_step).values[1:]), \
+        #     'Missing or duplicated row in historical DataFrame'
 
         df = df.set_index('open_time', drop=False)
 
         return df[(df.open_time >= self.start) & (df.open_time <= self.end)]
 
+    def convert_max_holding_to_candle_nb(self) -> int:
+        """
+        Return:
+            the number maximum of candle we can hold a position
+        """
+        multi = int(float(re.findall(r'\d+', self.candle)[0]))
+        if 'm' in self.candle:
+            return int(60 / multi * self.max_holding)
+        if 'h' in self.candle:
+            return int(1 / multi * self.max_holding)
+        if 'd' in self.candle:
+            return int(1 / (multi * 24) * self.max_holding)
 
     @staticmethod
     def create_entry_prices_times(df: pd.DataFrame) -> pd.DataFrame:
@@ -236,7 +268,7 @@ class BackTest:
 
         # creating all leading variables
 
-        nb_candle = convert_max_holding_to_candle_nb(interval=self.candle, holding_hour=self.max_holding)
+        nb_candle = self.convert_max_holding_to_candle_nb()
 
         for i in range(1, nb_candle + 1):
             condition_sl_long = (df.low.shift(-i) <= df.all_sl) & (df.all_entry_point == 1)
@@ -603,7 +635,7 @@ class BackTest:
         self.df_all_pairs_positions = self.df_all_pairs_positions.dropna(subset=['exit_price', 'PL_amt_realized'])
 
         # Shift all TP or SL exit time bc it is based on the open time
-        hours_step = self.max_holding / convert_max_holding_to_candle_nb(interval=self.candle, holding_hour=self.max_holding)
+        hours_step = self.max_holding / self.convert_max_holding_to_candle_nb()
 
         #
         self.df_all_pairs_positions['exit_time'] = np.where(
@@ -1040,6 +1072,28 @@ class BackTest:
                     'exit_signal'], "Exit signal is not the same, make sure you don't have access to futures " \
                                     "information when computing exit signals"
 
+    @staticmethod
+    def verify_tp_sl(df):
+        """
+        This method verify if all the TP and SL are valid:
+            - For short positions, SL must be higher than entry price and
+        TP must be lower.
+            - For long positions, SL must be lower than entry price and
+        TP must be higher
+
+        Args:
+            df: DataFrame
+
+        """
+
+        sl_valid = np.where(df['all_entry_point'] == 1, df['all_sl'] < df['close'],
+                              np.where(df['all_entry_point'] == -1, df['all_sl'] > df['close'], True))
+        tp_valid = np.where(df['all_entry_point'] == 1, df['all_tp'] > df['close'],
+                              np.where(df['all_entry_point'] == -1, df['all_tp'] < df['close'], True))
+
+        assert sl_valid.sum() == len(sl_valid), "Some SL are not valid. Please replace your SL correctly."
+        assert tp_valid.sum() == len(tp_valid), "Some TP are not valid. Please replace your TP correctly."
+
     def run_backtest(self, save: bool = True):
 
         """
@@ -1063,6 +1117,8 @@ class BackTest:
             df = self.build_indicators(df)
 
             df = self.entry_strategy(df)
+
+            self.verify_tp_sl(df)
 
             df = self.create_entry_prices_times(df)
 
