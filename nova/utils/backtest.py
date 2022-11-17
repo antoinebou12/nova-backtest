@@ -1040,6 +1040,28 @@ class BackTest:
                     'exit_signal'], "Exit signal is not the same, make sure you don't have access to futures " \
                                     "information when computing exit signals"
 
+    @staticmethod
+    def verify_tp_sl(df):
+        """
+        This method verify if all the TP and SL are valid:
+            - For short positions, SL must be higher than entry price and
+        TP must be lower.
+            - For long positions, SL must be lower than entry price and
+        TP must be higher
+
+        Args:
+            df: DataFrame
+
+        """
+
+        sl_valid = np.where(df['all_entry_point'] == 1, df['all_sl'] < df['close'],
+                              np.where(df['all_entry_point'] == -1, df['all_sl'] > df['close'], True))
+        tp_valid = np.where(df['all_entry_point'] == 1, df['all_tp'] > df['close'],
+                              np.where(df['all_entry_point'] == -1, df['all_tp'] < df['close'], True))
+
+        assert sl_valid.sum() == len(sl_valid), "Some SL are not valid. Please replace your SL correctly."
+        assert tp_valid.sum() == len(tp_valid), "Some TP are not valid. Please replace your TP correctly."
+
     def run_backtest(self, save: bool = True):
 
         """
@@ -1063,6 +1085,8 @@ class BackTest:
             df = self.build_indicators(df)
 
             df = self.entry_strategy(df)
+
+            self.verify_tp_sl(df)
 
             df = self.create_entry_prices_times(df)
 
