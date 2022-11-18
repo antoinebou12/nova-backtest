@@ -28,7 +28,7 @@ class BackTest:
                  end: datetime,
                  fees: float,
                  max_pos: int,
-                 max_holding: int,
+                 max_holding: float,
                  quote_asset: str = 'USDT',
                  geometric_sizes: bool = False,
                  leverage: int = 2,
