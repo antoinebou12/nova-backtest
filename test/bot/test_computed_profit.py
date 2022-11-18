@@ -1,5 +1,5 @@
 from decouple import config
-from nova.utils.strategy import RandomStrategy
+from nova.random.bot import RANDOM_BOT
 from nova.utils.helpers import is_opening_candle
 import time
 import asyncio
@@ -11,7 +11,7 @@ set_start_method('fork')
 def asserts_computed_profit(exchange: str,
                             list_pair: list
                             ):
-    bot = RandomStrategy(
+    bot = RANDOM_BOT(
         exchange=exchange,
         key=config(f"{exchange}TestAPIKey"),
         secret=config(f"{exchange}TestAPISecret"),

@@ -82,7 +82,7 @@ class OKX:
     def get_pairs_info(self) -> dict:
 
         data = self._send_request(
-            end_point=f"/api/v5/public/instruments?instType=MARGIN",
+            end_point=f"/api/v5/public/instruments?instType=SWAP",
             request_type="GET"
         )['data']
 
@@ -90,10 +90,12 @@ class OKX:
 
         for pair in data:
 
-            if pair['quoteCcy'] == 'USDT' and pair['state'] == 'live' and pair['instType'] == 'MARGIN':
+            if pair['settleCcy'] == self.quote_asset and pair['state'] == 'live' and pair['instType'] == 'SWAP' and pair['ctType'] == 'linear':
 
                 pairs_info[pair['instId']] = {}
-                pairs_info[pair['instId']]['quote_asset'] = pair['quoteCcy']
+
+                pairs_info[pair['instId']]['based_asset'] = pair['ctValCcy']
+                pairs_info[pair['instId']]['quote_asset'] = pair['settleCcy']
 
                 size_increment = np.format_float_positional(float(pair["lotSz"]), trim='-')
                 price_increment = np.format_float_positional(float(pair["tickSz"]), trim='-')
@@ -234,7 +236,7 @@ class OKX:
 
             # sleep after every 3rd call to be kind to the API
             idx += 1
-            if idx % 3 == 0:
+            if idx % 5 == 0:
                 time.sleep(1)
 
         data = self._format_data(all_data=klines)

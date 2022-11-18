@@ -151,12 +151,21 @@ class Bot(TelegramBOT):
             if entry_signal['action'] != 0:
 
                 actual_price = self.client.get_last_price(pair=pair)['latest_price']
+                direction = entry_signal['action']
 
                 _action = {'pair': pair}
                 _action['type_pos'] = 'LONG' if entry_signal['action'] == 1 else 'SHORT'
 
                 _action['quantity'] = size_usd / actual_price
+
                 _action['sl_price'] = entry_signal['sl_price']
+                # Compute liquidation price and place SL just before liquid price
+                tick_size = self.client.pairs_info[pair]['tick_size']
+                liquid_price = (1 - direction * (1 / self.leverage)) * actual_price
+                farther_price = liquid_price + direction * (10 * tick_size)
+                _action['sl_price'] = abs(max(direction * _action['sl_price'],
+                                              direction * farther_price))
+
                 _action['tp_price'] = entry_signal['tp_price']
 
                 print(f"{_action['type_pos']} signal on {pair}")

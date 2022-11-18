@@ -1,5 +1,5 @@
 from decouple import config
-from nova.utils.strategy import RandomStrategy
+from nova.random.bot import RANDOM_BOT
 from multiprocessing import set_start_method
 set_start_method('fork')
 
@@ -9,7 +9,7 @@ def asserts_production_run(
         quote_asset: str,
         list_pair: list
 ):
-    bot = RandomStrategy(
+    bot = RANDOM_BOT(
         exchange=exchange,
         key=config(f"{exchange}APIKey"),
         secret=config(f"{exchange}APISecret"),
