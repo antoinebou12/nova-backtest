@@ -32,7 +32,7 @@ class Bot(TelegramBOT):
                  max_pos: int,
 
                  max_down: float,
-                 max_hold: float,
+                 max_holding: timedelta,
 
                  limit_time_execution: int = 15,
 
@@ -52,7 +52,7 @@ class Bot(TelegramBOT):
         self.quote_asset = quote_asset
         self.candle = candle
         self.time_step = get_timedelta_unit(self.candle)
-        self.max_holding = max_hold
+        self.max_holding = max_holding.total_seconds() / 3600
         self.position_size = leverage / max_pos
         self.geometric_size = geometric_size
         self.historical_window = historical_window
