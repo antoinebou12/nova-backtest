@@ -1100,7 +1100,7 @@ class BackTest:
             df = self.entry_strategy(df)
 
             for col in ['entry_signal', 'stop_loss', 'take_profit']:
-                assert col in df.columns, f"Missing column {col}. Please create this column in entry_strategy()"
+                assert col in df.columns, f"Missing {col} column. Please create this column in entry_strategy()"
 
             self.verify_tp_sl(df)
 
