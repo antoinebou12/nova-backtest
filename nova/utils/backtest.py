@@ -10,7 +10,7 @@ import time
 
 from nova.utils.constant import VAR_NEEDED_FOR_POSITION
 from nova.clients.clients import clients
-from nova.utils.helpers import get_timedelta_unit, convert_max_holding_to_candle_nb
+from nova.utils.helpers import get_timedelta_unit, convert_max_holding_to_candle_nb, convert_candle_to_timedelta
 
 from warnings import simplefilter
 
@@ -28,7 +28,7 @@ class BackTest:
                  end: datetime,
                  fees: float,
                  max_pos: int,
-                 max_holding: float,
+                 max_holding: timedelta,
                  quote_asset: str = 'USDT',
                  geometric_sizes: bool = False,
                  leverage: int = 2,
@@ -169,8 +169,6 @@ class BackTest:
 
             df[var] = pd.to_datetime(df[var], unit='ms')
 
-        df = df.set_index('open_time', drop=False)
-
         return df[(df.open_time >= self.start) & (df.open_time <= self.end)]
 
 
@@ -236,7 +234,7 @@ class BackTest:
 
         # creating all leading variables
 
-        nb_candle = convert_max_holding_to_candle_nb(interval=self.candle, holding_hour=self.max_holding)
+        nb_candle = convert_max_holding_to_candle_nb(candle=self.candle, max_holding=self.max_holding)
 
         for i in range(1, nb_candle + 1):
             condition_sl_long = (df.low.shift(-i) <= df.all_sl) & (df.all_entry_point == 1)
@@ -269,7 +267,7 @@ class BackTest:
 
         # get the max holding date
         df['max_hold_date'] = np.where(df.all_entry_point.notnull(),
-                                       df['open_time'] + timedelta(hours=int(self.max_holding))
+                                       df['open_time'] + self.max_holding
                                        , np.datetime64('NaT'))
 
         # clean dataset
@@ -603,13 +601,12 @@ class BackTest:
         self.df_all_pairs_positions = self.df_all_pairs_positions.dropna(subset=['exit_price', 'PL_amt_realized'])
 
         # Shift all TP or SL exit time bc it is based on the open time
-        hours_step = self.max_holding / convert_max_holding_to_candle_nb(interval=self.candle, holding_hour=self.max_holding)
+        candle_duration = convert_candle_to_timedelta(candle=self.candle)
 
         #
         self.df_all_pairs_positions['exit_time'] = np.where(
             self.df_all_pairs_positions['exit_point'].isin(['TP', 'SL']),
-            self.df_all_pairs_positions['exit_time'] + timedelta(
-                hours=hours_step),
+            self.df_all_pairs_positions['exit_time'] + candle_duration,
             self.df_all_pairs_positions['exit_time'])
 
         # Delete impossible trades
