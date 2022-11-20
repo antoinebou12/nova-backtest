@@ -10,7 +10,7 @@ import time
 
 from nova.utils.constant import VAR_NEEDED_FOR_POSITION
 from nova.clients.clients import clients
-from nova.utils.helpers import get_timedelta_unit, convert_max_holding_to_candle_nb
+from nova.utils.helpers import get_timedelta_unit, convert_max_holding_to_candle_nb, convert_candle_to_timedelta
 
 from warnings import simplefilter
 
@@ -28,7 +28,7 @@ class BackTest:
                  end: datetime,
                  fees: float,
                  max_pos: int,
-                 max_holding: float,
+                 max_holding: timedelta,
                  quote_asset: str = 'USDT',
                  geometric_sizes: bool = False,
                  leverage: int = 2,
@@ -82,6 +82,8 @@ class BackTest:
             else:
                 self.list_pair = raw_list_pair
 
+        self.verify_all_pairs()
+
         # Initialize DataFrames
         self.df_all_positions = {}
         self.df_pairs_stat = pd.DataFrame()
@@ -119,6 +121,13 @@ class BackTest:
                 list_pairs.append(pair)
         return list_pairs
 
+    def verify_all_pairs(self):
+
+        for pair in self.list_pair:
+            all_pairs = self.get_list_pair()
+
+            assert pair in all_pairs, f"{pair} is not a valid trading pair"
+
     def get_all_historical_data(self, pair: str) -> pd.DataFrame:
         """
         Note:
@@ -131,6 +140,12 @@ class BackTest:
             If the dataFrame had already been download we get the DataFrame from the csv file else, we are downloading
             all the data since 1st January 2017 to 1st January 2022.
         """
+
+        # Create folder if it does not exist yet
+        if not 'database' in os.listdir(f'{os.getcwd()}'):
+            os.mkdir(f'{os.getcwd()}/database')
+        if not self.exchange in os.listdir(f'{os.getcwd()}/database'):
+            os.mkdir(f'{os.getcwd()}/database/{self.exchange}')
 
         if f'hist_{pair}_{self.candle}.csv' in os.listdir(f'{os.getcwd()}/database/{self.exchange}'):
 
@@ -166,19 +181,15 @@ class BackTest:
             print(f'HISTORICAL DATA {pair} DOWNLOADED', "\U00002705")
 
         for var in ['open_time', 'close_time']:
-
             df[var] = pd.to_datetime(df[var], unit='ms')
 
-        df = df.set_index('open_time', drop=False)
-
         return df[(df.open_time >= self.start) & (df.open_time <= self.end)]
-
 
     @staticmethod
     def create_entry_prices_times(df: pd.DataFrame) -> pd.DataFrame:
         """
         Args:
-            df: dataframe that contains the 'all_entry_point' with the following properties:
+            df: dataframe that contains the 'entry_signal' with the following properties:
                 1 -> enter long position
                 -1 -> enter short position
                 nan -> no actions
@@ -186,8 +197,8 @@ class BackTest:
         Returns:
             The function created 2 variables: all_entry_price, all_entry_time
         """
-        df['all_entry_price'] = np.where(df.all_entry_point.notnull(), df.next_open, np.nan)
-        df['all_entry_time'] = np.where(df.all_entry_point.notnull(), df.open_time, np.datetime64('NaT'))
+        df['all_entry_price'] = np.where(df.entry_signal.notnull(), df.next_open, np.nan)
+        df['all_entry_time'] = np.where(df.entry_signal.notnull(), df.open_time, np.datetime64('NaT'))
         return df
 
     @staticmethod
@@ -204,12 +215,12 @@ class BackTest:
             all_exit_var.append('exit_signal_date')
 
         df['all_exit_time'] = df[all_exit_var].min(axis=1)
-        condition_exit_type_sl = (df.all_entry_point.notnull()) & (df['all_exit_time'] == df['closest_sl'])
-        condition_exit_type_tp = (df.all_entry_point.notnull()) & (df['all_exit_time'] == df['closest_tp'])
-        max_hold_date_sl = (df.all_entry_point.notnull()) & (df['all_exit_time'] == df['max_hold_date'])
+        condition_exit_type_sl = (df.entry_signal.notnull()) & (df['all_exit_time'] == df['closest_sl'])
+        condition_exit_type_tp = (df.entry_signal.notnull()) & (df['all_exit_time'] == df['closest_tp'])
+        max_hold_date_sl = (df.entry_signal.notnull()) & (df['all_exit_time'] == df['max_hold_date'])
 
         if 'exit_signal_date' in all_exit_var:
-            condition_exit_strat = (df.all_entry_point.notnull()) & (df['all_exit_time'] == df['exit_signal_date'])
+            condition_exit_strat = (df.entry_signal.notnull()) & (df['all_exit_time'] == df['exit_signal_date'])
             df['all_exit_point'] = np.where(condition_exit_type_sl, 'SL',
                                             np.where(condition_exit_type_tp, 'TP',
                                                      np.where(max_hold_date_sl, 'MaxHolding',
@@ -224,7 +235,7 @@ class BackTest:
     def create_closest_exit(self, df: pd.DataFrame) -> pd.DataFrame:
         """
         Args:
-            df: dataframe that contains the variables all_entry_point, all_sl and all_tp
+            df: dataframe that contains the variables entry_signal, stop_loss and take_profit
         Returns:
             the dataframe with 3 new variables closest_sl, closest_tp, max_hold_date
         """
@@ -236,15 +247,15 @@ class BackTest:
 
         # creating all leading variables
 
-        nb_candle = convert_max_holding_to_candle_nb(interval=self.candle, holding_hour=self.max_holding)
+        nb_candle = convert_max_holding_to_candle_nb(candle=self.candle, max_holding=self.max_holding)
 
         for i in range(1, nb_candle + 1):
-            condition_sl_long = (df.low.shift(-i) <= df.all_sl) & (df.all_entry_point == 1)
-            condition_sl_short = (df.high.shift(-i) >= df.all_sl) & (df.all_entry_point == -1)
-            condition_tp_short = (df.low.shift(-i) <= df.all_tp) & (df.high.shift(-i) <= df.all_sl) & (
-                    df.all_entry_point == -1)
-            condition_tp_long = (df.all_entry_point == 1) & (df.high.shift(-i) >= df.all_tp) & (
-                    df.low.shift(-i) >= df.all_sl)
+            condition_sl_long = (df.low.shift(-i) <= df.stop_loss) & (df.entry_signal == 1)
+            condition_sl_short = (df.high.shift(-i) >= df.stop_loss) & (df.entry_signal == -1)
+            condition_tp_short = (df.low.shift(-i) <= df.take_profit) & (df.high.shift(-i) <= df.stop_loss) & (
+                    df.entry_signal == -1)
+            condition_tp_long = (df.entry_signal == 1) & (df.high.shift(-i) >= df.take_profit) & (
+                    df.low.shift(-i) >= df.stop_loss)
             df[f'sl_lead_{i}'] = np.where(condition_sl_long | condition_sl_short, df.open_time.shift(-i),
                                           np.datetime64('NaT'))
 
@@ -252,7 +263,7 @@ class BackTest:
                                           np.datetime64('NaT'))
 
             if 'exit_signal' in df.columns:
-                df[f'es_lead_{i}'] = np.where((df['exit_signal'].shift(-i) * df['all_entry_point']) == -1,
+                df[f'es_lead_{i}'] = np.where((df['exit_signal'].shift(-i) * df['entry_signal']) == -1,
                                               df.open_time.shift(-i),
                                               np.datetime64('NaT'))
                 lead_es.append(f'es_lead_{i}')
@@ -268,8 +279,8 @@ class BackTest:
             df['exit_signal_date'] = df[lead_es].min(axis=1)
 
         # get the max holding date
-        df['max_hold_date'] = np.where(df.all_entry_point.notnull(),
-                                       df['open_time'] + timedelta(hours=int(self.max_holding))
+        df['max_hold_date'] = np.where(df.entry_signal.notnull(),
+                                       df['open_time'] + self.max_holding
                                        , np.datetime64('NaT'))
 
         # clean dataset
@@ -280,8 +291,8 @@ class BackTest:
     def create_position_df(self, df: pd.DataFrame, pair: str):
         """
         Args:
-            df: timeseries dataframe that contains the following variables all_entry_time, all_entry_point,
-            all_entry_price, all_exit_time, all_exit_point, all_tp, all_sl
+            df: timeseries dataframe that contains the following variables all_entry_time, entry_signal,
+            all_entry_price, all_exit_time, all_exit_point, take_profit, stop_loss
             pair: pair that we are currently backtesting
         Returns:
         """
@@ -323,20 +334,20 @@ class BackTest:
         final_df = final_df.drop('open_time', axis=1)
 
         # compute the exit price for depending on the exit point category
-        final_df['exit_price'] = np.where(final_df['all_exit_point'] == 'SL', final_df['all_sl'],
-                                          np.where(final_df['all_exit_point'] == 'TP', final_df['all_tp'],
+        final_df['exit_price'] = np.where(final_df['all_exit_point'] == 'SL', final_df['stop_loss'],
+                                          np.where(final_df['all_exit_point'] == 'TP', final_df['take_profit'],
                                                    final_df['next_open']))
 
         # removing non important variables and renaming columns
         final_df = final_df.drop(['next_open'], axis=1)
         final_df = final_df.rename(columns={
             'all_entry_time': 'entry_time',
-            'all_entry_point': 'entry_point',
+            'entry_signal': 'entry_point',
             'all_entry_price': 'entry_price',
             'all_exit_time': 'exit_time',
             'all_exit_point': 'exit_point',
-            'all_tp': 'tp',
-            'all_sl': 'sl'
+            'take_profit': 'tp',
+            'stop_loss': 'sl'
         })
 
         final_df = self.compute_profit(final_df)
@@ -593,6 +604,9 @@ class BackTest:
             df_concat['pair'] = pair
             self.df_all_pairs_positions = pd.concat([self.df_all_pairs_positions, self.df_all_positions[pair]])
 
+        if len(self.df_all_pairs_positions) == 0:
+            raise Exception("No position has been taken during the whole backtest period")
+
         self.df_all_pairs_positions = self.df_all_pairs_positions[
             self.df_all_pairs_positions['entry_time'] > self.start]
 
@@ -603,13 +617,12 @@ class BackTest:
         self.df_all_pairs_positions = self.df_all_pairs_positions.dropna(subset=['exit_price', 'PL_amt_realized'])
 
         # Shift all TP or SL exit time bc it is based on the open time
-        hours_step = self.max_holding / convert_max_holding_to_candle_nb(interval=self.candle, holding_hour=self.max_holding)
+        candle_duration = convert_candle_to_timedelta(candle=self.candle)
 
         #
         self.df_all_pairs_positions['exit_time'] = np.where(
             self.df_all_pairs_positions['exit_point'].isin(['TP', 'SL']),
-            self.df_all_pairs_positions['exit_time'] + timedelta(
-                hours=hours_step),
+            self.df_all_pairs_positions['exit_time'] + candle_duration,
             self.df_all_pairs_positions['exit_time'])
 
         # Delete impossible trades
@@ -667,7 +680,7 @@ class BackTest:
                     axis=1
                 )
 
-            t = t + timedelta(hours=hours_step)
+            t = t + candle_duration
 
         if not self.geometric_sizes:
             self.df_all_pairs_positions['PL_amt_realized'] = self.df_all_pairs_positions['position_size'] * \
@@ -957,15 +970,15 @@ class BackTest:
 
         """
 
-        df['all_sl'] = np.where(df['all_entry_point'] == 1,
-                                pd.DataFrame({'all_sl': df['all_sl'],
+        df['stop_loss'] = np.where(df['entry_signal'] == 1,
+                                pd.DataFrame({'stop_loss': df['stop_loss'],
                                               'all_entry_price': df['all_entry_price'] * (1 - 1 / self.leverage)}).max(
-                                    axis=1), df['all_sl'])
+                                    axis=1), df['stop_loss'])
 
-        df['all_sl'] = np.where(df['all_entry_point'] == -1,
-                                pd.DataFrame({'all_sl': df['all_sl'],
+        df['stop_loss'] = np.where(df['entry_signal'] == -1,
+                                pd.DataFrame({'stop_loss': df['stop_loss'],
                                               'all_entry_price': df['all_entry_price'] * (1 + 1 / self.leverage)}).min(
-                                    axis=1), df['all_sl'])
+                                    axis=1), df['stop_loss'])
 
         return df
 
@@ -1005,11 +1018,11 @@ class BackTest:
             last_row = df[df['open_time'] == row['entry_time']].iloc[0]
 
             assert row['entry_point'] == last_row[
-                'all_entry_point'], "Entry point is not the same, make sure you don't have access to futures " \
+                'entry_signal'], "Entry point is not the same, make sure you don't have access to futures " \
                                     "information when computing entry point"
-            assert row['tp'] == last_row['all_tp'], "TP is not the same, make sure you don't have access to futures " \
+            assert row['tp'] == last_row['take_profit'], "TP is not the same, make sure you don't have access to futures " \
                                                     "information when computing take profit price"
-            assert row['sl'] == last_row['all_sl'], "SL is not the same, make sure you don't have access to futures " \
+            assert row['sl'] == last_row['stop_loss'], "SL is not the same, make sure you don't have access to futures " \
                                                     "information when computing stop loss price"
 
         # Verify exit signals
@@ -1054,10 +1067,10 @@ class BackTest:
 
         """
 
-        sl_valid = np.where(df['all_entry_point'] == 1, df['all_sl'] < df['close'],
-                              np.where(df['all_entry_point'] == -1, df['all_sl'] > df['close'], True))
-        tp_valid = np.where(df['all_entry_point'] == 1, df['all_tp'] > df['close'],
-                              np.where(df['all_entry_point'] == -1, df['all_tp'] < df['close'], True))
+        sl_valid = np.where(df['entry_signal'] == 1, df['stop_loss'] < df['close'],
+                            np.where(df['entry_signal'] == -1, df['stop_loss'] > df['close'], True))
+        tp_valid = np.where(df['entry_signal'] == 1, df['take_profit'] > df['close'],
+                            np.where(df['entry_signal'] == -1, df['take_profit'] < df['close'], True))
 
         assert sl_valid.sum() == len(sl_valid), "Some SL are not valid. Please replace your SL correctly."
         assert tp_valid.sum() == len(tp_valid), "Some TP are not valid. Please replace your TP correctly."
@@ -1085,6 +1098,9 @@ class BackTest:
             df = self.build_indicators(df)
 
             df = self.entry_strategy(df)
+
+            for col in ['entry_signal', 'stop_loss', 'take_profit']:
+                assert col in df.columns, f"Missing {col} column. Please create this column in entry_strategy()"
 
             self.verify_tp_sl(df)
 

@@ -4,18 +4,29 @@ import time
 import re
 
 
-def convert_max_holding_to_candle_nb(interval: str, holding_hour: int) -> int:
+def convert_candle_to_timedelta(candle: str) -> timedelta:
+    multi = int(float(re.findall(r'\d+', candle)[0]))
+    if 'm' in candle:
+        candle_duration = timedelta(minutes=multi)
+    elif 'h' in candle:
+        candle_duration = timedelta(hours=multi)
+    elif 'd' in candle:
+        candle_duration = timedelta(days=multi)
+    else:
+        raise ValueError(f"Please enter a valid candle value. Must contain the letter m, h or d.")
+
+    return candle_duration
+
+
+def convert_max_holding_to_candle_nb(candle: str, max_holding: timedelta) -> int:
     """
     Return:
         the number maximum of candle we can hold a position
     """
-    multi = int(float(re.findall(r'\d+', interval)[0]))
-    if 'm' in interval:
-        return int(60 / multi * holding_hour)
-    if 'h' in interval:
-        return int(1 / multi * holding_hour)
-    if 'd' in interval:
-        return int(1 / (multi * 24) * holding_hour)
+
+    candle_duration = convert_candle_to_timedelta(candle=candle)
+
+    return int(max_holding.total_seconds() / candle_duration.total_seconds())
 
 
 def get_timedelta_unit(interval: str) -> timedelta:
@@ -34,9 +45,9 @@ def get_timedelta_unit(interval: str) -> timedelta:
 
 def milliseconds_to_interval(interval_ms: int) -> str:
     if interval_ms < 3600000:
-        return str(int(60/(3600000/interval_ms))) + 'T'
+        return str(int(60 / (3600000 / interval_ms))) + 'T'
     elif interval_ms < 86400000:
-        return str(int(24/(86400000 / interval_ms))) + 'H'
+        return str(int(24 / (86400000 / interval_ms))) + 'H'
     else:
         return str(int(interval_ms / 86400000)) + 'D'
 
@@ -185,7 +196,6 @@ def compute_time_difference(
 
 
 def interval_to_oanda_granularity(interval: str):
-
     _number = interval[:-1]
     _letter = interval[-1].upper()
 

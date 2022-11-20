@@ -1,6 +1,7 @@
 import pandas as pd
 import numpy as np
 import random
+from datetime import timedelta
 from nova.utils.bot import Bot
 from typing import Union
 
@@ -31,7 +32,7 @@ class RANDOM_BOT(Bot):
                  bot_id: str = "RANDOM_BOT_1",
                  entry_l_prob: float = 0.2,
                  entry_s_prob: float = 0.2,
-                 exit_prob: float = 0.2,
+                 exit_prob: float = 0,
                  tp_sl_delta: float = 0.005,
                  geometric_size: bool = False
                  ):
@@ -55,7 +56,7 @@ class RANDOM_BOT(Bot):
                      geometric_size=geometric_size,
                      max_pos=max_pos,
                      max_down=max_down,
-                     max_hold=1 / 10,
+                     max_holding=timedelta(minutes=2),
 
                      telegram_notification=telegram_notification,
                      telegram_bot_token=telegram_bot_token,

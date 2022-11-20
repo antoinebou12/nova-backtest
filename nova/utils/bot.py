@@ -32,7 +32,7 @@ class Bot(TelegramBOT):
                  max_pos: int,
 
                  max_down: float,
-                 max_hold: float,
+                 max_holding: timedelta,
 
                  limit_time_execution: int = 15,
 
@@ -52,7 +52,7 @@ class Bot(TelegramBOT):
         self.quote_asset = quote_asset
         self.candle = candle
         self.time_step = get_timedelta_unit(self.candle)
-        self.max_holding = max_hold
+        self.max_holding = max_holding.total_seconds() / 3600
         self.position_size = leverage / max_pos
         self.geometric_size = geometric_size
         self.historical_window = historical_window
@@ -203,10 +203,11 @@ class Bot(TelegramBOT):
         self.position_opened[pair]['exit_fees'] += exit_info[fees_var]
 
         # Manage the Partial TP Update
-        if exit_type == "TP" and exit_info['executed_quantity'] < self.position_opened[pair]['last_tp_executed']:
+        if exit_type == "TP" and exit_info['executed_quantity'] > self.position_opened[pair]['last_tp_executed']:
             self.position_opened[pair]['quantity_exited'] = exit_info['executed_quantity']
             self.position_opened[pair]['last_tp_executed'] = exit_info['executed_quantity']
             self.position_opened[pair]['last_tp_time'] = exit_info['time']
+        # TP totally filled
         if exit_type == "TP" and exit_info['status'] == 'FILLED':
             self.position_opened[pair]['last_tp_executed'] = exit_info['executed_quantity']
             self.position_opened[pair]['quantity_exited'] = exit_info['executed_quantity']
@@ -495,7 +496,7 @@ class Bot(TelegramBOT):
         # Begin the infinite loop
         while True:
 
-            try:
+            # try:
 
                 # Start the logic at each candle opening
                 if is_opening_candle(interval=self.candle):
@@ -532,25 +533,25 @@ class Bot(TelegramBOT):
                     # If the previous code takes less than 1 second to execute, it will be executed again
                     time.sleep(1)
 
-            except Exception as e:
-
-                print(f'{self.bot_name} crashed with the error:\n{str(e)[:100]}')
-
-                since_last_crash = datetime.utcnow() - last_crashed_time
-
-                if since_last_crash < self.time_step * 1.5:
-                    # exit all current positions
-                    self.security_close_all_positions()
-
-                    if self.telegram_notification:
-                        self.telegram_bot_crashed(
-                            exchange=self.exchange,
-                            bot_name=self.bot_name,
-                            error=str(e)
-                        )
-
-                    return str(e)
-
-                last_crashed_time = datetime.utcnow()
-
-                time.sleep(60)
+            # except Exception as e:
+            #
+            #     print(f'{self.bot_name} crashed with the error:\n{str(e)[:100]}')
+            #
+            #     since_last_crash = datetime.utcnow() - last_crashed_time
+            #
+            #     if since_last_crash < self.time_step * 1.5:
+            #         # exit all current positions
+            #         self.security_close_all_positions()
+            #
+            #         if self.telegram_notification:
+            #             self.telegram_bot_crashed(
+            #                 exchange=self.exchange,
+            #                 bot_name=self.bot_name,
+            #                 error=str(e)
+            #             )
+            #
+            #         return str(e)
+            #
+            #     last_crashed_time = datetime.utcnow()
+            #
+            #     time.sleep(60)
