@@ -496,7 +496,7 @@ class Bot(TelegramBOT):
         # Begin the infinite loop
         while True:
 
-            try:
+            # try:
 
                 # Start the logic at each candle opening
                 if is_opening_candle(interval=self.candle):
@@ -533,25 +533,25 @@ class Bot(TelegramBOT):
                     # If the previous code takes less than 1 second to execute, it will be executed again
                     time.sleep(1)
 
-            except Exception as e:
-
-                print(f'{self.bot_name} crashed with the error:\n{str(e)[:100]}')
-
-                since_last_crash = datetime.utcnow() - last_crashed_time
-
-                if since_last_crash < self.time_step * 1.5:
-                    # exit all current positions
-                    self.security_close_all_positions()
-
-                    if self.telegram_notification:
-                        self.telegram_bot_crashed(
-                            exchange=self.exchange,
-                            bot_name=self.bot_name,
-                            error=str(e)
-                        )
-
-                    return str(e)
-
-                last_crashed_time = datetime.utcnow()
-
-                time.sleep(60)
+            # except Exception as e:
+            #
+            #     print(f'{self.bot_name} crashed with the error:\n{str(e)[:100]}')
+            #
+            #     since_last_crash = datetime.utcnow() - last_crashed_time
+            #
+            #     if since_last_crash < self.time_step * 1.5:
+            #         # exit all current positions
+            #         self.security_close_all_positions()
+            #
+            #         if self.telegram_notification:
+            #             self.telegram_bot_crashed(
+            #                 exchange=self.exchange,
+            #                 bot_name=self.bot_name,
+            #                 error=str(e)
+            #             )
+            #
+            #         return str(e)
+            #
+            #     last_crashed_time = datetime.utcnow()
+            #
+            #     time.sleep(60)
