@@ -788,7 +788,6 @@ class Bybit:
         final_data['entry_price'] = round(_avg_price, self.pairs_info[final_data['pair']]['pricePrecision'])
 
         # needed for TP partial Execution
-        final_data['last_tp_executed'] = 0
         final_data['last_tp_time'] = float('inf')
         final_data['exit_time'] = 0
         final_data['exit_fees'] = 0

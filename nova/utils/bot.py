@@ -9,6 +9,7 @@ from datetime import datetime, timedelta
 from typing import Union
 import random
 import time
+import traceback
 
 
 class Bot(TelegramBOT):
@@ -194,40 +195,33 @@ class Bot(TelegramBOT):
         fees_var = 'exit_fees' if exit_type not in ['TP', 'SL'] else 'tx_fee_in_quote_asset'
         price_var = 'exit_price' if exit_type not in ['TP', 'SL'] else 'executed_price'
 
-        old_pricing = 0 if exit_type != "TP" else self.position_opened[pair]['exit_price']
-        old_quantity_exited = 0 if exit_type != "TP" else self.position_opened[pair]['quantity_exited']
+        tp_price = 0 if exit_type != "TP" else exit_info[price_var]
+        quantity_TP_executed = 0 if exit_type != "TP" else exit_info['executed_quantity']
 
         prc_precision = self.client.pairs_info[pair]['pricePrecision']
 
-        self.position_opened[pair]['exit_time'] = exit_info['time']
-        self.position_opened[pair]['exit_fees'] += exit_info[fees_var]
-
-        # Manage the Partial TP Update
-        if exit_type == "TP" and exit_info['executed_quantity'] > self.position_opened[pair]['last_tp_executed']:
+        # Manage the Partial TP and TP totally filled
+        if exit_type == "TP":
             self.position_opened[pair]['quantity_exited'] = exit_info['executed_quantity']
-            self.position_opened[pair]['last_tp_executed'] = exit_info['executed_quantity']
             self.position_opened[pair]['last_tp_time'] = exit_info['time']
-        # TP totally filled
-        if exit_type == "TP" and exit_info['status'] == 'FILLED':
-            self.position_opened[pair]['last_tp_executed'] = exit_info['executed_quantity']
-            self.position_opened[pair]['quantity_exited'] = exit_info['executed_quantity']
+            self.position_opened[pair]['exit_fees'] = exit_info[fees_var]
+            self.position_opened[pair]['exit_price'] = exit_info[price_var]
 
         else:
             self.position_opened[pair]['quantity_exited'] += exit_info['executed_quantity']
+            self.position_opened[pair]['exit_fees'] += exit_info[fees_var]
+
+            _price_ = (tp_price * quantity_TP_executed + exit_info[price_var] * exit_info['executed_quantity']) / \
+                      self.position_opened[pair]['quantity_exited']
+            self.position_opened[pair]['exit_price'] = float(round(_price_, prc_precision))
 
         self.position_opened[pair]['current_position_size'] = self.position_opened[pair]['original_position_size'] - \
                                                               self.position_opened[pair]['quantity_exited']
 
-        if old_pricing == 0 and old_quantity_exited == 0:
-            self.position_opened[pair]['exit_price'] = exit_info[price_var]
-        else:
-            _price_ = (old_pricing * old_quantity_exited + exit_info[price_var] * exit_info['executed_quantity']) / \
-                      self.position_opened[pair]['quantity_exited']
-            self.position_opened[pair]['exit_price'] = float(round(_price_, prc_precision))
-
         if self.position_opened[pair]['current_position_size'] == 0:
 
             self.position_opened[pair]['trade_status'] = 'CLOSED'
+            self.position_opened[pair]['exit_time'] = exit_info['time']
 
             self.position_opened[pair]['total_fees'] = self.position_opened[pair]['exit_fees']\
                                                           + self.position_opened[pair]['entry_fees']
@@ -260,7 +254,7 @@ class Bot(TelegramBOT):
             position closing logic.
         """
 
-        date = datetime.now()
+        date = datetime.utcnow()
 
         all_exits = []
 
@@ -333,6 +327,7 @@ class Bot(TelegramBOT):
         """
 
         all_pos = self.position_opened.copy()
+        current_ts_ms = int(1000 * time.time())
 
         # for each position opened by the bot we are executing a verification
         for _pair, _info in all_pos.items():
@@ -370,46 +365,38 @@ class Bot(TelegramBOT):
                 continue
 
             # 3 Verify if tp has been executed
-            if data['tp']['status'] in ['FILLED', 'PARTIALLY_FILLED']:
+            if data['tp']['status'] == 'FILLED':
 
-                remaining_quantity = data['tp']['original_quantity'] - data['tp']['executed_quantity']
+                print('Limit TP order has been totally filled')
+                # Cancel sl order
+                self.client.cancel_order(pair=_pair, order_id=data['sl']['order_id'])
 
-                if remaining_quantity == 0:
-                    print('TP Limit has been triggered')
-                    # Cancel sl order
-                    self.client.cancel_order(pair=_pair, order_id=data['sl']['order_id'])
+                self.update_exit_info(
+                    pair=_pair,
+                    exit_info=data['tp'],
+                    exit_type='TP',
+                )
 
-                    self.update_exit_info(
+                self._push_backend()
+
+                if self.telegram_notification:
+                    self.telegram_tp_fully_filled(
                         pair=_pair,
-                        exit_info=data['tp'],
-                        exit_type='TP',
+                        pnl=self.position_opened[_pair]['realized_pnl']
                     )
 
-                    self._push_backend()
+                self.close_local_state(pair=_pair)
 
-                    if self.telegram_notification:
-                        self.telegram_tp_fully_filled(
-                            pair=_pair,
-                            pnl=self.position_opened[_pair]['realized_pnl']
-                        )
+            elif data['tp']['status'] == 'PARTIALLY_FILLED':
 
-                    self.close_local_state(pair=_pair)
+                print('Limit TP order has been partially filled')
+                self.update_exit_info(
+                    pair=_pair,
+                    exit_info=data['tp'],
+                    exit_type='TP',
+                )
 
-                else:
-                    print('PARTIAL TP Limit has been triggered')
-                    self.update_exit_info(
-                        pair=_pair,
-                        exit_info=data['tp'],
-                        exit_type='TP',
-                    )
-
-                    self._push_backend()
-
-                    if self.telegram_notification:
-                        self.telegram_tp_partially_filled(
-                            pair=_pair,
-                            tp_info=data['tp']
-                        )
+                self._push_backend()
 
     @staticmethod
     def _push_backend():
@@ -460,8 +447,6 @@ class Bot(TelegramBOT):
 
     def production_run(self):
 
-        last_crashed_time = datetime.utcnow()
-
         print(f'Nova L@bs {self.bot_name} starting')
 
         # start account
@@ -479,7 +464,8 @@ class Bot(TelegramBOT):
         if self.telegram_notification:
             self.telegram_bot_starting(
                 bot_name=self.bot_name,
-                exchange=self.exchange
+                bot_id=self.bot_id,
+                exchange=self.exchange,
             )
             print(f'Telegram Messages', "\U00002705")
 
@@ -496,7 +482,7 @@ class Bot(TelegramBOT):
         # Begin the infinite loop
         while True:
 
-            # try:
+            try:
 
                 # Start the logic at each candle opening
                 if is_opening_candle(interval=self.candle):
@@ -533,25 +519,15 @@ class Bot(TelegramBOT):
                     # If the previous code takes less than 1 second to execute, it will be executed again
                     time.sleep(1)
 
-            # except Exception as e:
-            #
-            #     print(f'{self.bot_name} crashed with the error:\n{str(e)[:100]}')
-            #
-            #     since_last_crash = datetime.utcnow() - last_crashed_time
-            #
-            #     if since_last_crash < self.time_step * 1.5:
-            #         # exit all current positions
-            #         self.security_close_all_positions()
-            #
-            #         if self.telegram_notification:
-            #             self.telegram_bot_crashed(
-            #                 exchange=self.exchange,
-            #                 bot_name=self.bot_name,
-            #                 error=str(e)
-            #             )
-            #
-            #         return str(e)
-            #
-            #     last_crashed_time = datetime.utcnow()
-            #
-            #     time.sleep(60)
+            except Exception:
+
+                # exit all current positions
+                self.security_close_all_positions()
+
+                if self.telegram_notification:
+                    self.telegram_bot_crashed(
+                        exchange=self.exchange,
+                        bot_name=self.bot_name
+                    )
+
+                traceback.print_exc()
