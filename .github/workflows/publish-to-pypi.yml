@@ -7,7 +7,7 @@ on:
 
 jobs:
   build-n-publish:
-    name: Build & publish nova-python 🐍 
+    name: Build & publish nova-backtest 🐍
     runs-on: ubuntu-18.04
     steps:
       - uses: actions/checkout@master
@@ -32,14 +32,14 @@ jobs:
           password: ${{ secrets.PYPI_API_TOKEN }}
           
   update-production:
-    name: Update nova-python 📦 on production
+    name: Update nova-backtest 📦 on production
     runs-on: self-hosted
     steps:
-      - name: Update novalabs venv
+      - name: Update novalabs-backtest venv
         run: |
           . /root/anaconda3/bin/activate algo
-          pip uninstall -y novalabs
-          pip install novalabs
+          pip uninstall -y novalabs-backtest
+          pip install novalabs-backtest
           conda deactivate
       
     
