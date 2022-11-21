@@ -57,24 +57,22 @@ class TelegramBOT:
 
         self.telegram_bot_send_text(bot_message=bot_message)
 
-    def telegram_tp_partially_filled(self, pair: str, tp_info: dict):
+    def telegram_bot_starting(self,
+                              bot_name: str,
+                              bot_id: str,
+                              exchange: str):
 
-        prc_filled = 100 * tp_info['executedQuantity'] / tp_info['originalQuantity']
-
-        bot_message = f"{pair} take profit limit order partially filled ({round(prc_filled, 2)}) \U0001F911"
-
-        self.telegram_bot_send_text(bot_message=bot_message)
-
-    def telegram_bot_starting(self, bot_name: str, exchange: str):
-
-        bot_message = f"{bot_name} starting on {exchange} \U0001F916"
+        bot_message = f"{bot_name} starting on {exchange} \U0001F916" \
+                      f"\nbot\_id = {bot_id}"
 
         self.telegram_bot_send_text(bot_message=bot_message)
 
-    def telegram_bot_crashed(self, bot_name: str, exchange: str, error: str):
+    def telegram_bot_crashed(self, bot_name: str, exchange: str):
 
         bot_message = f"{bot_name} crashed \U0001F6D1" \
-                      f"\n Please check your {exchange} account" \
-                      f"\n Error: {error[:100]}"
+                      f"\nPlease re-start the bot on your TUXN account." \
+                      f"\nFor more information, contact us at: support@novalabs.ai"\
+                      f"\nWe highly recommend you to check your {exchange} account " \
+                      f"to make sure that all positions have been exited."
 
         self.telegram_bot_send_text(bot_message=bot_message)
