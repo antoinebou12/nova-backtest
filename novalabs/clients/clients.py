@@ -1,15 +1,15 @@
-from nova.clients.binance import Binance
-from nova.clients.ftx import FTX
-from nova.clients.coinbase import Coinbase
-from nova.clients.okx import OKX
-from nova.clients.kraken import Kraken
-from nova.clients.kucoin import Kucoin
-from nova.clients.huobi import Huobi
-from nova.clients.gemini import Gemini
-from nova.clients.gate import Gate
-from nova.clients.cryptocom import Cryptocom
-from nova.clients.bybit import Bybit
-from nova.clients.oanda import Oanda
+from novalabs.clients.binance import Binance
+from novalabs.clients.ftx import FTX
+from novalabs.clients.coinbase import Coinbase
+from novalabs.clients.okx import OKX
+from novalabs.clients.kraken import Kraken
+from novalabs.clients.kucoin import Kucoin
+from novalabs.clients.huobi import Huobi
+from novalabs.clients.gemini import Gemini
+from novalabs.clients.gate import Gate
+from novalabs.clients.cryptocom import Cryptocom
+from novalabs.clients.bybit import Bybit
+from novalabs.clients.oanda import Oanda
 
 
 def clients(
