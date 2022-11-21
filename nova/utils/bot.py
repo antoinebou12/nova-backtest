@@ -366,7 +366,7 @@ class Bot(TelegramBOT):
             # 3 Verify if tp has been executed
             if data['tp']['status'] == 'FILLED':
 
-                print('TP Limit has been triggered')
+                print('Limit TP order has been totally filled')
                 # Cancel sl order
                 self.client.cancel_order(pair=_pair, order_id=data['sl']['order_id'])
 
