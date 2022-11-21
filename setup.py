@@ -1,15 +1,13 @@
 import requests
 from setuptools import setup, find_packages
+def versions(package_name):
+    data = requests.get(f'https://pypi.python.org/pypi/{package_name}/json')
+    _versions = data.json()['releases'].keys()
+    return list(_versions)[-1]
 
 
-# def versions(package_name):
-#     data = requests.get(f'https://pypi.python.org/pypi/{package_name}/json')
-#     _versions = data.json()['releases'].keys()
-#     return list(_versions)[-1]
-#
-#
-# package_version = versions('novalabs')
-# VERSION = package_version[:-1] + str(int(package_version[-1])+1)
+package_version = versions('novalabs-backtest')
+VERSION = package_version[:-1] + str(int(package_version[-1])+1)
 
 with open("README.md", "r") as fh:
     long_description = fh.read()
