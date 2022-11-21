@@ -1,97 +1,114 @@
 from requests import Request, Session
 import hmac
 import base64
-import time
-import hashlib
-from novalabs.utils.helpers import interval_to_milliseconds
-from datetime import datetime, date
-import pandas as pd
-from novalabs.utils.constant import DATA_FORMATING
 import json
+from datetime import datetime
+from nova.utils.helpers import interval_to_milliseconds
+import time
+from nova.utils.constant import DATA_FORMATING
+import pandas as pd
+import numpy as np
+from typing import Union
 
 
-class Coinbase:
+class OKX:
 
     def __init__(self,
                  key: str,
                  secret: str,
                  pass_phrase: str,
                  testnet: bool):
+
         self.api_key = key
         self.api_secret = secret
         self.pass_phrase = pass_phrase
 
-        self.based_endpoint = "https://api.pro.coinbase.com"
-        if testnet:
-            self.based_endpoint = "https://api-public.sandbox.exchange.coinbase.com"
-
+        self.based_endpoint = "https://www.okx.com"
         self._session = Session()
+
+        self.quote_asset = 'USDT'
 
         self.pairs_info = self.get_pairs_info()
 
-        self.max_historical = 10000
-        self.historical_limit = 290
+        self.historical_limit = 90
 
-    def _send_request(self, end_point: str, request_type: str, params: dict = {}, signed: bool = False):
+    def _send_request(self, end_point: str, request_type: str, params: Union[dict, list] = None, signed: bool = False):
 
-        timestamp = str(int(time.time()))
+        now = datetime.utcnow()
+        timestamp = now.isoformat("T", "milliseconds") + "Z"
 
-        to_use = "https://api.pro.coinbase.com" if not signed else self.based_endpoint
-        request = Request(request_type, f'{to_use}{end_point}', data=json.dumps(params))
+        request = Request(request_type, f'{self.based_endpoint}{end_point}', data=json.dumps(params))
         prepared = request.prepare()
 
-        prepared.headers['Content-Type'] = "application/json"
-
         if signed:
-            _params = ""
-            if params is not None:
-                _params = prepared.body
+            body = ""
+            if params:
+                body = json.dumps(params)
+                prepared.body = body
 
-            message = ''.join([timestamp, request_type, end_point, _params])
-            message = message.encode('ascii')
-            hmac_key = base64.b64decode(self.api_secret)
-            signature = hmac.new(hmac_key, message, hashlib.sha256)
-            signature_b64 = base64.b64encode(signature.digest()).decode('utf-8')
+            to_hash = str(timestamp) + str.upper(request_type) + end_point + body
 
-            prepared.headers['CB-ACCESS-KEY'] = self.api_key
-            prepared.headers['CB-ACCESS-SIGN'] = signature_b64
-            prepared.headers['CB-ACCESS-PASSPHRASE'] = self.pass_phrase
-            prepared.headers['CB-ACCESS-TIMESTAMP'] = timestamp
+            mac = hmac.new(bytes(self.api_secret, encoding='utf8'),
+                           bytes(to_hash, encoding='utf-8'),
+                           digestmod='sha256')
+
+            signature = base64.b64encode(mac.digest())
+
+            prepared.headers['OK-ACCESS-KEY'] = self.api_key
+            prepared.headers['OK-ACCESS-SIGN'] = signature
+            prepared.headers['OK-ACCESS-PASSPHRASE'] = self.pass_phrase
+
+        prepared.headers['Content-Type'] = "application/json"
+        prepared.headers['OK-ACCESS-TIMESTAMP'] = timestamp
 
         response = self._session.send(prepared)
 
         return response.json()
 
-    @staticmethod
-    def get_server_time() -> int:
+    def get_server_time(self) -> int:
         """
+        Note: FTX does not have any server time end point so we are simulating it with the time function
         Returns:
             the timestamp in milliseconds
         """
-        return int(time.time() * 1000)
+        return int(self._send_request(
+            end_point=f"/api/v5/public/time",
+            request_type="GET",
+        )['data'][0]['ts'])
 
     def get_pairs_info(self) -> dict:
-        """
-        Returns:
-            the timestamp in milliseconds
-        """
+
         data = self._send_request(
-            end_point=f"/products",
+            end_point=f"/api/v5/public/instruments?instType=SWAP",
             request_type="GET"
-        )
+        )['data']
 
         pairs_info = {}
 
         for pair in data:
 
-            if not pair['trading_disabled'] and pair['quote_currency'] in ['USD', 'USDT', 'USDC']:
-                pairs_info[pair['id']] = {}
-                pairs_info[pair['id']]['quote_asset'] = pair['quote_currency']
-                pairs_info[pair['id']]['maxQuantity'] = float('inf')
-                pairs_info[pair['id']]['minQuantity'] = 0.0
-                pairs_info[pair['id']]['tick_size'] = float(pair['base_increment'])
-                pairs_info[pair['id']]['pricePrecision'] = int(str(pair['base_increment'])[::-1].find('.'))
-                pairs_info[pair['id']]['quantityPrecision'] = 6
+            if pair['settleCcy'] == self.quote_asset and pair['state'] == 'live' and pair['instType'] == 'SWAP' and pair['ctType'] == 'linear':
+
+                pairs_info[pair['instId']] = {}
+
+                pairs_info[pair['instId']]['based_asset'] = pair['ctValCcy']
+                pairs_info[pair['instId']]['quote_asset'] = pair['settleCcy']
+
+                size_increment = np.format_float_positional(float(pair["lotSz"]), trim='-')
+                price_increment = np.format_float_positional(float(pair["tickSz"]), trim='-')
+
+                pairs_info[pair['instId']]['maxQuantity'] = float('inf')
+                pairs_info[pair['instId']]['minQuantity'] = float(pair['minSz'])
+
+                price_precision = int(str(price_increment)[::-1].find('.')) if float(pair['tickSz']) < 1 else 1
+                pairs_info[pair['instId']]['tick_size'] = float(pair['tickSz'])
+                pairs_info[pair['instId']]['pricePrecision'] = price_precision
+
+                qty_precision = int(str(size_increment)[::-1].find('.')) if float(pair['minSz']) < 1 else 1
+                pairs_info[pair['instId']]['step_size'] = float(pair['minSz'])
+                pairs_info[pair['instId']]['quantityPrecision'] = qty_precision
+
+                pairs_info[pair['instId']]['earliest_timestamp'] = int(pair['listTime'])
 
         return pairs_info
 
@@ -105,27 +122,18 @@ class Coinbase:
         Returns:
             the none formatted candle information requested
         """
-
-        _start_time = datetime.fromtimestamp(int(start_time // 1000)).isoformat()
-        _interval_ms = interval_to_milliseconds(interval)
-        _interval = str(int(_interval_ms//1000))
-        end_time = start_time + _interval_ms * self.historical_limit
-        _end_time = datetime.fromtimestamp(int(end_time // 1000)).isoformat()
-
-        data = self._send_request(
-            end_point=f'/products/{pair}/candles?start={_start_time}&end={_end_time}&granularity={_interval}',
+        _end_time = start_time + interval_to_milliseconds(interval) * self.historical_limit
+        _bar = interval if 'm' in interval else interval.upper()
+        _endpoint = f"/api/v5/market/history-candles?instId={pair}&bar={_bar}&before={start_time}&after={_end_time}"
+        return self._send_request(
+            end_point=_endpoint,
             request_type="GET",
-            params={
-                'start': _start_time,
-                'granularity': _interval,
-                'end': _end_time
-            }
-        )
-
-        return data
+        )['data']
 
     def _get_earliest_timestamp(self, pair: str, interval: str):
         """
+        Note we are using an interval of 4 days to make sure we start at the beginning
+        of the time
         Args:
             pair: Name of symbol pair
             interval: interval in string
@@ -133,12 +141,7 @@ class Coinbase:
             the earliest valid open timestamp in milliseconds
         """
 
-        earliest = int(datetime(2022, 1, 1).timestamp() * 1000)
-        today = int(time.time() * 1000)
-
-        maximum_historical = today - self.max_historical * interval_to_milliseconds(interval)
-
-        return max([earliest, maximum_historical])
+        return self.pairs_info[pair]['earliest_timestamp']
 
     @staticmethod
     def _format_data(all_data: list, historical: bool = True) -> pd.DataFrame:
@@ -150,20 +153,23 @@ class Coinbase:
             standardized pandas dataframe
         """
 
-        df = pd.DataFrame(all_data, columns=DATA_FORMATING['coinbase']['columns'])
+        df = pd.DataFrame(all_data, columns=DATA_FORMATING['okx']['columns'])
         df = df.sort_values(by='open_time').reset_index(drop=True)
-        df['open_time'] = df['open_time'] * 1000
-        interval_ms = df['open_time'].iloc[1] - df['open_time'].iloc[0]
-        df['close_time'] = df['open_time'] + interval_ms - 1
 
-        for var in DATA_FORMATING['coinbase']['num_var']:
+        for var in DATA_FORMATING['okx']['num_var']:
             df[var] = pd.to_numeric(df[var], downcast="float")
 
-        for var in DATA_FORMATING['coinbase']['date_var']:
-            df[var] = pd.to_numeric(df[var], downcast="integer")
+        for var in ['open_time']:
+            df[var] = df[var].astype(int)
+
+        df = df.sort_values(by='open_time').reset_index(drop=True)
 
         if historical:
             df['next_open'] = df['open'].shift(-1)
+
+        interval_ms = df.loc[1, 'open_time'] - df.loc[0, 'open_time']
+
+        df['close_time'] = df['open_time'] + interval_ms - 1
 
         return df.dropna().drop_duplicates('open_time')
 
@@ -195,16 +201,21 @@ class Coinbase:
         start_time = max(start_ts, first_valid_ts)
 
         idx = 0
-
         while True:
+
+            end_t = int(start_time + timeframe * self.historical_limit)
+            end_time = min(end_t, end_ts)
 
             # fetch the klines from start_ts up to max 500 entries or the end_ts if set
             temp_data = self._get_candles(
                 pair=pair,
                 interval=interval,
                 start_time=start_time,
-                end_time=end_ts
+                end_time=end_time
             )
+
+            if len(temp_data) == 0:
+                break
 
             # append this loops data to our output data
             if temp_data:
@@ -212,25 +223,17 @@ class Coinbase:
 
             # handle the case where exactly the limit amount of data was returned last loop
             # check if we received less than the required limit and exit the loop
-            if not len(temp_data) or len(temp_data) < self.historical_limit:
-                print('exit_1')
-                # exit the while loop
-                break
 
             # increment next call by our timeframe
-            start_time = temp_data[0][0] * 1000 + timeframe
-
-            print(f'Request # {idx}')
-            print(start_time, end_ts)
+            start_time = int(temp_data[0][0])
 
             # exit loop if we reached end_ts before reaching <limit> klines
             if start_time >= end_ts:
-                print('exit_2')
                 break
 
             # sleep after every 3rd call to be kind to the API
             idx += 1
-            if idx % 3 == 0:
+            if idx % 5 == 0:
                 time.sleep(1)
 
         data = self._format_data(all_data=klines)

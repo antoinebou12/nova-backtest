@@ -1,114 +1,69 @@
 from requests import Request, Session
-import hmac
-import base64
 import json
-from datetime import datetime
-from novalabs.utils.helpers import interval_to_milliseconds
-import time
-from novalabs.utils.constant import DATA_FORMATING
+from nova.utils.helpers import interval_to_oanda_granularity, interval_to_milliseconds
 import pandas as pd
-import numpy as np
-from typing import Union
+from datetime import datetime
+import time
 
-
-class OKX:
+class Oanda:
 
     def __init__(self,
-                 key: str,
-                 secret: str,
-                 pass_phrase: str,
-                 testnet: bool):
+                 key: str = "",
+                 secret: str = "",
+                 testnet: bool = False
+                 ):
 
         self.api_key = key
         self.api_secret = secret
-        self.pass_phrase = pass_phrase
-
-        self.based_endpoint = "https://www.okx.com"
+        self.based_endpoint = "	https://api-fxpractice.oanda.com" if testnet else "https://api-fxtrade.oanda.com"
         self._session = Session()
-
-        self.quote_asset = 'USDT'
+        self.historical_limit = 4500
 
         self.pairs_info = self.get_pairs_info()
 
-        self.historical_limit = 90
-
-    def _send_request(self, end_point: str, request_type: str, params: Union[dict, list] = None, signed: bool = False):
-
-        now = datetime.utcnow()
-        timestamp = now.isoformat("T", "milliseconds") + "Z"
-
-        request = Request(request_type, f'{self.based_endpoint}{end_point}', data=json.dumps(params))
+    def _send_request(self, end_point: str, request_type: str, params: dict = None, signed: bool = False):
+        url = f'{self.based_endpoint}{end_point}'
+        request = Request(request_type, url, data=json.dumps(params))
         prepared = request.prepare()
-
-        if signed:
-            body = ""
-            if params:
-                body = json.dumps(params)
-                prepared.body = body
-
-            to_hash = str(timestamp) + str.upper(request_type) + end_point + body
-
-            mac = hmac.new(bytes(self.api_secret, encoding='utf8'),
-                           bytes(to_hash, encoding='utf-8'),
-                           digestmod='sha256')
-
-            signature = base64.b64encode(mac.digest())
-
-            prepared.headers['OK-ACCESS-KEY'] = self.api_key
-            prepared.headers['OK-ACCESS-SIGN'] = signature
-            prepared.headers['OK-ACCESS-PASSPHRASE'] = self.pass_phrase
-
-        prepared.headers['Content-Type'] = "application/json"
-        prepared.headers['OK-ACCESS-TIMESTAMP'] = timestamp
+        prepared.headers['Content-Type'] = 'application/json'
+        prepared.headers['OANDA-Agent'] = 'NovaLabs'
+        prepared.headers['Authorization'] = f'Bearer {self.api_secret}'
+        prepared.headers['Accept-Datetime-Format'] = 'UNIX'
 
         response = self._session.send(prepared)
-
         return response.json()
 
-    def get_server_time(self) -> int:
+    @staticmethod
+    def get_server_time() -> int:
         """
         Note: FTX does not have any server time end point so we are simulating it with the time function
         Returns:
             the timestamp in milliseconds
         """
-        return int(self._send_request(
-            end_point=f"/api/v5/public/time",
-            request_type="GET",
-        )['data'][0]['ts'])
+        return int(time.time() * 1000)
 
-    def get_pairs_info(self) -> dict:
-
-        data = self._send_request(
-            end_point=f"/api/v5/public/instruments?instType=SWAP",
+    def get_pairs_info(self):
+        response = self._send_request(
+            end_point=f"/v3/accounts/{self.api_key}/instruments",
+            params={"accountID": self.api_key},
             request_type="GET"
-        )['data']
+        )['instruments']
 
         pairs_info = {}
 
-        for pair in data:
+        for pair in response:
 
-            if pair['settleCcy'] == self.quote_asset and pair['state'] == 'live' and pair['instType'] == 'SWAP' and pair['ctType'] == 'linear':
+            if pair['type'] == 'CURRENCY':
 
-                pairs_info[pair['instId']] = {}
+                _name = pair['name']
 
-                pairs_info[pair['instId']]['based_asset'] = pair['ctValCcy']
-                pairs_info[pair['instId']]['quote_asset'] = pair['settleCcy']
+                pairs_info[_name] = {}
 
-                size_increment = np.format_float_positional(float(pair["lotSz"]), trim='-')
-                price_increment = np.format_float_positional(float(pair["tickSz"]), trim='-')
+                pairs_info[_name]['maxQuantity'] = float(pair['maximumOrderUnits'])
+                pairs_info[_name]['minQuantity'] = float(pair['minimumTradeSize'])
 
-                pairs_info[pair['instId']]['maxQuantity'] = float('inf')
-                pairs_info[pair['instId']]['minQuantity'] = float(pair['minSz'])
-
-                price_precision = int(str(price_increment)[::-1].find('.')) if float(pair['tickSz']) < 1 else 1
-                pairs_info[pair['instId']]['tick_size'] = float(pair['tickSz'])
-                pairs_info[pair['instId']]['pricePrecision'] = price_precision
-
-                qty_precision = int(str(size_increment)[::-1].find('.')) if float(pair['minSz']) < 1 else 1
-                pairs_info[pair['instId']]['step_size'] = float(pair['minSz'])
-                pairs_info[pair['instId']]['quantityPrecision'] = qty_precision
-
-                pairs_info[pair['instId']]['earliest_timestamp'] = int(pair['listTime'])
+                pairs_info[_name]['pricePrecision'] = int(pair['displayPrecision'])
+                pairs_info[_name]['quantityPrecision'] = 1
 
         return pairs_info
 
@@ -122,13 +77,23 @@ class OKX:
         Returns:
             the none formatted candle information requested
         """
-        _end_time = start_time + interval_to_milliseconds(interval) * self.historical_limit
-        _bar = interval if 'm' in interval else interval.upper()
-        _endpoint = f"/api/v5/market/history-candles?instId={pair}&bar={_bar}&before={start_time}&after={_end_time}"
+
+        gran = interval_to_oanda_granularity(interval=interval)
+
+        _start = start_time/1000
+        _end = end_time/1000
+        _args = f"?price=M&granularity={gran}&from={_start}&to={_end}"
+
         return self._send_request(
-            end_point=_endpoint,
-            request_type="GET",
-        )['data']
+            end_point=f"/v3/instruments/{pair}/candles{_args}",
+            params={
+                "price": "M",
+                "granularity": gran,
+                "from": str(_start),
+                "to": str(_end)
+            },
+            request_type="GET"
+        )
 
     def _get_earliest_timestamp(self, pair: str, interval: str):
         """
@@ -141,37 +106,63 @@ class OKX:
             the earliest valid open timestamp in milliseconds
         """
 
-        return self.pairs_info[pair]['earliest_timestamp']
+        start_year = 2018
+        starting_date = int(datetime(start_year, 1, 1).timestamp())
+        gran = interval_to_oanda_granularity(interval=interval)
 
-    @staticmethod
-    def _format_data(all_data: list, historical: bool = True) -> pd.DataFrame:
+        _args = f"?price=M&granularity={gran}&from={starting_date}&count=10"
+
+        response = self._send_request(
+            end_point=f"/v3/instruments/{pair}/candles{_args}",
+            params={
+                "price": "M",
+                "granularity": gran,
+                "count": 10,
+                "from": str(starting_date),
+            },
+            request_type="GET"
+        )['candles'][0]['time']
+
+        return int(float(response) * 1000)
+
+    def _format_data(self, all_data: list, historical: bool = True) -> pd.DataFrame:
         """
         Args:
-            all_data: output from _full_history
-
+            all_data: output from _combine_history
         Returns:
             standardized pandas dataframe
         """
 
-        df = pd.DataFrame(all_data, columns=DATA_FORMATING['okx']['columns'])
-        df = df.sort_values(by='open_time').reset_index(drop=True)
+        final = {
+            'open_time': [],
+            'open': [],
+            'high': [],
+            'low': [],
+            'close': [],
+            'volume': [],
+        }
 
-        for var in DATA_FORMATING['okx']['num_var']:
-            df[var] = pd.to_numeric(df[var], downcast="float")
+        for info in all_data:
+            final['open_time'].append(int(float(info['time']) * 1000))
+            final['open'].append(float(info['mid']['o']))
+            final['high'].append(float(info['mid']['h']))
+            final['low'].append(float(info['mid']['l']))
+            final['close'].append(float(info['mid']['c']))
+            final['volume'].append(float(info['volume']))
 
-        for var in ['open_time']:
+        df = pd.DataFrame(final)
+
+        interval_ms = df['open_time'].iloc[1] - df['open_time'].iloc[0]
+
+        df['close_time'] = df['open_time'] + interval_ms - 1
+
+        for var in ['open_time', 'close_time']:
             df[var] = df[var].astype(int)
-
-        df = df.sort_values(by='open_time').reset_index(drop=True)
 
         if historical:
             df['next_open'] = df['open'].shift(-1)
 
-        interval_ms = df.loc[1, 'open_time'] - df.loc[0, 'open_time']
-
-        df['close_time'] = df['open_time'] + interval_ms - 1
-
-        return df.dropna().drop_duplicates('open_time')
+        return df.dropna().drop_duplicates()
 
     def get_historical_data(self, pair: str, interval: str, start_ts: int, end_ts: int) -> pd.DataFrame:
         """
@@ -203,7 +194,9 @@ class OKX:
         idx = 0
         while True:
 
-            end_t = int(start_time + timeframe * self.historical_limit)
+            print(f'Request # {idx}')
+
+            end_t = start_time + timeframe * self.historical_limit
             end_time = min(end_t, end_ts)
 
             # fetch the klines from start_ts up to max 500 entries or the end_ts if set
@@ -212,28 +205,27 @@ class OKX:
                 interval=interval,
                 start_time=start_time,
                 end_time=end_time
-            )
-
-            if len(temp_data) == 0:
-                break
+            )['candles']
 
             # append this loops data to our output data
             if temp_data:
                 klines += temp_data
 
+            if len(temp_data) == 0:
+                break
             # handle the case where exactly the limit amount of data was returned last loop
             # check if we received less than the required limit and exit the loop
 
             # increment next call by our timeframe
-            start_time = int(temp_data[0][0])
+            start_time = float(temp_data[-1]['time']) * 1000 + timeframe
 
             # exit loop if we reached end_ts before reaching <limit> klines
-            if start_time >= end_ts:
+            if end_time and start_time >= end_ts:
                 break
 
             # sleep after every 3rd call to be kind to the API
             idx += 1
-            if idx % 5 == 0:
+            if idx % 3 == 0:
                 time.sleep(1)
 
         data = self._format_data(all_data=klines)

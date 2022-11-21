@@ -8,9 +8,9 @@ import math
 import json
 import time
 
-from novalabs.utils.constant import VAR_NEEDED_FOR_POSITION
-from novalabs.clients.clients import clients
-from novalabs.utils.helpers import get_timedelta_unit, convert_max_holding_to_candle_nb, convert_candle_to_timedelta
+from nova.utils.constant import VAR_NEEDED_FOR_POSITION
+from nova.clients.clients import clients
+from nova.utils.helpers import get_timedelta_unit, convert_max_holding_to_candle_nb, convert_candle_to_timedelta
 
 from warnings import simplefilter
 

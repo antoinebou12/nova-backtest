@@ -1,5 +1,5 @@
-from novalabs.utils.helpers import interval_to_milliseconds
-from novalabs.utils.constant import DATA_FORMATING
+from nova.utils.helpers import interval_to_milliseconds
+from nova.utils.constant import DATA_FORMATING
 from requests import Request, Session
 from urllib.parse import urlencode
 import pandas as pd
