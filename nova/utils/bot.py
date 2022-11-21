@@ -9,6 +9,7 @@ from datetime import datetime, timedelta
 from typing import Union
 import random
 import time
+import traceback
 
 
 class Bot(TelegramBOT):
@@ -518,9 +519,7 @@ class Bot(TelegramBOT):
                     # If the previous code takes less than 1 second to execute, it will be executed again
                     time.sleep(1)
 
-            except Exception as e:
-
-                print(f'{self.bot_name} crashed with the error:\n{str(e)[:100]}')
+            except Exception:
 
                 # exit all current positions
                 self.security_close_all_positions()
@@ -531,4 +530,4 @@ class Bot(TelegramBOT):
                         bot_name=self.bot_name
                     )
 
-                return str(e)
+                traceback.print_exc()
