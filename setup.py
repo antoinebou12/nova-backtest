@@ -15,13 +15,13 @@ with open("README.md", "r") as fh:
     long_description = fh.read()
 
 setup(
-    name="novalabs",
+    name="novalabs-backtest",
     version="1.0.0",
     author="Nova Labs",
     author_email="devteam@novalabs.ai",
     description="Wrappers around Nova Labs utilities focused on safety and testability",
     long_description=long_description,
-    url="https://github.com/Nova-DevTeam/nova-python",
+    url="https://github.com/Nova-DevTeam/nova-backtest",
     packages=find_packages(),
     classifiers=[
         "Programming Language :: Python :: 3",
