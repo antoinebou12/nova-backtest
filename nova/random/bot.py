@@ -29,7 +29,7 @@ class RANDOM_BOT(Bot):
                  telegram_notification: bool = False,
                  telegram_bot_token: str = None,
                  telegram_bot_chat_id: str = None,
-                 bot_id: str = "RANDOM_BOT_1",
+                 bot_id: str = "0000-1111-2222-3333",
                  entry_l_prob: float = 0.2,
                  entry_s_prob: float = 0.2,
                  exit_prob: float = 0,
@@ -56,7 +56,7 @@ class RANDOM_BOT(Bot):
                      geometric_size=geometric_size,
                      max_pos=max_pos,
                      max_down=max_down,
-                     max_holding=timedelta(minutes=2),
+                     max_holding=timedelta(minutes=30),
 
                      telegram_notification=telegram_notification,
                      telegram_bot_token=telegram_bot_token,
