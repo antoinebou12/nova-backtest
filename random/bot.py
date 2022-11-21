@@ -56,7 +56,7 @@ class RANDOM_BOT(Bot):
                      geometric_size=geometric_size,
                      max_pos=max_pos,
                      max_down=max_down,
-                     max_holding=timedelta(minutes=30),
+                     max_holding=timedelta(hours=1),
 
                      telegram_notification=telegram_notification,
                      telegram_bot_token=telegram_bot_token,
