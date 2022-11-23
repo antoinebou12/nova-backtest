@@ -32,7 +32,7 @@ jobs:
           password: ${{ secrets.PYPI_API_TOKEN }}
           
   update-production:
-    name: Update nova-backtest 📦 on production
+    name: Update novalabs-backtest 📦 on production
     runs-on: self-hosted
     steps:
       - name: Update novalabs-backtest venv

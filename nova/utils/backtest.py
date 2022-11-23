@@ -122,9 +122,9 @@ class BackTest:
         return list_pairs
 
     def verify_all_pairs(self):
+        all_pairs = self.get_list_pair()
 
         for pair in self.list_pair:
-            all_pairs = self.get_list_pair()
 
             assert pair in all_pairs, f"{pair} is not a valid trading pair"
 
