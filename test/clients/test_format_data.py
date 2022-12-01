@@ -1,6 +1,6 @@
-from nova.clients.clients import clients
+from novalabs.clients.clients import clients
 from decouple import config
-from nova.utils.constant import STD_CANDLE_FORMAT
+from novalabs.utils.constant import STD_CANDLE_FORMAT
 from datetime import datetime
 import pandas as pd
 

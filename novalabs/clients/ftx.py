@@ -1,119 +1,119 @@
 from requests import Request, Session
-import hmac
-import base64
-import json
 import time
-import hashlib
-from nova.utils.helpers import interval_to_minutes, interval_to_milliseconds, milliseconds_to_interval
-from nova.utils.constant import DATA_FORMATING
+import datetime
+import hmac
+from novalabs.utils.helpers import interval_to_milliseconds, milliseconds_to_interval
+from novalabs.utils.constant import DATA_FORMATING
 import pandas as pd
-from datetime import datetime
 import numpy as np
+import aiohttp
+import asyncio
+import json
+import urllib.parse
+from typing import Union
+import math
+from multiprocessing import Pool
 
-class Kucoin:
+
+class FTX:
 
     def __init__(self,
                  key: str,
                  secret: str,
-                 pass_phrase: str,
-                 testnet: bool):
+                 testnet: bool = False
+                 ):
         self.api_key = key
         self.api_secret = secret
-        self.pass_phrase = pass_phrase
-
-        self.based_endpoint = "https://api-futures.kucoin.com"
-
+        self.based_endpoint = "https://ftx.com/"
         self._session = Session()
-
-        self.historical_limit = 190
-
+        self.historical_limit = 1500
         self.pairs_info = self.get_pairs_info()
+        self.holding_days = 5
 
-        self.leverage = 2
+    def _send_request(self, end_point: str, request_type: str, params: dict = None, signed: bool = False):
+        if params is None:
+            params = {}
 
-    def _send_request(self, end_point: str, request_type: str, params: dict = {}, signed: bool = False):
-
-        to_use = "https://api-futures.kucoin.com" if not signed else self.based_endpoint
-        request = Request(request_type, f'{to_use}{end_point}', data=json.dumps(params))
+        url = f'{self.based_endpoint}{end_point}'
+        request = Request(request_type, url, data=json.dumps(params))
         prepared = request.prepare()
-
-        timestamp = int(time.time() * 1000)
-
-        prepared.headers['Content-Type'] = "application/json"
-        prepared.headers['KC-API-KEY-VERSION '] = "2"
-        prepared.headers['User-Agent'] = "NovaLabs"
-        prepared.headers['KC-API-TIMESTAMP'] = str(timestamp)
+        prepared.headers['Content-Type'] = 'application/json'
 
         if signed:
+            ts = int(time.time() * 1000)
 
-            final_dict = ""
-            if params:
-                final_dict = json.dumps(params)
+            signature_payload = f'{ts}{request_type}{end_point}'
 
-            sig_str = f"{timestamp}{request_type}{end_point}{final_dict}".encode('utf-8')
-            signature = base64.b64encode(
-                hmac.new(self.api_secret.encode('utf-8'), sig_str, hashlib.sha256).digest()
-            )
+            if prepared.body:
+                signature_payload += prepared.body
 
-            prepared.headers['KC-API-SIGN'] = signature
-            prepared.headers['KC-API-KEY'] = self.api_key
-            prepared.headers['KC-API-PASSPHRASE'] = self.pass_phrase
+            signature_payload = signature_payload.encode()
+
+            signature = hmac.new(self.api_secret.encode(), signature_payload, 'sha256').hexdigest()
+
+            prepared.headers['FTX-KEY'] = self.api_key
+            prepared.headers['FTX-SIGN'] = signature
+            prepared.headers['FTX-TS'] = str(ts)
+
+            prepared.headers['FTX-SUBACCOUNT'] = urllib.parse.quote('novalabs')
 
         response = self._session.send(prepared)
+        data = response.json()
 
-        return response.json()
+        if not data['success']:
+            if data['error'] == 'Order not found' or data['error'] == 'Order already closed':
+                return data
+            else:
+                print(data['error'])
 
-    def get_server_time(self) -> int:
+        if 'result' in data.keys():
+            return data['result']
+        else:
+            return data
+
+    @staticmethod
+    def get_server_time() -> int:
         """
+        Note: FTX does not have any server time end point so we are simulating it with the time function
         Returns:
             the timestamp in milliseconds
         """
-        return self._send_request(
-            end_point=f"/api/v1/timestamp",
-            request_type="GET"
-        )['data']
+        return int(time.time() * 1000)
 
-    def get_pairs_info(self):
-
+    def get_pairs_info(self) -> dict:
         data = self._send_request(
-            end_point=f"/api/v1/contracts/active",
-            request_type="GET",
-            signed=False
-        )['data']
+            end_point=f"/api/markets",
+            request_type="GET"
+        )
 
         pairs_info = {}
 
         for pair in data:
 
-            if pair['status'] == "Open":
+            if 'PERP' in pair['name']:
 
-                if pair['multiplier'] > 0:
-                    step_size = pair['lotSize'] * pair['multiplier']
+                _name = pair['name']
+
+                pairs_info[_name] = {}
+                pairs_info[_name]['quote_asset'] = 'USD'
+
+                size_increment = np.format_float_positional(pair["sizeIncrement"], trim='-')
+                price_increment = np.format_float_positional(pair["priceIncrement"], trim='-')
+
+                pairs_info[_name]['maxQuantity'] = float(pair['largeOrderThreshold'])
+                pairs_info[_name]['minQuantity'] = float(size_increment)
+
+                pairs_info[_name]['tick_size'] = float(price_increment)
+                if float(pair['priceIncrement']) < 1:
+                    pairs_info[_name]['pricePrecision'] = int(str(price_increment)[::-1].find('.'))
                 else:
-                    step_size = pair['lotSize']
+                    pairs_info[_name]['pricePrecision'] = 1
 
-                pairs_info[pair['symbol']] = {}
-                pairs_info[pair['symbol']]['quote_asset'] = pair['quoteCurrency']
-
-                price_increment = np.format_float_positional(pair["tickSize"], trim='-')
-
-                pairs_info[pair['symbol']]['maxQuantity'] = float(pair['maxOrderQty'])
-                pairs_info[pair['symbol']]['minQuantity'] = float(step_size)
-
-                pairs_info[pair['symbol']]['tick_size'] = float(pair['tickSize'])
-
-                if float(pair['tickSize']) < 1:
-                    pairs_info[pair['symbol']]['pricePrecision'] = int(str(price_increment)[::-1].find('.'))
+                pairs_info[_name]['step_size'] = float(size_increment)
+                if float(pair['sizeIncrement']) < 1:
+                    pairs_info[_name]['quantityPrecision'] = int(str(size_increment)[::-1].find('.'))
                 else:
-                    pairs_info[pair['symbol']]['pricePrecision'] = 1
-
-                pairs_info[pair['symbol']]['step_size'] = float(step_size)
-                if step_size < 1:
-                    pairs_info[pair['symbol']]['quantityPrecision'] = int(str(step_size)[::-1].find('.'))
-                else:
-                    pairs_info[pair['symbol']]['quantityPrecision'] = 1
-
-                pairs_info[pair['symbol']]['multiplier'] = pair['multiplier']
+                    pairs_info[_name]['quantityPrecision'] = 1
 
         return pairs_info
 
@@ -127,19 +127,18 @@ class Kucoin:
         Returns:
             the none formatted candle information requested
         """
-        _interval_min = interval_to_minutes(interval)
-        _interval_ms = interval_to_milliseconds(interval)
-
-        _end_time = start_time + self.historical_limit * _interval_ms
-        _endpoint = f"/api/v1/kline/query?symbol={pair}&granularity={_interval_min}&from={start_time}&to={_end_time}"
+        _start_time = int(start_time//1000)
+        _end_time = int(end_time//1000)
+        _interval = int(interval_to_milliseconds(interval)//1000)
+        _endpoint = f"/api/markets/{pair}/candles?resolution={_interval}&start_time={_start_time}&end_time={_end_time}"
         return self._send_request(
-            end_point=f'{_endpoint}',
-            request_type="GET",
-        )['data']
+            end_point=_endpoint,
+            request_type="GET"
+        )
 
     def _get_earliest_timestamp(self, pair: str, interval: str):
         """
-        Note the historical data for the
+        Note we are using an interval of 4 days to make sure we start at the beginning
         of the time
         Args:
             pair: Name of symbol pair
@@ -147,25 +146,27 @@ class Kucoin:
         return:
             the earliest valid open timestamp in milliseconds
         """
+        kline = self._get_candles(
+            pair=pair,
+            interval='4d',
+            start_time=0,
+            end_time=int(time.time()*1000)
+        )
+        return int(kline[0]['time'])
 
-        current_time = (time.time() * 1000)
-        _interval_ms = interval_to_milliseconds(interval)
-
-        return int(current_time - 15 * _interval_ms * self.historical_limit)
-
-    @staticmethod
-    def _format_data(all_data: list, historical: bool = True) -> pd.DataFrame:
+    def _format_data(self, all_data: list, historical: bool = True) -> pd.DataFrame:
         """
         Args:
-            all_data: output from _full_history
-
+            all_data: output from _combine_history
         Returns:
             standardized pandas dataframe
         """
+        # Remove the last row if it's not finished yet
+        df = pd.DataFrame(all_data)
+        df.drop('startTime', axis=1, inplace=True)
+        df.columns = ['open_time', 'open', 'high', 'low', 'close', 'volume']
 
-        df = pd.DataFrame(all_data, columns=DATA_FORMATING['kucoin']['columns'])
-
-        for var in DATA_FORMATING['kucoin']['num_var']:
+        for var in DATA_FORMATING['ftx']['num_var']:
             df[var] = pd.to_numeric(df[var], downcast="float")
 
         interval_ms = df['open_time'].iloc[1] - df['open_time'].iloc[0]
@@ -176,8 +177,8 @@ class Kucoin:
 
             final_data = df.drop_duplicates().dropna().reset_index(drop=True)
 
-            _first_time = datetime.fromtimestamp(final_data.loc[0, 'open_time'] // 1000.0)
-            _last_time = datetime.fromtimestamp(final_data.loc[len(final_data)-1, 'open_time'] // 1000.0)
+            _first_time = datetime.datetime.fromtimestamp(final_data.loc[0, 'open_time'] // 1000.0)
+            _last_time = datetime.datetime.fromtimestamp(final_data.loc[len(final_data)-1, 'open_time'] // 1000.0)
             _freq = milliseconds_to_interval(interval_ms)
 
             final_timeseries = pd.DataFrame(
@@ -191,7 +192,7 @@ class Kucoin:
             all_missing = clean_df.isna().sum().sum()
 
             if all_missing > 0:
-                print(f'Kucoin returned {all_missing} missing values ! Forward Fill Applied')
+                print(f'FTX returned {all_missing} missing values ! Forward Fill Applied')
                 clean_df = clean_df.ffill()
 
             clean_df['next_open'] = clean_df['open'].shift(-1)
@@ -201,7 +202,7 @@ class Kucoin:
         for var in ['open_time', 'close_time']:
             clean_df[var] = clean_df[var].astype(int)
 
-        return clean_df.dropna()
+        return clean_df
 
     def get_historical_data(self, pair: str, interval: str, start_ts: int, end_ts: int) -> pd.DataFrame:
         """
@@ -233,12 +234,15 @@ class Kucoin:
         idx = 0
         while True:
 
+            end_t = start_time + timeframe * self.historical_limit
+            end_time = min(end_t, end_ts)
+
             # fetch the klines from start_ts up to max 500 entries or the end_ts if set
             temp_data = self._get_candles(
                 pair=pair,
                 interval=interval,
                 start_time=start_time,
-                end_time=end_ts
+                end_time=end_time
             )
 
             # append this loops data to our output data
@@ -252,10 +256,10 @@ class Kucoin:
                 break
 
             # increment next call by our timeframe
-            start_time = temp_data[-1][0] + timeframe
+            start_time = temp_data[-1]['time'] + timeframe
 
-            # exit loop if we reached end_ts before reaching klines
-            if start_time >= end_ts:
+            # exit loop if we reached end_ts before reaching <limit> klines
+            if end_time and start_time >= end_ts:
                 break
 
             # sleep after every 3rd call to be kind to the API
@@ -287,4 +291,3 @@ class Kucoin:
             end_ts=int(time.time() * 1000)
         )
         return pd.concat([current_df, df], ignore_index=True).drop_duplicates(subset=['open_time'])
-

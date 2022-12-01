@@ -1,4 +1,4 @@
-from nova.clients.clients import clients
+from novalabs.clients.clients import clients
 from decouple import config
 
 

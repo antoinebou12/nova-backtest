@@ -1,5 +1,5 @@
-from nova.clients.clients import clients
-from nova.utils.helpers import interval_to_milliseconds
+from novalabs.clients.clients import clients
+from novalabs.utils.helpers import interval_to_milliseconds
 
 from decouple import config
 from datetime import datetime
