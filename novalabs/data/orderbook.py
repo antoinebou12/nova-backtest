@@ -10,7 +10,7 @@ import time
 import requests
 import numpy as np
 
-from nova.utils.constant import EXCEPTION_LIST_BINANCE
+from novalabs.utils.constant import EXCEPTION_LIST_BINANCE
 
 import warnings
 

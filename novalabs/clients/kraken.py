@@ -1,6 +1,6 @@
 import time
-from nova.utils.helpers import interval_to_milliseconds
-from nova.utils.constant import DATA_FORMATING
+from novalabs.utils.helpers import interval_to_milliseconds
+from novalabs.utils.constant import DATA_FORMATING
 import pandas as pd
 from requests import Request, Session
 import hmac
