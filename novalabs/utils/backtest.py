@@ -1110,6 +1110,9 @@ class BackTest:
 
             df = self.exit_strategy(df)
 
+            assert 'exit_signal' in df.columns, \
+                f"Missing exit_signal column. Please create this column in entry_strategy()"
+
             df = self.create_closest_exit(df)
 
             df = self.create_all_exit_point(df)
