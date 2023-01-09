@@ -1,3 +1,6 @@
+import numpy as np
+import requests
+
 from nova.utils.helpers import interval_to_milliseconds, retry_requests
 from nova.utils.constant import DATA_FORMATING
 from requests import Request, Session
@@ -16,7 +19,7 @@ import random
 import string
 
 
-class Bybit:
+class BTCEX:
 
     def __init__(self,
                  key: str,
@@ -26,11 +29,19 @@ class Bybit:
         self.api_key = key
         self.api_secret = secret
 
-        self.based_endpoint = "https://api-testnet.bybit.com" if testnet else "https://api.bybit.com"
+        self.based_endpoint = "" if testnet else "https://api.btcex.com/api/v1"
 
         self._session = Session()
 
-        self.historical_limit = 200
+        self.historical_limit = 10_000
+
+        self.access_token = ''
+        self.refresh_token = ''
+        self.end_connection_date = np.Inf
+        self.connected = False
+        if key != '' and secret != '':
+            self.connected = True
+            self.connect()
 
         self.pairs_info = self.get_pairs_info()
 
@@ -45,20 +56,9 @@ class Bybit:
         if params is None:
             params = {}
 
-        if signed:
-            params['api_key'] = self.api_key
-            params['timestamp'] = int(time.time() * 1000)
-            params = dict(sorted(params.items()))
-
-            query_string = urlencode(params, True)
-            query_string = query_string.replace('False', 'false').replace('True', 'true')
-
-            m = hmac.new(self.api_secret.encode("utf-8"), query_string.encode("utf-8"), hashlib.sha256)
-            params['sign'] = m.hexdigest()
-
         if request_type == 'POST':
             request = Request(request_type, f'{self.based_endpoint}{end_point}',
-                              data=json.dumps(params))
+                              json=params)
         elif request_type == 'GET':
             request = Request(request_type, f'{self.based_endpoint}{end_point}',
                               params=urlencode(params, True))
@@ -66,15 +66,58 @@ class Bybit:
             raise ValueError("Please enter valid request_type")
 
         prepared = request.prepare()
-        prepared.headers['Content-Type'] = "application/json"
+        if signed:
+            prepared.headers['Authorization'] = f"bearer {self.access_token}"
+
         response = self._session.send(prepared)
+
         data = response.json()
 
-        if data['ret_msg'] != "OK" and data['ret_code'] != 20001:
-            print(f"{data['ret_code']} : {data['ret_msg']}")
-            raise ValueError('Error when sending request')
+        if 'error' in data.keys():
+            raise ConnectionError(data['error'])
 
         return data
+
+    def connect(self):
+
+        params = {'grant_type': 'client_credentials',
+                  'client_id': self.api_key,
+                  'client_secret': self.api_secret}
+
+        data = self._send_request(
+            end_point=f"/public/auth",
+            request_type="GET",
+            params=params,
+        )['result']
+
+        self.access_token = data['access_token']
+        self.refresh_token = data['refresh_token']
+        self.end_connection_date = int(time.time()) + data['expires_in']
+
+    def logout(self):
+
+        data = self._send_request(
+            end_point=f"/private/logout",
+            request_type="GET",
+            signed=True
+        )['result']
+
+        return data
+
+    def refresh_connection(self):
+
+        params = {'grant_type': 'refresh_token',
+                  'refresh_token': self.refresh_token}
+
+        data = self._send_request(
+            end_point=f"/public/auth",
+            request_type="GET",
+            params=params,
+        )['result']
+
+        self.access_token = data['access_token']
+        self.refresh_token = data['refresh_token']
+        self.end_connection_date = int(time.time()) + data['expires_in']
 
     def get_server_time(self) -> int:
         """
@@ -82,98 +125,39 @@ class Bybit:
             the timestamp in milliseconds
         """
         ts = self._send_request(
-            end_point=f"/v2/public/time",
-            request_type="GET"
-        )['time_now']
-        return int(float(ts) * 1000)
-
-    def _get_candles(self,
-                     pair: str,
-                     interval: str,
-                     start_time: int,
-                     limit: int = 200,
-                     end_time: int = None) -> list:
-
-        """
-
-        Args:
-            pair: pair to get the candles
-            interval: Data refresh interval. Enum : 1 3 5 15 30 60 120 240 360 720 "D" "M" "W"
-            start_time: From timestamp in milliseconds
-            limit: Limit for data size per page, max size is 200. Default as showing 200 pieces of data per page
-
-        Returns:
-            list of candles
-        """
-
-        _interval = self._convert_interval(std_interval=interval)
-
-        params = {
-            'symbol': pair,
-            'interval': _interval,
-            'from': start_time // 1000,
-            'limit': limit
-        }
-        data = self._send_request(
-            end_point=f"/public/linear/kline",
+            end_point=f"/public/ping",
             request_type="GET",
-            params=params
-        )
-        return data['result']
+            signed=False,
+        )['usOut']
+        return int(ts)
 
     def get_pairs_info(self) -> dict:
-        """
-        Returns:
-            All pairs available and tradable on the exchange.
-        """
-        data = self._send_request(
-            end_point=f"/v2/public/symbols",
-            request_type="GET"
-        )['result']
 
         pairs_info = {}
 
-        for pair in data:
-            tradable = pair['status'] == 'Trading'
+        data = self._send_request(
+            end_point=f"/public/get_instruments",
+            params={'currency': 'PERPETUAL'},
+            request_type="GET"
+        )['result']
 
-            if tradable:
-                pairs_info[pair['name']] = {}
-                pairs_info[pair['name']]['quote_asset'] = pair['quote_currency']
+        for info in data:
+            if info['is_active']:
+                pair_name = info['instrument_name']
+                pairs_info[pair_name] = {}
 
-                pairs_info[pair['name']]['maxQuantity'] = float(pair['lot_size_filter']['max_trading_qty'])
-                pairs_info[pair['name']]['minQuantity'] = float(pair['lot_size_filter']['min_trading_qty'])
+                pairs_info[pair_name]['quote_asset'] = info['base_currency']
 
-                pairs_info[pair['name']]['tick_size'] = float(pair['price_filter']['tick_size'])
-                pairs_info[pair['name']]['pricePrecision'] = pair['price_scale']
+                pairs_info[pair_name]['maxQuantity'] = np.Inf
+                pairs_info[pair_name]['minQuantity'] = float(info['min_qty'])
 
-                pairs_info[pair['name']]['step_size'] = float(pair['lot_size_filter']['qty_step'])
+                pairs_info[pair_name]['tick_size'] = float(info['tick_size'])
 
-                if float(pair['lot_size_filter']['qty_step']) < 1:
-                    step_size = str(pair['lot_size_filter']['qty_step'])[::-1].find('.')
-                    pairs_info[pair['name']]['quantityPrecision'] = int(step_size)
-                else:
-                    pairs_info[pair['name']]['quantityPrecision'] = 1
+                pairs_info[pair_name]['step_size'] = float(info['min_trade_amount'])
+
+                pairs_info[pair_name]['creation_timestamp'] = int(info['creation_timestamp'])
 
         return pairs_info
-
-    def _get_earliest_timestamp(self, pair: str, interval: str) -> int:
-        """
-        Args:
-            pair: Name of symbol pair -- BNBBTC
-            interval: Binance Kline interval
-
-        return:
-            the earliest valid open timestamp
-        """
-
-        kline = self._get_candles(
-            pair=pair,
-            interval=interval,
-            start_time=1467900800000,
-            limit=1
-        )
-
-        return kline[0]['open_time'] * 1000
 
     @staticmethod
     def _convert_interval(std_interval) -> str:
@@ -193,6 +177,60 @@ class Bybit:
         else:
             return std_interval[-1].upper()
 
+    def _format_price(self,
+                      pair: str,
+                      raw_price: float) -> float:
+
+        raw_price = float(raw_price)
+
+        return round(raw_price - raw_price % self.pairs_info[pair]['tick_size'], 10)
+
+    def _format_quantity(self,
+                         pair: str,
+                         raw_quantity: float) -> float:
+
+        raw_quantity = float(raw_quantity)
+
+        return round(raw_quantity - raw_quantity % self.pairs_info[pair]['step_size'], 10)
+
+    def _get_candles(self,
+                     pair: str,
+                     interval: str,
+                     start_time: int,
+                     end_time: int = None) -> list:
+
+        """
+
+        Args:
+            pair: pair to get the candles
+            interval: Data refresh interval. Enum : 1 3 5 15 30 60 120 240 360 720 "D" "M" "W"
+            start_time: From timestamp in milliseconds
+            limit: Limit for data size per page, max size is 200. Default as showing 200 pieces of data per page
+
+        Returns:
+            list of candles
+        """
+
+        _interval = self._convert_interval(std_interval=interval)
+
+        params = {
+            'instrument_name': pair,
+            'resolution': _interval,
+            'start_timestamp': start_time // 1000,
+            'end_timestamp': end_time // 1000
+        }
+        data = self._send_request(
+            end_point=f"/public/get_tradingview_chart_data",
+            request_type="GET",
+            params=params
+        )['result']
+
+        return data
+
+    def _get_earliest_timestamp(self, pair: str) -> int:
+
+        return int(self.pairs_info[pair]['creation_timestamp'])
+
     @staticmethod
     def _format_data(all_data: list, historical: bool = True) -> pd.DataFrame:
         """
@@ -203,11 +241,13 @@ class Bybit:
             standardized pandas dataframe
         """
 
-        interval_ms = 1000 * (all_data[1]['start_at'] - all_data[0]['start_at'])
-        df = pd.DataFrame(all_data)[DATA_FORMATING['bybit']['columns']]
+        interval_ms = 1000 * (all_data[1]['tick'] - all_data[0]['tick'])
+        df = pd.DataFrame(all_data)[DATA_FORMATING['btcex']['columns']]
 
-        for var in DATA_FORMATING['bybit']['num_var']:
+        for var in DATA_FORMATING['btcex']['num_var']:
             df[var] = pd.to_numeric(df[var], downcast="float")
+
+        df = df.rename(columns={'tick': 'open_time'})
 
         df['open_time'] = 1000 * df['open_time']
 
@@ -243,7 +283,6 @@ class Bybit:
         if start_ts is not None:
             first_valid_ts = self._get_earliest_timestamp(
                 pair=pair,
-                interval=interval
             )
             start_ts = max(start_ts, first_valid_ts)
 
@@ -255,8 +294,8 @@ class Bybit:
             temp_data = self._get_candles(
                 pair=pair,
                 interval=interval,
-                limit=self.historical_limit,
-                start_time=start_ts
+                start_time=start_ts,
+                end_time=start_ts + self.historical_limit * timeframe
             )
 
             # append this loops data to our output data
@@ -270,12 +309,14 @@ class Bybit:
                 break
 
             # increment next call by our timeframe
-            start_ts = 1000 * temp_data[-1]['open_time'] + timeframe
+            start_ts = 1000 * temp_data[-1]['tick'] + timeframe
 
             # exit loop if we reached end_ts before reaching <limit> klines
             if end_ts and start_ts >= end_ts:
                 break
+
         df = self._format_data(all_data=klines)
+
         return df[df['open_time'] <= end_ts]
 
     def update_historical(self, pair: str, interval: str, current_df: pd.DataFrame) -> pd.DataFrame:
@@ -293,178 +334,182 @@ class Bybit:
         end_date_data_ts = current_df['open_time'].max()
         now_date_ts = int(time.time() * 1000)
 
-        df = self.get_historical_data(pair=pair,
-                                      interval=interval,
-                                      start_ts=end_date_data_ts,
-                                      end_ts=now_date_ts)
+        df_temp = self.get_historical_data(pair=pair,
+                                           interval=interval,
+                                           start_ts=end_date_data_ts,
+                                           end_ts=now_date_ts)
 
-        return pd.concat([current_df, df], ignore_index=True).drop_duplicates(subset=['open_time'])
+        return pd.concat([current_df, df_temp], ignore_index=True).drop_duplicates(subset=['open_time'])
 
-    def get_token_balance(self, quote_asset: str) -> float:
-        """
-        Args:
-            quote_asset: asset used for the trades (USD, USDT, BUSD, ...)
+    def get_token_balance(self,
+                          quote_asset: str) -> float:
 
-        Returns:
-            Available quote_asset amount.
-        """
+        params = {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "/private/get_assets_info",
+            "params": {
+                'asset_type': ['PERPETUAL']
+            }
+        }
+
         data = self._send_request(
-            end_point=f"/v2/private/wallet/balance",
-            request_type="GET",
+            end_point=f"/private/get_assets_info",
+            request_type="POST",
+            params=params,
             signed=True
         )['result']
 
-        return float(data[quote_asset]['available_balance'])
+        current_balance = data['PERPETUAL']['wallet_balance']
+
+        return float(current_balance)
 
     def get_order_book(self, pair: str) -> dict:
 
         data = self._send_request(
-            end_point=f"/v2/public/orderBook/L2",
+            end_point=f"/public/get_order_book",
             request_type="GET",
-            params={'symbol': pair}
+            params={'instrument_name': pair}
         )['result']
 
         std_ob = {'bids': [], 'asks': []}
 
-        for info in data:
-            if info['side'] == 'Buy':
-                std_ob['bids'].append({
-                    'price': float(info['price']),
-                    'size': float(info['size'])
-                })
-            elif info['side'] == 'Sell':
-                std_ob['asks'].append({
-                    'price': float(info['price']),
-                    'size': float(info['size'])
-                })
+        for ask in data['asks']:
+            std_ob['asks'].append({
+                'price': float(ask[0]),
+                'size': float(ask[1])
+            })
+        for bid in data['bids']:
+            std_ob['bids'].append({
+                'price': float(bid[0]),
+                'size': float(bid[1])
+            })
 
         return std_ob
 
     def enter_market_order(self, pair: str, type_pos: str, quantity: float) -> dict:
 
-        side = 'Buy' if type_pos == 'LONG' else 'Sell'
+        method = '/private/buy' if type_pos == 'LONG' else '/private/sell'
+
+        std_qty = self._format_quantity(pair=pair, raw_quantity=quantity)
 
         params = {
-            "side": side,
-            "symbol": pair,
-            "qty": float(round(quantity, self.pairs_info[pair]['quantityPrecision'])),
-            "order_type": 'Market',
-            "time_in_force": 'GoodTillCancel',
-            "close_on_trigger": False,
+            "instrument_name": pair,
+            "position_side": type_pos,
+            "amount": std_qty,
+            "type": 'market',
+            "time_in_force": 'immediate_or_cancel',
             "reduce_only": False,
-            "recv_window": "5000",
-            "position_idx": 0
         }
 
         response = self._send_request(
-            end_point=f"/private/linear/order/create",
-            request_type="POST",
+            end_point=method,
+            request_type="GET",
             params=params,
             signed=True
         )
 
-        return self.get_order(pair=pair, order_id=response['result']['order_id'])
+        return self.get_order(order_id=response['result']['order']['order_id'])
 
     def exit_market_order(self, pair: str, type_pos: str, quantity: float) -> dict:
 
-        side = 'Sell' if type_pos == 'LONG' else 'Buy'
+        method = '/private/sell' if type_pos == 'LONG' else '/private/buy'
+
+        std_qty = self._format_quantity(pair=pair, raw_quantity=quantity)
 
         params = {
-            "side": side,
-            "symbol": pair,
-            "qty": float(round(quantity, self.pairs_info[pair]['quantityPrecision'])),
-            "order_type": 'Market',
-            "time_in_force": 'ImmediateOrCancel',
-            "close_on_trigger": True,
+            "instrument_name": pair,
+            "position_side": type_pos,
+            "amount": std_qty,
+            "type": 'market',
+            "time_in_force": 'immediate_or_cancel',
             "reduce_only": True,
-            "recv_window": "5000",
-            "position_idx": 0
         }
 
         response = self._send_request(
-            end_point=f"/private/linear/order/create",
-            request_type="POST",
+            end_point=method,
+            request_type="GET",
             params=params,
             signed=True
         )
 
-        return self.get_order(pair=pair, order_id=response['result']['order_id'])
+        return self.get_order(order_id=response['result']['order']['order_id'])
+
+    @retry_requests
+    def get_order(self,
+                  order_id: str):
+
+        response = self._send_request(
+            end_point=f"/private/get_order_state",
+            request_type="GET",
+            params={'order_id': order_id},
+            signed=True
+        )['result']
+
+        formated_order = self._format_order(data=response)
+
+        return formated_order
 
     def _format_order(self, data: dict) -> dict:
 
-        date = datetime.strptime(data['updated_time'], '%Y-%m-%dT%H:%M:%SZ')
+        date_ts = data['last_update_timestamp']
 
-        _order_type = data['order_type']
-        if data['order_type'] == 'Limit' and data['reduce_only'] and data['order_link_id'][:2] == 'TP':
+        _order_type = data['order_type'].upper()
+        if data['custom_order_id'][:2] == 'TP':
             _order_type = 'TAKE_PROFIT'
-        if data['order_type'] == 'Market' and data['order_status'] in ['Untriggered', 'Deactivated', 'Triggered']:
-            _order_type = 'STOP_MARKET'
 
-        data['order_status'] = 'PARTIALLY_FILLED' if data['order_status'] == 'PartiallyFilled' else data['order_status']
-        data['order_status'] = 'CANCELED' if data['order_status'] == 'Cancelled' else data['order_status']
+        _order_type = 'STOP_MARKET' if _order_type == 'STOP_LOSS_MARKET' else _order_type
 
-        _order_name = 'order_id' if 'order_id' in data.keys() else 'stop_order_id'
+        data['order_state'] = data['order_state'].upper()
+        data['order_state'] = 'CANCELED' if data['order_state'] == 'cancelled' else data['order_state']
+
+        condition_partially_filled = (_order_type == 'TAKE_PROFIT') and (float(data['filled_amount']) != 0) and \
+                                     (float(data['filled_amount']) < float(data['amount']))
+        data['order_state'] = 'PARTIALLY_FILLED' if condition_partially_filled else data['order_state']
+
+        _order_name = 'order_id'
 
         _stop_price = 0
         _executed_quantity = 0
         _executed_price = 0
         _price = 0
 
-        if _order_type == 'Market' and data['cum_exec_qty'] != 0:
-            _executed_quantity = data['cum_exec_qty']
-            _executed_price = data['cum_exec_value'] / data['cum_exec_qty']
+        if _order_type == 'MARKET' and data['filled_amount'] != 0:
+            _executed_quantity = float(data['filled_amount'])
+            _executed_price = float(data['average_price'])
 
-        elif _order_type == 'Limit':
-            _price = data['price']
-            _executed_price = data['price']
-            _executed_quantity = data['cum_exec_qty']
+        elif _order_type == 'LIMIT':
+            _price = float(data['price'])
+            _executed_price = float(data['price'])
+            _executed_quantity = float(data['filled_amount'])
 
         elif _order_type == 'TAKE_PROFIT':
-            _stop_price = data['price']
-            _executed_quantity = data['cum_exec_qty']
-            _executed_price = data['last_exec_price']
+            _stop_price = float(data['price'])
+            _executed_quantity = float(data['filled_amount'])
+            _executed_price = 0 if _executed_quantity == 0 else float(data['price'])
 
         elif _order_type == 'STOP_MARKET':
 
-            _stop_price = self._send_request(
-                end_point=f"/private/linear/stop-order/search",
-                request_type="GET",
-                params={'symbol': data['symbol'], 'stop_order_id': data['order_id']},
-                signed=True
-            )['result']['trigger_price']
-            _executed_quantity = data['cum_exec_qty']
-            _executed_price = 0 if data['cum_exec_qty'] == 0 else data['cum_exec_value'] / data['cum_exec_qty']
+            _executed_quantity = float(data['filled_amount'])
+            _executed_price = float(data['average_price'])
 
         formatted = {
-            'time': int(datetime.timestamp(date) * 1000),
+            'time': int(date_ts),
             'order_id': data[_order_name],
-            'pair': data['symbol'],
-            'status': data['order_status'].upper(),
+            'pair': data['instrument_name'],
+            'status': data['order_state'],
             'type': _order_type.upper(),
             'time_in_force': data['time_in_force'],
             'reduce_only': data['reduce_only'],
-            'side': data['side'].upper(),
+            'side': data['direction'].upper(),
             'price': _price,
             'stop_price': _stop_price,
-            'original_quantity': data['qty'],
+            'original_quantity': data['amount'],
             'executed_quantity': _executed_quantity,
             'executed_price': _executed_price
         }
 
         return formatted
-
-    def get_order(self, pair, order_id: str):
-
-        response = self._send_request(
-            end_point=f"/private/linear/order/search",
-            request_type="GET",
-            params={'symbol': pair, 'order_id': order_id},
-            signed=True
-        )
-
-        formated_order = self._format_order(data=response['result'])
-
-        return formated_order
 
     def get_order_trades(self, pair: str, order_id: str):
         """
@@ -476,33 +521,26 @@ class Bybit:
                   standardize output of the trades needed to complete an order
               """
 
-        results = self.get_order(
-            pair=pair,
+        order = self.get_order(
             order_id=order_id
         )
 
         trades = self._send_request(
-            end_point=f"/private/linear/trade/execution/history-list",
+            end_point=f"/private/get_user_trades_by_order",
             request_type="GET",
-            params={"symbol": pair, "start_time": int(results['time'] // 1000 - 10)},
+            params={"order_id": order_id},
             signed=True
-        )
+        )['result']
 
-        results['quote_asset'] = 'USDT'
-        results['tx_fee_in_quote_asset'] = 0
-        results['tx_fee_in_other_asset'] = {}
-        results['nb_of_trades'] = 0
-        results['is_buyer'] = None
+        order['tx_fee_in_quote_asset'] = 0
+        order['tx_fee_in_other_asset'] = {}
+        order['nb_of_trades'] = trades['count']
 
-        if trades['result']['data']:
-            for trade in trades['result']['data']:
-                if trade['order_id'] == order_id:
-                    if results['is_buyer'] is None:
-                        results['is_buyer'] = True if trade['side'] == 'Buy' else False
-                    results['tx_fee_in_quote_asset'] += float(trade['exec_fee'])
-                    results['nb_of_trades'] += 1
+        if trades['count'] > 0:
+            for trade in trades['trades']:
+                order['tx_fee_in_quote_asset'] += float(trade['fee'])
 
-        return results
+        return order
 
     def place_limit_tp(self, pair: str, side: str, quantity: float, tp_price: float):
         """
@@ -516,71 +554,71 @@ class Bybit:
             response of the API call
         """
 
+        method = '/private/buy' if side == 'BUY' else '/private/sell'
+
+        std_price = self._format_price(pair=pair, raw_price=tp_price)
+        std_quantity = self._format_quantity(pair=pair, raw_quantity=quantity)
+
         params = {
-            "side": 'Buy' if side == 'BUY' else 'Sell',
-            "symbol": pair,
-            "price": float(round(tp_price, self.pairs_info[pair]['pricePrecision'])),
-            "qty": float(round(quantity, self.pairs_info[pair]['quantityPrecision'])),
-            "order_type": 'Limit',
-            "time_in_force": 'PostOnly',
-            "close_on_trigger": True,
+            "position_side": 'LONG' if side == 'SELL' else 'SHORT',
+            "instrument_name": pair,
+            "price": std_price,
+            "amount": std_quantity,
+            "type": 'limit',
+            "post_only": True,
             "reduce_only": True,
-            "recv_window": "5000",
-            "position_idx": 0,
-            "order_link_id": 'TP_' + ''.join(random.choice(string.ascii_lowercase) for i in range(33))
+            "custom_order_id": 'TP_' + ''.join(random.choice(string.ascii_lowercase) for i in range(25))
         }
 
         response = self._send_request(
-            end_point=f"/private/linear/order/create",
-            request_type="POST",
+            end_point=method,
+            request_type="GET",
             params=params,
             signed=True
-        )
+        )['result']
 
-        return self.get_order(pair=pair, order_id=response['result']['order_id'])
+        return self.get_order(order_id=response['order']['order_id'])
 
     def place_market_sl(self, pair: str, side: str, quantity: float, sl_price: float):
 
-        # specificity of bybit
-        multi = 1.005 if side == 'SELL' else 0.995
+        method = '/private/buy' if side == 'BUY' else '/private/sell'
+
+        std_price = self._format_price(pair=pair, raw_price=sl_price)
+        std_quantity = self._format_quantity(pair=pair, raw_quantity=quantity)
 
         params = {
-            "side": 'Buy' if side == 'BUY' else 'Sell',
-            "symbol": pair,
-            "order_type": 'Market',
-            "qty": float(round(quantity, self.pairs_info[pair]['quantityPrecision'])),
-            "base_price": float(round(sl_price * multi, self.pairs_info[pair]['pricePrecision'])),
-            "stop_px": float(round(sl_price, self.pairs_info[pair]['pricePrecision'])),
-            "trigger_by": "LastPrice",
-            "time_in_force": 'GoodTillCancel',
-            "close_on_trigger": True,
+            "position_side": 'LONG' if side == 'SELL' else 'SHORT',
+            "instrument_name": pair,
+            "type": 'market',
+            "amount": std_quantity,
+            "trigger_price": std_price,
+            "condition_type": 'STOP',
+            "trigger_price_type": 2,
+            "post_only": False,
             "reduce_only": True,
-            "recv_window": "5000",
-            "position_idx": 0
         }
 
         response = self._send_request(
-            end_point=f"/private/linear/stop-order/create",
-            request_type="POST",
+            end_point=method,
+            request_type="GET",
             params=params,
             signed=True
-        )
+        )['result']
 
-        return self.get_order(pair=pair, order_id=response['result']['stop_order_id'])
+        return self.get_order(order_id=response['order']['order_id'])
 
     def get_last_price(self, pair: str):
 
         data = self._send_request(
-            end_point=f"/public/linear/recent-trading-records",
+            end_point=f"/public/tickers",
             request_type="GET",
-            params={"symbol": pair,
-                    "limit": 1},
-        )
+            params={"instrument_name": pair},
+        )['result']
 
         return {
-            'pair': data['result'][0]['symbol'],
-            'timestamp': data['result'][0]['trade_time_ms'],
-            'latest_price': float(data['result'][0]['price'])
+            'pair': data[0]['instrument_name'],
+            'timestamp': int(data[0]['timestamp']),
+            'latest_price': float(data[0]['last_price'])
         }
 
     def place_limit_order_best_price(
@@ -595,39 +633,35 @@ class Bybit:
         _type = 'bids' if side == 'BUY' else 'asks'
         best_price = float(ob[_type][0]['price'])
 
-        _side = 'Buy' if side == 'BUY' else 'Sell'
+        method = '/private/buy' if side == 'BUY' else '/private/sell'
+
+        std_quantity = self._format_quantity(pair=pair, raw_quantity=quantity)
 
         params = {
-            "side": _side,
-            "symbol": pair,
-            "price": float(round(best_price, self.pairs_info[pair]['pricePrecision'])),
-            "qty": float(round(quantity, self.pairs_info[pair]['quantityPrecision'])),
-            "order_type": 'Limit',
-            "time_in_force": 'PostOnly',
-            "close_on_trigger": False,
+            "instrument_name": pair,
+            "price": best_price,
+            "amount": std_quantity,
+            "type": 'limit',
+            "post_only": True,
             "reduce_only": reduce_only,
-            "recv_window": "5000",
-            "position_idx": 0
         }
 
         response = self._send_request(
-            end_point=f"/private/linear/order/create",
-            request_type="POST",
+            end_point=method,
+            request_type="GET",
             params=params,
             signed=True
-        )
+        )['result']
 
-        if not response['result']:
-            return False, ''
+        time.sleep(1)
 
         limit_order_posted, order_data = self._verify_limit_posted(
-            order_id=response['result']['order_id'],
-            pair=pair
+            order_id=response['order']['order_id']
         )
 
         return limit_order_posted, order_data
 
-    def _verify_limit_posted(self, pair: str, order_id: str):
+    def _verify_limit_posted(self, order_id: str):
         """
         When posting a limit order (with time_in_force='PostOnly') the order can be immediately canceled if its
         price is to high for buy orders and to low for sell orders. Sometimes the first order book changes too quickly
@@ -643,28 +677,16 @@ class Bybit:
             This function returns True if the limit order has been posted, False else.
         """
 
-        t_start = time.time()
+        order_data = self.get_order(
+            order_id=order_id
+        )
 
-        # Keep trying to get order status during 10s
-        while time.time() - t_start < 10:
+        if order_data['status'] in ['NEW', 'FILLED', 'PARTIALLY_FILLED', 'OPEN']:
+            return True, order_data
 
-            time.sleep(1)
-
-            order_data = self.get_order(
-                pair=pair,
-                order_id=order_id
-            )
-
-            if order_data['status'] in ['NEW', 'FILLED', 'PARTIALLY_FILLED']:
-                return True, order_data
-
-            elif order_data['status'] in ['REJECTED', 'CANCELED']:
-                print(f'Limit order rejected or canceled: {order_id}')
-                return False, None
-
-        print(f'Failed to get order: {order_id}')
-
-        return False, None
+        elif order_data['status'] in ['REJECTED', 'CANCELED']:
+            print(f'Limit order rejected or canceled: {order_id}')
+            return False, None
 
     def _looping_limit_orders(
             self,
@@ -716,7 +738,6 @@ class Bybit:
                     _type = 'bids' if side == 'BUY' else 'asks'
                     _price = float(ob[_type][0]['price'])
                     _status = self.get_order(
-                        pair=pair,
                         order_id=data['order_id']
                     )['status']
 
@@ -784,14 +805,14 @@ class Bybit:
                 _price_information.append({'price': _trades['executed_price'], 'qty': _trades['executed_quantity']})
 
         # Can be small differences due to float approximations, so we have to round position size
-        final_data['original_position_size'] = round(final_data['original_position_size'],
-                                                     self.pairs_info[final_data['pair']]['quantityPrecision'])
+        final_data['original_position_size'] = self._format_quantity(pair=final_data['pair'],
+                                                                     raw_quantity=final_data['original_position_size'])
         final_data['current_position_size'] = final_data['original_position_size']
 
         for _info in _price_information:
             _avg_price += _info['price'] * (_info['qty'] / final_data['current_position_size'])
 
-        final_data['entry_price'] = round(_avg_price, self.pairs_info[final_data['pair']]['pricePrecision'])
+        final_data['entry_price'] = _avg_price
 
         # needed for TP partial Execution
         final_data['last_tp_time'] = float('inf')
@@ -801,7 +822,7 @@ class Bybit:
         final_data['quantity_exited'] = 0
         final_data['total_fees'] = 0
         final_data['realized_pnl'] = 0
-        final_data['exchange'] = 'bybit'
+        final_data['exchange'] = 'btcex'
 
         return final_data
 
@@ -809,27 +830,23 @@ class Bybit:
                      pair: str,
                      order_id: str):
 
-        response = self._send_request(
-            end_point=f"/private/linear/order/cancel",
-            request_type="POST",
-            params={"symbol": pair,
-                    "order_id": order_id},
+        self._send_request(
+            end_point=f"/private/cancel/",
+            request_type="GET",
+            params={"order_id": order_id},
             signed=True
         )
 
     def _set_margin_type(self,
                          pair: str,
-                         margin: str = 'ISOLATED',
-                         leverage: int = 1):
+                         margin: str = 'isolate'):
 
-        params = {"symbol": pair,
-                  "is_isolated": margin == 'ISOLATED',
-                  "buy_leverage": leverage,
-                  "sell_leverage": leverage}
+        params = {"instrument_name": pair,
+                  "margin_type": margin}
 
         return self._send_request(
-            end_point=f"/private/linear/position/switch-isolated",
-            request_type="POST",
+            end_point=f"/private/adjust_perpetual_margin_type",
+            request_type="GET",
             params=params,
             signed=True
         )['result']
@@ -838,27 +855,12 @@ class Bybit:
                       pair: str,
                       leverage: int = 1):
 
-        params = {"symbol": pair,
-                  "buy_leverage": leverage,
-                  "sell_leverage": leverage}
+        params = {"instrument_name": pair,
+                  "leverage": leverage}
 
         return self._send_request(
-            end_point=f"/private/linear/position/set-leverage",
-            request_type="POST",
-            params=params,
-            signed=True
-        )['result']
-
-    def _set_position_mode(self,
-                           pair: str,
-                           mode: str = 'MergedSingle'):
-
-        params = {"symbol": pair,
-                  "mode": mode}
-
-        return self._send_request(
-            end_point=f"/private/linear/position/switch-mode",
-            request_type="POST",
+            end_point=f"/private/adjust_perpetual_leverage",
+            request_type="GET",
             params=params,
             signed=True
         )['result']
@@ -882,45 +884,20 @@ class Bybit:
             None
         """
 
-        positions_info = self._send_request(
-            end_point=f"/private/linear/position/list",
-            request_type="GET",
-            params={},
-            signed=True
-        )['result']
+        ## ACCOUNT MUST BE ON ONE-WAY MODE
 
-        for info in positions_info:
+        for pair in list_pairs:
+            # Set margin type to ISOLATED
+            self._set_margin_type(
+                pair=pair,
+                margin="isolate",
+            )
 
-            if info['data']['symbol'] in list_pairs:
-
-                pair = info['data']['symbol']
-                current_leverage = info['data']['leverage']
-                current_margin_type = 'ISOLATED' if info['data']['is_isolated'] else 'CROSS'
-                current_position_mode = info['data']['mode']
-
-                assert info['data']['size'] == 0, f'Please exit your position on {pair} before starting the bot'
-
-                if current_position_mode != 'MergedSingle':
-                    # Set position mode
-                    self._set_position_mode(
-                        pair=pair,
-                        mode='MergedSingle'
-                    )
-
-                if current_margin_type != "ISOLATED":
-                    # Set margin type to ISOLATED
-                    self._set_margin_type(
-                        pair=pair,
-                        margin="ISOLATED",
-                        leverage=leverage
-                    )
-
-                elif current_leverage != leverage:
-                    # Set leverage
-                    self._set_leverage(
-                        pair=pair,
-                        leverage=leverage
-                    )
+            # Set leverage
+            self._set_leverage(
+                pair=pair,
+                leverage=leverage
+            )
 
         # Check with the account has enough bk
         balance = self.get_token_balance(quote_asset=quote_asset)
@@ -928,32 +905,61 @@ class Bybit:
         assert balance >= bankroll, f"The account has only {round(balance, 2)} {quote_asset}. " \
                                     f"{round(bankroll, 2)} {quote_asset} is required"
 
+        params = {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "/private/get_assets_info",
+            "params": {
+                'asset_type': ['PERPETUAL']
+            }
+        }
+
+        data = self._send_request(
+            end_point=f"/private/get_assets_info",
+            request_type="POST",
+            params=params,
+            signed=True
+        )['result']['PERPETUAL']
+
+        # Make sure we are in One-Way-Mode
+        assert not data['dual_side_position'], 'Please change your position mode to One-Way Mode'
+
+        # Make sure there is no current position
+        assert data['available_funds'] == data['wallet_balance'], \
+            'Please exit all your positions before running the bot'
+
     def get_actual_positions(self, pairs: Union[list, str]) -> dict:
 
-        pos_inf = self._send_request(
-            end_point=f"/private/linear/position/list",
-            request_type="GET",
-            params={},
-            signed=True
-        )['result']
-
         _pairs = [pairs] if isinstance(pairs, str) else pairs
-
+        pos_inf = []
         final = {}
 
-        for i in pos_inf:
+        for pair in _pairs:
+            data = self._send_request(
+                end_point=f"/private/get_position",
+                request_type="GET",
+                params={'instrument_name': pair},
+                signed=True
+            )['result']
 
-            if i['data']['symbol'] in _pairs and i['data']['size'] != 0:
-                final[i['data']['symbol']] = {}
-                final[i['data']['symbol']]['position_size'] = float(i['data']['size'])
-                final[i['data']['symbol']]['entry_price'] = float(i['data']['entry_price'])
-                final[i['data']['symbol']]['unrealized_pnl'] = float(i['data']['unrealised_pnl'])
-                final[i['data']['symbol']]['type_pos'] = 'LONG' if i['data']['side'] == 'Buy' else 'SHORT'
-                final[i['data']['symbol']]['exit_side'] = 'SELL' if i['data']['side'] == 'Buy' else 'BUY'
+            if data != {}:
+                pos_inf.append(data)
+
+        for i in pos_inf:
+            pair = i['instrument_name']
+            final[pair] = {}
+            final[pair]['position_size'] = abs(float(i['size']))
+            final[pair]['entry_price'] = float(i['average_price'])
+            final[pair]['unrealized_pnl'] = float(i['floating_profit_loss'])
+            final[pair]['type_pos'] = 'LONG' if i['direction'] == 'buy' else 'SHORT'
+            final[pair]['exit_side'] = 'SELL' if i['direction'] == 'buy' else 'BUY'
 
         return final
 
-    def get_tp_sl_state(self, pair: str, tp_id: str, sl_id: str):
+    def get_tp_sl_state(self,
+                        pair: str,
+                        tp_id: str,
+                        sl_id: str):
 
         tp_info = self.get_order_trades(pair=pair, order_id=tp_id)
         sl_info = self.get_order_trades(pair=pair, order_id=sl_id)
@@ -984,10 +990,12 @@ class Bybit:
 
         side = 'BUY' if type_pos == 'LONG' else 'SELL'
 
+        std_qty = self._format_quantity(pair=pair, raw_quantity=quantity)
+
         residual_size, all_orders = self._looping_limit_orders(
             pair=pair,
             side=side,
-            quantity=float(round(quantity, self.pairs_info[pair]['quantityPrecision'])),
+            quantity=std_qty,
             duration=60,
             reduce_only=False
         )
@@ -1002,6 +1010,7 @@ class Bybit:
 
             all_orders.append(market_order)
 
+        time.sleep(5)
         # Get current position info
         pos_info = self.get_actual_positions(pairs=pair)
 
@@ -1124,7 +1133,7 @@ class Bybit:
         for _info in _price_information:
             _avg_price += _info['price'] * (_info['qty'] / final_data['executed_quantity'])
 
-        final_data['exit_price'] = round(_avg_price, self.pairs_info[final_data['pair']]['pricePrecision'])
+        final_data['exit_price'] = _avg_price
 
         return final_data
 
@@ -1166,7 +1175,7 @@ class Bybit:
             current_pair_state: dict = None
     ):
 
-        url = self.based_endpoint + '/public/linear/kline'
+        url = self.based_endpoint + '/public/get_tradingview_chart_data'
 
         final_dict = {}
         final_dict[pair] = {}
@@ -1178,10 +1187,10 @@ class Bybit:
             start_time = int(time.time() - (window + 1) * interval_to_milliseconds(interval=interval) / 1000)
 
         params = {
-            'symbol': pair,
-            'interval': self._convert_interval(interval),
-            'limit': 200,
-            'from': start_time
+            'instrument_name': pair,
+            'resolution': self._convert_interval(interval),
+            'start_timestamp': start_time,
+            'end_timestamp': int(time.time() + 10)
         }
 
         # Compute the server time
@@ -1189,6 +1198,7 @@ class Bybit:
 
         async with session.get(url=url, params=params) as response:
             data = await response.json()
+
             df = self._format_data(data['result'], historical=False)
 
             df = df[df['close_time'] <= s_time]
@@ -1235,32 +1245,9 @@ class Bybit:
         needed for the analysis.
         !! Command to run async function: asyncio.run(self.get_prod_data(list_pair=list_pair)) !!
         """
-
-        # If we need more than 200 candles (which is the API's limit) we call self.get_historical_data instead
-        if nb_candles > 200 and current_state is None:
-
-            final_dict = {}
-
-            for pair in list_pair:
-                final_dict[pair] = {}
-                start_time = int(1000 * time.time() - (nb_candles + 1) * interval_to_milliseconds(interval=interval))
-                last_update = int(1000 * time.time())
-
-                df = self.get_historical_data(pair=pair,
-                                              start_ts=start_time,
-                                              interval=interval,
-                                              end_ts=int(1000 * time.time())).drop(['next_open'], axis=1)
-
-                df = df[df['close_time'] < last_update]
-
-                latest_update = df['open_time'].values[-1]
-                for var in ['open_time', 'close_time']:
-                    df[var] = pd.to_datetime(df[var], unit='ms')
-
-                final_dict[pair]['latest_update'] = latest_update
-                final_dict[pair]['data'] = df
-
-            return final_dict
+        # Refresh token if necessary
+        if self.connected and self.end_connection_date - time.time() < 86400:
+            self.refresh_connection()
 
         async with aiohttp.ClientSession(connector=aiohttp.TCPConnector(ssl=False)) as session:
             tasks = []
@@ -1280,3 +1267,4 @@ class Bybit:
             for info in all_info:
                 all_data.update(info)
             return all_data
+

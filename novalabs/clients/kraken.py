@@ -1,6 +1,6 @@
 import time
-from novalabs.utils.helpers import interval_to_milliseconds
-from novalabs.utils.constant import DATA_FORMATING
+from nova.utils.helpers import interval_to_milliseconds
+from nova.utils.constant import DATA_FORMATING
 import pandas as pd
 from requests import Request, Session
 import hmac
@@ -110,6 +110,35 @@ class Kraken:
                 output[pair['symbol']]['quantityPrecision'] = pair['contractValueTradePrecision']
 
         return output
+
+    def get_order_book(self, pair: str):
+        """
+        Args:
+            pair:
+
+        Returns:
+            the current orderbook with a depth of 20 observations
+        """
+
+        data = self._send_request(
+            end_point=f"/api/v3/orderbook?symbol={pair}",
+            request_type="GET",
+        )['orderBook']
+
+        std_ob = {'bids': [], 'asks': []}
+
+        for i in range(len(data['asks'])):
+            std_ob['bids'].append({
+                'price': float(data['bids'][i][0]),
+                'size': float(data['bids'][i][1])
+            })
+
+            std_ob['asks'].append({
+                'price': float(data['asks'][i][0]),
+                'size': float(data['asks'][i][1])
+            })
+
+        return std_ob
 
     def _get_candles(self, pair: str, interval: str, start_time: int, end_time: int, limit: int = None):
         """
@@ -261,4 +290,269 @@ class Kraken:
             end_ts=int(time.time() * 1000)
         )
         return pd.concat([current_df, df], ignore_index=True).drop_duplicates(subset=['open_time'])
+
+    def setup_account(self, quote_asset: str, leverage: int, bankroll: float, max_down: float, list_pairs: list):
+
+        for pair in list_pairs:
+
+            pair = pair.upper()
+
+            _set_leverage = self._send_request(
+                end_point=f"/api/v3/leveragepreferences",
+                params=f"symbol={pair}&maxLeverage={leverage}",
+                request_type="PUT",
+                signed=True
+            )
+
+            if _set_leverage['result'] == 'success':
+                print(f'Leverage of {pair} set to {leverage}')
+
+            _set_pnl_payment = self._send_request(
+                end_point=f"/api/v3/pnlpreferences",
+                request_type="PUT",
+                params=f"symbol={pair}&pnlPreference={quote_asset}",
+                signed=True
+            )
+
+            if _set_pnl_payment['result'] == 'success':
+                print(f'PnL for {pair} is paid in {quote_asset}')
+
+        balance = self.get_token_balance(quote_asset)
+
+        assert balance >= bankroll * (1 + max_down), f"The account has only {round(balance, 2)} {quote_asset}. " \
+                                                     f"{round(bankroll * (1 + max_down), 2)} {quote_asset} is required"
+
+    def get_token_balance(self, quote_asset: str):
+
+        account_info = self._send_request(
+            end_point=f"/api/v3/accounts",
+            request_type="GET",
+            signed=True
+        )['accounts']
+
+        print(f"The current amount is : {account_info['flex']['currencies'][quote_asset]['value']} {quote_asset}")
+
+        return round(account_info['flex']['currencies'][quote_asset]['value'], 2)
+
+    def get_actual_positions(self, pairs: Union[list, str]) -> dict:
+        """
+        Args:
+            pairs: list of pair that we want to run analysis on
+        Returns:
+            a dictionary containing all the current OPEN positions
+        """
+
+        if isinstance(pairs, str):
+            pairs = [pairs]
+
+        all_pos = self._send_request(
+            end_point=f"/api/v3/openpositions",
+            request_type="GET",
+            signed=True,
+        )['openPositions']
+
+        position = {}
+
+        for pos in all_pos:
+
+            if pos['symbol'] in pairs and pos['size'] != 0:
+                position[pos['symbol']] = {}
+                position[pos['symbol']]['position_size'] = abs(float(pos['size']))
+                position[pos['symbol']]['entry_price'] = float(pos['price'])
+                position[pos['symbol']]['unrealized_pnl'] = float(pos['unrealizedFunding'])
+                position[pos['symbol']]['type_pos'] = pos['side'].upper()
+                position[pos['symbol']]['exit_side'] = 'SELL' if pos['side'].upper() == "LONG" else 'BUY'
+
+        return position
+
+    async def get_prod_candles(
+            self,
+            session,
+            pair: str,
+            interval: str,
+            window: int,
+            current_pair_state: dict = None
+    ):
+
+        milli_sec = interval_to_milliseconds(interval) // 1000
+        end_time = int(time.time())
+        start_time = int(end_time - (window + 1) * milli_sec)
+
+        url = f"https://futures.kraken.com/api/charts/v1/trade/{pair}/{interval}?from={start_time}&to={end_time}"
+
+        final_dict = {}
+        final_dict[pair] = {}
+
+        if current_pair_state is not None:
+            limit = 3
+            final_dict[pair]['data'] = current_pair_state[pair]['data']
+            final_dict[pair]['latest_update'] = current_pair_state[pair]['latest_update']
+        else:
+            limit = window
+
+        params = dict(symbol=pair, interval=interval, limit=limit)
+
+        # Compute the server time
+        s_time = int(1000 * time.time())
+
+        async with session.get(url=url, params=params) as response:
+            data = await response.json()
+
+            df = self._format_data(all_data=data['candles'], historical=False)
+
+            df = df[df['close_time'] < s_time]
+
+            for var in ['open_time', 'close_time']:
+                df[var] = pd.to_datetime(df[var], unit='ms')
+
+            if current_pair_state is None:
+                final_dict[pair]['latest_update'] = s_time
+                final_dict[pair]['data'] = df
+
+            else:
+                df_new = pd.concat([final_dict[pair]['data'], df])
+                df_new = df_new.drop_duplicates(subset=['open_time']).sort_values(
+                    by=['open_time'],
+                    ascending=True
+                )
+                final_dict[pair]['latest_update'] = s_time
+                final_dict[pair]['data'] = df_new.tail(window)
+
+            return final_dict
+
+    async def get_prod_data(self,
+                            list_pair: list,
+                            interval: str,
+                            nb_candles: int,
+                            current_state: dict):
+        """
+        Note: This function is called once when the bot is instantiated.
+        This function execute n API calls with n representing the number of pair in the list
+        Args:
+            list_pair: list of all the pairs you want to run the bot on.
+            interval: time interval
+            nb_candles: number of candles needed
+            current_state: boolean indicate if this is an update
+        Returns: None, but it fills the dictionary self.prod_data that will contain all the data
+        needed for the analysis.
+        !! Command to run async function: asyncio.run(self.get_prod_data(list_pair=list_pair)) !!
+        """
+
+        async with aiohttp.ClientSession(connector=aiohttp.TCPConnector(ssl=False)) as session:
+            tasks = []
+            for pair in list_pair:
+                task = asyncio.ensure_future(
+                    self.get_prod_candles(
+                        session=session,
+                        pair=pair,
+                        interval=interval,
+                        window=nb_candles,
+                        current_pair_state=current_state)
+                )
+                tasks.append(task)
+            all_info = await asyncio.gather(*tasks)
+
+            all_data = {}
+            for info in all_info:
+                all_data.update(info)
+            return all_data
+
+    def get_last_price(self, pair: str) -> dict:
+        """
+        Args:
+            pair: pair desired
+        Returns:
+            a dictionary containing the pair_id, latest_price, price_timestamp in timestamp
+        """
+        data = self._send_request(
+            end_point=f"/api/v3/tickers",
+            request_type="GET",
+            signed=False
+        )['tickers']
+
+        for info in data:
+            if info['symbol'] == pair:
+                dt = datetime.datetime.strptime(info['lastTime'], '%Y-%m-%dT%H:%M:%S.%fZ')
+                return {
+                    'pair': info['symbol'],
+                    'timestamp': int(dt.timestamp() * 1000),
+                    'latest_price': float(info['last'])
+                }
+
+    def get_order(self, pair: str, order_id: str):
+
+        data = self._send_request(
+            end_point=f"/api/v3/editorder",
+            request_type="POST",
+            params=f'orderId={order_id}',
+            signed=True
+        )
+
+        return data
+
+    def cancel_order(self, pair: str, order_id: str):
+
+        data = self._send_request(
+            end_point=f"/api/v3/cancelorder",
+            request_type="POST",
+            params=f'order_id={order_id}',
+            signed=True
+        )
+
+        return data
+
+    def enter_market_order(self, pair: str, type_pos: str, quantity: float):
+        """
+            Args:
+                pair: pair id that we want to create the order for
+                type_pos: could be 'LONG' or 'SHORT'
+                quantity: quantity should respect the minimum precision
+
+            Returns:
+                standardized output
+        """
+
+        side = 'buy' if type_pos == 'LONG' else 'sell'
+
+        response = self._send_request(
+            end_point=f"/api/v3/sendorder",
+            request_type="POST",
+            params=f"orderType=mkt&symbol={pair}&side={side}&size={quantity}",
+            signed=True
+        )['sendStatus']
+
+        return response
+
+        # return self.get_order_trades(
+        #     pair=pair,
+        #     order_id=response['id']
+        # )
+
+    def exit_market_order(self, pair: str, type_pos: str, quantity: float):
+        """
+            Args:
+                pair: pair id that we want to create the order for
+                type_pos: could be 'LONG' or 'SHORT'
+                quantity: quantity should respect the minimum precision
+
+            Returns:
+                standardized output
+        """
+
+        side = 'sell' if type_pos == 'LONG' else 'buy'
+
+        response = self._send_request(
+            end_point=f"/api/v3/sendorder",
+            request_type="POST",
+            params=f"orderType=mkt&symbol={pair}&side={side}&size={quantity}&reduceOnly=true",
+            signed=True
+        )['sendStatus']
+
+        return response
+
+        # return self.get_order_trades(
+        #     pair=pair,
+        #     order_id=response['id']
+        # )
+
 
