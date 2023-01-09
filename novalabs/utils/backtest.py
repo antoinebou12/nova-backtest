@@ -27,15 +27,15 @@ class BackTest:
                  start: datetime,
                  end: datetime,
                  fees: float,
+                 start_bk: float,
+                 leverage: int,
                  max_pos: int,
                  max_holding: timedelta,
                  quote_asset: str = 'USDT',
                  geometric_sizes: bool = False,
-                 leverage: int = 2,
                  save_all_pairs_charts: bool = False,
-                 start_bk: float = 10000,
                  update_data: bool = False,
-                 plot_exposure: bool = True,
+                 plot_exposure: bool = False,
                  key: str = "",
                  secret: str = "",
                  passphrase: str = ""):
@@ -1109,6 +1109,9 @@ class BackTest:
             df = self.max_stop_loss(df)
 
             df = self.exit_strategy(df)
+
+            assert 'exit_signal' in df.columns, \
+                f"Missing exit_signal column. Please create this column in entry_strategy()"
 
             df = self.create_closest_exit(df)
 
