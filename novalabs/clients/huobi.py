@@ -8,7 +8,7 @@ import datetime
 import pandas as pd
 import time
 
-from nova.utils.helpers import interval_to_milliseconds, retry_requests
+from novalabs.utils.helpers import interval_to_milliseconds, retry_requests
 
 
 class Huobi:
