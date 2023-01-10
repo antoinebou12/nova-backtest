@@ -2,6 +2,7 @@ from datetime import datetime, timedelta
 from typing import Optional, Dict
 import time
 import re
+import traceback
 
 
 def convert_candle_to_timedelta(candle: str) -> timedelta:
@@ -146,24 +147,23 @@ def get_timedelta_unit(interval: str) -> timedelta:
         return timedelta(days=multi)
 
 
-def is_opening_candle(interval: str):
+def is_opening_candle(interval: str,
+                      current_date: datetime):
     multi = int(float(re.findall(r'\d+', interval)[0]))
     unit = interval[-1]
 
-    now = datetime.utcnow()
-
     if multi == 1:
         if unit == 'm':
-            return now.second == 0
+            return current_date.second == 0
         elif unit == 'h':
-            return now.minute + now.second == 0
+            return current_date.minute + current_date.second == 0
         elif unit == 'd':
-            return now.hour + now.minute + now.second == 0
+            return current_date.hour + current_date.minute + current_date.second == 0
     else:
         if unit == 'm':
-            return now.minute % multi + now.second == 0
+            return current_date.minute % multi + current_date.second == 0
         elif unit == 'h':
-            return now.hour % multi + now.minute + now.second == 0
+            return current_date.hour % multi + current_date.minute + current_date.second == 0
 
 
 def compute_time_difference(
@@ -200,3 +200,35 @@ def interval_to_oanda_granularity(interval: str):
     _letter = interval[-1].upper()
 
     return f"{_letter}{_number}" if _letter in ['M', 'H'] else f'{_letter}'
+
+
+def retry_requests(func,
+                   retries=10):
+    def retry_wrapper(*args, **kwargs):
+
+        attempts = 0
+        while attempts < retries:
+            try:
+                return func(*args, **kwargs)
+
+            except Exception:
+                if attempts == 4:
+                    traceback.print_exc()
+                    raise ConnectionError(f"requests failed {retries} times")
+
+                time.sleep(5)
+                attempts += 1
+
+    return retry_wrapper
+
+
+def format_precision(value: float, precision: int, tick: float, up: bool = True):
+    if precision == 0:
+        return int(value)
+
+    residue = round(value, precision) % tick
+
+    if up:
+        return round(value + tick - residue, precision)
+    else:
+        return round(value - residue, precision)

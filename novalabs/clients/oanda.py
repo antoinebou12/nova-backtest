@@ -1,6 +1,6 @@
 from requests import Request, Session
 import json
-from nova.utils.helpers import interval_to_oanda_granularity, interval_to_milliseconds
+from novalabs.utils.helpers import interval_to_oanda_granularity, interval_to_milliseconds
 import pandas as pd
 from datetime import datetime
 import time
