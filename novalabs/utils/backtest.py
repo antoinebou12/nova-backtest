@@ -198,7 +198,7 @@ class BackTest:
             The function created 2 variables: all_entry_price, all_entry_time
         """
         df['all_entry_price'] = np.where(df.entry_signal.notnull(), df.next_open, np.nan)
-        df['all_entry_time'] = np.where(df.entry_signal.notnull(), df.open_time, np.datetime64('NaT'))
+        df['all_entry_time'] = np.where(df.entry_signal.notnull(), df.open_time.shift(-1), np.datetime64('NaT'))
         return df
 
     @staticmethod
@@ -249,7 +249,7 @@ class BackTest:
 
         nb_candle = convert_max_holding_to_candle_nb(candle=self.candle, max_holding=self.max_holding)
 
-        for i in range(1, nb_candle + 1):
+        for i in range(nb_candle + 1):
             condition_sl_long = (df.low.shift(-i) <= df.stop_loss) & (df.entry_signal == 1)
             condition_sl_short = (df.high.shift(-i) >= df.stop_loss) & (df.entry_signal == -1)
             condition_tp_short = (df.low.shift(-i) <= df.take_profit) & (df.high.shift(-i) <= df.stop_loss) & (
@@ -280,7 +280,7 @@ class BackTest:
 
         # get the max holding date
         df['max_hold_date'] = np.where(df.entry_signal.notnull(),
-                                       df['open_time'] + self.max_holding
+                                       df['open_time'].shift(-1) + self.max_holding
                                        , np.datetime64('NaT'))
 
         # clean dataset
@@ -329,17 +329,18 @@ class BackTest:
         final_df.reset_index(drop=True, inplace=True)
 
         # add back the 'next_open' variable
-        final_df = pd.merge(final_df, df[['open_time', 'next_open']], how="left",
+        final_df = pd.merge(final_df, df[['open_time', 'open']], how="left",
                             left_on=["all_exit_time"], right_on=["open_time"])
         final_df = final_df.drop('open_time', axis=1)
 
         # compute the exit price for depending on the exit point category
         final_df['exit_price'] = np.where(final_df['all_exit_point'] == 'SL', final_df['stop_loss'],
                                           np.where(final_df['all_exit_point'] == 'TP', final_df['take_profit'],
-                                                   final_df['next_open']))
+                                                   final_df['open']))
 
         # removing non important variables and renaming columns
-        final_df = final_df.drop(['next_open'], axis=1)
+        final_df = final_df.drop(['open'], axis=1)
+
         final_df = final_df.rename(columns={
             'all_entry_time': 'entry_time',
             'entry_signal': 'entry_point',
