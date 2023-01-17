@@ -75,6 +75,10 @@ DATA_FORMATING = {
             'volume' , 'quote_asset_volume'
         ],
         "date_var": ["open_time", "close_time"]
+    },
+    "btcex": {
+        'columns': ['tick', 'open', 'high', 'low', 'close', 'volume'],
+        'num_var': ['open', 'high', 'low', 'close', 'volume']
     }
 
 }

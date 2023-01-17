@@ -249,7 +249,7 @@ class BackTest:
 
         nb_candle = convert_max_holding_to_candle_nb(candle=self.candle, max_holding=self.max_holding)
 
-        for i in range(nb_candle + 1):
+        for i in range(nb_candle):
             condition_sl_long = (df.low.shift(-i) <= df.stop_loss) & (df.entry_signal == 1)
             condition_sl_short = (df.high.shift(-i) >= df.stop_loss) & (df.entry_signal == -1)
             condition_tp_short = (df.low.shift(-i) <= df.take_profit) & (df.high.shift(-i) <= df.stop_loss) & (
@@ -264,7 +264,7 @@ class BackTest:
 
             if 'exit_signal' in df.columns:
                 df[f'es_lead_{i}'] = np.where((df['exit_signal'].shift(-i) * df['entry_signal']) == -1,
-                                              df.open_time.shift(-i),
+                                              df.open_time.shift(-i - 1),
                                               np.datetime64('NaT'))
                 lead_es.append(f'es_lead_{i}')
 
