@@ -151,7 +151,7 @@ class BackTest:
 
             df = pd.read_csv(f'database/{self.exchange}/hist_{pair}_{self.candle}.csv')
 
-            if self.update_data and (df['open_time'].max() < 1000 * (int(time.time()) - self.time_step.seconds)):
+            if self.update_data and (df['close_time'].max() < 1000 * (int(time.time()) - 2 * self.time_step.seconds)):
                 print(f'UPDATING HISTORICAL DATA {pair}', "\U000023F3", end="\r")
                 df = self.client.update_historical(
                     pair=pair,
@@ -183,8 +183,10 @@ class BackTest:
         open_time_difference = df['open_time'] - df['open_time'].shift(1)
         close_time_difference = df['close_time'] - df['close_time'].shift(1)
 
-        assert open_time_difference.max() == interval_to_milliseconds(self.candle), 'Candle interval is wrong for open_time'
-        assert close_time_difference.max() == interval_to_milliseconds(self.candle), 'Candle interval is wrong for close_time'
+        assert open_time_difference.max() == interval_to_milliseconds(
+            self.candle), 'Candle interval is wrong for open_time'
+        assert close_time_difference.max() == interval_to_milliseconds(
+            self.candle), 'Candle interval is wrong for close_time'
 
         assert open_time_difference.max() == open_time_difference.min(), 'Time series not respected'
         assert close_time_difference.min() == close_time_difference.max(), 'Time series not respected'
