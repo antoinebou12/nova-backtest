@@ -10,7 +10,7 @@ import time
 
 from novalabs.utils.constant import VAR_NEEDED_FOR_POSITION
 from novalabs.clients.clients import clients
-from novalabs.utils.helpers import get_timedelta_unit, convert_max_holding_to_candle_nb, convert_candle_to_timedelta
+from novalabs.utils.helpers import get_timedelta_unit, convert_max_holding_to_candle_nb, convert_candle_to_timedelta, interval_to_milliseconds
 
 from warnings import simplefilter
 
@@ -179,6 +179,15 @@ class BackTest:
             df.to_csv(f'database/{self.exchange}/hist_{pair}_{self.candle}.csv', index=False)
 
             print(f'HISTORICAL DATA {pair} DOWNLOADED', "\U00002705")
+
+        open_time_difference = df['open_time'] - df['open_time'].shift(1)
+        close_time_difference = df['close_time'] - df['close_time'].shift(1)
+
+        assert open_time_difference.max() == interval_to_milliseconds(self.candle), 'Candle interval is wrong for open_time'
+        assert close_time_difference.max() == interval_to_milliseconds(self.candle), 'Candle interval is wrong for close_time'
+
+        assert open_time_difference.max() == open_time_difference.min(), 'Time series not respected'
+        assert close_time_difference.min() == close_time_difference.max(), 'Time series not respected'
 
         for var in ['open_time', 'close_time']:
             df[var] = pd.to_datetime(df[var], unit='ms')
