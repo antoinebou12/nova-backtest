@@ -154,20 +154,3 @@ class MEXC:
             end_point=_endpoint,
             request_type="GET",
         )['data']
-
-
-# from decouple import config
-#
-# client = MEXC(
-#     key=config(f"mexcTestAPIKey"),
-#     secret=config(f"mexcTestAPISecret"),
-#     passphrase=config(f"mexcTestPassPhrase"),
-#     testnet=False
-# )
-#
-
-# data = client.get_pairs_info()
-
-# test = client._get_candles('BNB_USDT', 'Min1', 1671483156159, 1671583156159)
-
-# acc = client.get_account_info()
