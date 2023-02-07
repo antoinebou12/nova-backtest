@@ -477,7 +477,7 @@ class BackTest:
         # update bot total exposure
         self.df_pos['wallet_exposure'] = self.df_pos['wallet_exposure'] + self.df_pos[f'{pair}_exposure']
 
-        if not self.save_all_pairs_charts:
+        if self.save_all_pairs_charts:
             self.df_pos = self.df_pos.drop([f'total_profit_{pair}', f'long_profit_{pair}', f'short_profit_{pair}'],
                                            axis=1)
 
