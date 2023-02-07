@@ -260,7 +260,7 @@ class BackTest:
 
         nb_candle = convert_max_holding_to_candle_nb(candle=self.candle, max_holding=self.max_holding)
 
-        for i in range(nb_candle):
+        for i in range(1, nb_candle):
             condition_sl_long = (df.low.shift(-i) <= df.stop_loss) & (df.entry_signal == 1)
             condition_sl_short = (df.high.shift(-i) >= df.stop_loss) & (df.entry_signal == -1)
             condition_tp_short = (df.low.shift(-i) <= df.take_profit) & (df.high.shift(-i) <= df.stop_loss) & (
@@ -1020,14 +1020,14 @@ class BackTest:
             df = self.get_all_historical_data(pair=row['pair'])
 
             # truncate df
-            df = df[df['open_time'] <= row['entry_time']]
+            df = df[df['open_time'] < row['entry_time']]
 
             # re-compute indicators, entry signals, tp and sl
             df = self.build_indicators(df)
 
             df = self.entry_strategy(df)
 
-            last_row = df[df['open_time'] == row['entry_time']].iloc[0]
+            last_row = df.iloc[-1]
 
             assert row['entry_point'] == last_row[
                 'entry_signal'], "Entry point is not the same, make sure you don't have access to futures " \
@@ -1048,7 +1048,7 @@ class BackTest:
                 df = self.get_all_historical_data(pair=row['pair'])
 
                 # truncate df
-                df = df[df['open_time'] <= row['exit_time']]
+                df = df[df['open_time'] < row['exit_time']]
 
                 # re-compute indicators, entry signals, tp and sl
                 df = self.build_indicators(df)
