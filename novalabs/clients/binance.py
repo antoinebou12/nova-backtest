@@ -4,8 +4,6 @@ from requests import Request, Session
 from urllib.parse import urlencode
 import pandas as pd
 import numpy as np
-import aiohttp
-import asyncio
 import hashlib
 import time
 import hmac
