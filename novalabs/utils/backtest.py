@@ -590,18 +590,6 @@ class BackTest:
         stat_perf = pd.DataFrame([perf_dict], columns=list(perf_dict.keys()))
         self.df_pairs_stat = pd.concat([self.df_pairs_stat, stat_perf])
 
-    def compute_geometric_sizes(self,
-                                row,
-                                t,
-                                current_bk):
-
-        if row['entry_time'] == t:
-            # 50_000k $ is the max position size for any strategy
-            row['position_size'] = min(current_bk * self.positions_size, 50_000)
-            row['PL_amt_realized'] = row['PL_prc_realized'] * row['position_size']
-
-        return row
-
     def all_pairs_real_positions(self):
         """
         This method delete all the positions that wouldn't have been taken because the self.max_pos would be reach.
@@ -631,11 +619,12 @@ class BackTest:
         # Shift all TP or SL exit time bc it is based on the open time
         candle_duration = convert_candle_to_timedelta(candle=self.candle)
 
-        #
         self.df_all_pairs_positions['exit_time'] = np.where(
             self.df_all_pairs_positions['exit_point'].isin(['TP', 'SL']),
             self.df_all_pairs_positions['exit_time'] + candle_duration,
             self.df_all_pairs_positions['exit_time'])
+
+        self.df_all_pairs_positions = self.df_all_pairs_positions.reset_index(drop=True)
 
         # Delete impossible trades
         t = self.start
@@ -685,12 +674,16 @@ class BackTest:
 
             # Compute position size
             if self.geometric_sizes and (nb_signals > 0):
-                self.df_all_pairs_positions = self.df_all_pairs_positions.apply(
-                    lambda row: self.compute_geometric_sizes(row,
-                                                             t,
-                                                             current_bk),
-                    axis=1
-                )
+
+                self.df_all_pairs_positions['position_size'] = np.where(self.df_all_pairs_positions['entry_time'] == t,
+                                                                        min(current_bk * self.positions_size, 50_000),
+                                                                        self.df_all_pairs_positions['position_size'])
+
+                self.df_all_pairs_positions['PL_amt_realized'] = np.where(self.df_all_pairs_positions['entry_time'] == t,
+                                                                        self.df_all_pairs_positions['PL_prc_realized'] *
+                                                                          self.df_all_pairs_positions['position_size'],
+                                                                        self.df_all_pairs_positions['PL_amt_realized'])
+
 
             t = t + candle_duration
 
