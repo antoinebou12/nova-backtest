@@ -807,6 +807,12 @@ class BackTest:
         avg_profit_perc = round(100 * df_all_pairs_positions['PL_prc_realized'].mean(), 2)
         overview['Average profit / trade (%)'] = f"{avg_profit_perc} %"
 
+        std_dev_profit = round(df_all_pairs_positions['PL_amt_realized'].std(), 2)
+        overview['Profits std dev'] = f"{std_dev_profit} $"
+
+        std_dev_profit_perc = round(100 * df_all_pairs_positions['PL_prc_realized'].std(), 2)
+        overview['Profits std dev (%)'] = f"{std_dev_profit_perc} %"
+
         avg_position_size = round(df_all_pairs_positions['position_size'].mean(), 2)
         overview['Average position size'] = f"{avg_position_size} $"
 
