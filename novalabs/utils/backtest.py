@@ -10,7 +10,7 @@ import time
 
 from novalabs.utils.constant import VAR_NEEDED_FOR_POSITION
 from novalabs.clients.clients import clients
-from novalabs.utils.helpers import get_timedelta_unit, convert_max_holding_to_candle_nb, convert_candle_to_timedelta
+from novalabs.utils.helpers import get_timedelta_unit, convert_max_holding_to_candle_nb, convert_candle_to_timedelta, interval_to_milliseconds
 
 from warnings import simplefilter
 
@@ -151,7 +151,7 @@ class BackTest:
 
             df = pd.read_csv(f'database/{self.exchange}/hist_{pair}_{self.candle}.csv')
 
-            if self.update_data and (df['open_time'].max() < 1000 * (int(time.time()) - self.time_step.seconds)):
+            if self.update_data and (df['close_time'].max() < 1000 * (int(time.time()) - 2 * self.time_step.seconds)):
                 print(f'UPDATING HISTORICAL DATA {pair}', "\U000023F3", end="\r")
                 df = self.client.update_historical(
                     pair=pair,
@@ -179,6 +179,17 @@ class BackTest:
             df.to_csv(f'database/{self.exchange}/hist_{pair}_{self.candle}.csv', index=False)
 
             print(f'HISTORICAL DATA {pair} DOWNLOADED', "\U00002705")
+
+        open_time_difference = df['open_time'] - df['open_time'].shift(1)
+        close_time_difference = df['close_time'] - df['close_time'].shift(1)
+
+        assert open_time_difference.max() == interval_to_milliseconds(
+            self.candle), 'Candle interval is wrong for open_time'
+        assert close_time_difference.max() == interval_to_milliseconds(
+            self.candle), 'Candle interval is wrong for close_time'
+
+        assert open_time_difference.max() == open_time_difference.min(), 'Time series not respected'
+        assert close_time_difference.min() == close_time_difference.max(), 'Time series not respected'
 
         for var in ['open_time', 'close_time']:
             df[var] = pd.to_datetime(df[var], unit='ms')
@@ -249,7 +260,7 @@ class BackTest:
 
         nb_candle = convert_max_holding_to_candle_nb(candle=self.candle, max_holding=self.max_holding)
 
-        for i in range(nb_candle):
+        for i in range(1, nb_candle):
             condition_sl_long = (df.low.shift(-i) <= df.stop_loss) & (df.entry_signal == 1)
             condition_sl_short = (df.high.shift(-i) >= df.stop_loss) & (df.entry_signal == -1)
             condition_tp_short = (df.low.shift(-i) <= df.take_profit) & (df.high.shift(-i) <= df.stop_loss) & (
@@ -466,7 +477,7 @@ class BackTest:
         # update bot total exposure
         self.df_pos['wallet_exposure'] = self.df_pos['wallet_exposure'] + self.df_pos[f'{pair}_exposure']
 
-        if not self.save_all_pairs_charts:
+        if self.save_all_pairs_charts:
             self.df_pos = self.df_pos.drop([f'total_profit_{pair}', f'long_profit_{pair}', f'short_profit_{pair}'],
                                            axis=1)
 
@@ -579,18 +590,6 @@ class BackTest:
         stat_perf = pd.DataFrame([perf_dict], columns=list(perf_dict.keys()))
         self.df_pairs_stat = pd.concat([self.df_pairs_stat, stat_perf])
 
-    def compute_geometric_sizes(self,
-                                row,
-                                t,
-                                current_bk):
-
-        if row['entry_time'] == t:
-            # 50_000k $ is the max position size for any strategy
-            row['position_size'] = min(current_bk * self.positions_size, 50_000)
-            row['PL_amt_realized'] = row['PL_prc_realized'] * row['position_size']
-
-        return row
-
     def all_pairs_real_positions(self):
         """
         This method delete all the positions that wouldn't have been taken because the self.max_pos would be reach.
@@ -620,11 +619,12 @@ class BackTest:
         # Shift all TP or SL exit time bc it is based on the open time
         candle_duration = convert_candle_to_timedelta(candle=self.candle)
 
-        #
         self.df_all_pairs_positions['exit_time'] = np.where(
             self.df_all_pairs_positions['exit_point'].isin(['TP', 'SL']),
             self.df_all_pairs_positions['exit_time'] + candle_duration,
             self.df_all_pairs_positions['exit_time'])
+
+        self.df_all_pairs_positions = self.df_all_pairs_positions.reset_index(drop=True)
 
         # Delete impossible trades
         t = self.start
@@ -674,12 +674,16 @@ class BackTest:
 
             # Compute position size
             if self.geometric_sizes and (nb_signals > 0):
-                self.df_all_pairs_positions = self.df_all_pairs_positions.apply(
-                    lambda row: self.compute_geometric_sizes(row,
-                                                             t,
-                                                             current_bk),
-                    axis=1
-                )
+
+                self.df_all_pairs_positions['position_size'] = np.where(self.df_all_pairs_positions['entry_time'] == t,
+                                                                        min(current_bk * self.positions_size, 50_000),
+                                                                        self.df_all_pairs_positions['position_size'])
+
+                self.df_all_pairs_positions['PL_amt_realized'] = np.where(self.df_all_pairs_positions['entry_time'] == t,
+                                                                        self.df_all_pairs_positions['PL_prc_realized'] *
+                                                                          self.df_all_pairs_positions['position_size'],
+                                                                        self.df_all_pairs_positions['PL_amt_realized'])
+
 
             t = t + candle_duration
 
@@ -795,6 +799,12 @@ class BackTest:
 
         avg_profit_perc = round(100 * df_all_pairs_positions['PL_prc_realized'].mean(), 2)
         overview['Average profit / trade (%)'] = f"{avg_profit_perc} %"
+
+        std_dev_profit = round(df_all_pairs_positions['PL_amt_realized'].std(), 2)
+        overview['Profits std dev'] = f"{std_dev_profit} $"
+
+        std_dev_profit_perc = round(100 * df_all_pairs_positions['PL_prc_realized'].std(), 2)
+        overview['Profits std dev (%)'] = f"{std_dev_profit_perc} %"
 
         avg_position_size = round(df_all_pairs_positions['position_size'].mean(), 2)
         overview['Average position size'] = f"{avg_position_size} $"
@@ -1009,14 +1019,14 @@ class BackTest:
             df = self.get_all_historical_data(pair=row['pair'])
 
             # truncate df
-            df = df[df['open_time'] <= row['entry_time']]
+            df = df[df['open_time'] < row['entry_time']]
 
             # re-compute indicators, entry signals, tp and sl
             df = self.build_indicators(df)
 
             df = self.entry_strategy(df)
 
-            last_row = df[df['open_time'] == row['entry_time']].iloc[0]
+            last_row = df.iloc[-1]
 
             assert row['entry_point'] == last_row[
                 'entry_signal'], "Entry point is not the same, make sure you don't have access to futures " \
@@ -1037,7 +1047,7 @@ class BackTest:
                 df = self.get_all_historical_data(pair=row['pair'])
 
                 # truncate df
-                df = df[df['open_time'] <= row['exit_time']]
+                df = df[df['open_time'] < row['exit_time']]
 
                 # re-compute indicators, entry signals, tp and sl
                 df = self.build_indicators(df)
