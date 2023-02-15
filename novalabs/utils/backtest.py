@@ -10,7 +10,8 @@ import time
 
 from novalabs.utils.constant import VAR_NEEDED_FOR_POSITION
 from novalabs.clients.clients import clients
-from novalabs.utils.helpers import get_timedelta_unit, convert_max_holding_to_candle_nb, convert_candle_to_timedelta, interval_to_milliseconds
+from novalabs.utils.helpers import get_timedelta_unit, convert_max_holding_to_candle_nb, convert_candle_to_timedelta, \
+    interval_to_milliseconds
 
 from warnings import simplefilter
 
@@ -125,7 +126,6 @@ class BackTest:
         all_pairs = self.get_list_pair()
 
         for pair in self.list_pair:
-
             assert pair in all_pairs, f"{pair} is not a valid trading pair"
 
     def get_all_historical_data(self, pair: str) -> pd.DataFrame:
@@ -612,7 +612,8 @@ class BackTest:
 
         self.df_all_pairs_positions = self.df_all_pairs_positions.sort_values(by=['exit_time'])
 
-        self.df_all_pairs_positions['position_size'] = self.positions_size * self.start_bk
+        self.df_all_pairs_positions['position_size'] = self.positions_size * self.start_bk * \
+                                                       self.df_all_pairs_positions['position_size']
 
         self.df_all_pairs_positions = self.df_all_pairs_positions.dropna(subset=['exit_price', 'PL_amt_realized'])
 
@@ -674,16 +675,15 @@ class BackTest:
 
             # Compute position size
             if self.geometric_sizes and (nb_signals > 0):
-
                 self.df_all_pairs_positions['position_size'] = np.where(self.df_all_pairs_positions['entry_time'] == t,
                                                                         min(current_bk * self.positions_size, 50_000),
                                                                         self.df_all_pairs_positions['position_size'])
 
-                self.df_all_pairs_positions['PL_amt_realized'] = np.where(self.df_all_pairs_positions['entry_time'] == t,
-                                                                        self.df_all_pairs_positions['PL_prc_realized'] *
-                                                                          self.df_all_pairs_positions['position_size'],
-                                                                        self.df_all_pairs_positions['PL_amt_realized'])
-
+                self.df_all_pairs_positions['PL_amt_realized'] = np.where(
+                    self.df_all_pairs_positions['entry_time'] == t,
+                    self.df_all_pairs_positions['PL_prc_realized'] *
+                    self.df_all_pairs_positions['position_size'],
+                    self.df_all_pairs_positions['PL_amt_realized'])
 
             t = t + candle_duration
 
@@ -982,14 +982,16 @@ class BackTest:
         """
 
         df['stop_loss'] = np.where(df['entry_signal'] == 1,
-                                pd.DataFrame({'stop_loss': df['stop_loss'],
-                                              'all_entry_price': df['all_entry_price'] * (1 - 1 / self.leverage)}).max(
-                                    axis=1), df['stop_loss'])
+                                   pd.DataFrame({'stop_loss': df['stop_loss'],
+                                                 'all_entry_price': df['all_entry_price'] * (
+                                                             1 - 1 / self.leverage)}).max(
+                                       axis=1), df['stop_loss'])
 
         df['stop_loss'] = np.where(df['entry_signal'] == -1,
-                                pd.DataFrame({'stop_loss': df['stop_loss'],
-                                              'all_entry_price': df['all_entry_price'] * (1 + 1 / self.leverage)}).min(
-                                    axis=1), df['stop_loss'])
+                                   pd.DataFrame({'stop_loss': df['stop_loss'],
+                                                 'all_entry_price': df['all_entry_price'] * (
+                                                             1 + 1 / self.leverage)}).min(
+                                       axis=1), df['stop_loss'])
 
         return df
 
@@ -1030,11 +1032,12 @@ class BackTest:
 
             assert row['entry_point'] == last_row[
                 'entry_signal'], "Entry point is not the same, make sure you don't have access to futures " \
-                                    "information when computing entry point"
-            assert row['tp'] == last_row['take_profit'], "TP is not the same, make sure you don't have access to futures " \
-                                                    "information when computing take profit price"
+                                 "information when computing entry point"
+            assert row['tp'] == last_row[
+                'take_profit'], "TP is not the same, make sure you don't have access to futures " \
+                                "information when computing take profit price"
             assert row['sl'] == last_row['stop_loss'], "SL is not the same, make sure you don't have access to futures " \
-                                                    "information when computing stop loss price"
+                                                       "information when computing stop loss price"
 
         # Verify exit signals
         nb_total_es = len(self.df_all_pairs_positions[self.df_all_pairs_positions['exit_point'] == 'ExitSignal'])
@@ -1086,6 +1089,10 @@ class BackTest:
         assert sl_valid.sum() == len(sl_valid), "Some SL are not valid. Please replace your SL correctly."
         assert tp_valid.sum() == len(tp_valid), "Some TP are not valid. Please replace your TP correctly."
 
+        # Verify position sizes coefficients are between 0 and 1
+        assert df['position_size'].max() <= 1, "All position sizes must be between 0 and 1"
+        assert df['position_size'].min() > 0, "Position sizes must be greater than 0"
+
     def run_backtest(self, save: bool = True):
 
         """
@@ -1110,7 +1117,7 @@ class BackTest:
 
             df = self.entry_strategy(df)
 
-            for col in ['entry_signal', 'stop_loss', 'take_profit']:
+            for col in ['entry_signal', 'stop_loss', 'take_profit', 'position_size']:
                 assert col in df.columns, f"Missing {col} column. Please create this column in entry_strategy()"
 
             self.verify_tp_sl(df)
