@@ -1090,8 +1090,10 @@ class BackTest:
         assert tp_valid.sum() == len(tp_valid), "Some TP are not valid. Please replace your TP correctly."
 
         # Verify position sizes coefficients are between 0 and 1
-        assert df['position_size'].max() <= 1, "All position sizes must be between 0 and 1"
-        assert df['position_size'].min() > 0, "Position sizes must be greater than 0"
+        ps_valid = np.where(df['entry_signal'].notnull(),
+                            (df['position_size'] <= 1) & (df['position_size'] > 0), True)
+        assert ps_valid.sum() == len(ps_valid), "Some position sizes are not valid. " \
+                                                "All position sizes values must be between 0 and 1 (> 0 and <= 1)"
 
     def run_backtest(self, save: bool = True):
 
