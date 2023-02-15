@@ -4,7 +4,8 @@ STD_CANDLE_FORMAT = [
 
 VAR_NEEDED_FOR_POSITION = [
     'all_entry_time', 'entry_signal', 'all_entry_price',
-    'all_exit_time', 'all_exit_point', 'take_profit', 'stop_loss'
+    'all_exit_time', 'all_exit_point', 'take_profit', 'stop_loss',
+    'position_size'
 ]
 
 DATA_FORMATING = {
