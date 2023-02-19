@@ -30,16 +30,3 @@ jobs:
         uses: pypa/gh-action-pypi-publish@master
         with:
           password: ${{ secrets.PYPI_API_TOKEN }}
-          
-  update-production:
-    name: Update novalabs-backtest 📦 on production
-    runs-on: self-hosted
-    steps:
-      - name: Update novalabs-backtest venv
-        run: |
-          . /root/anaconda3/bin/activate algo
-          pip uninstall -y novalabs-backtest
-          pip install novalabs-backtest
-          conda deactivate
-      
-    
