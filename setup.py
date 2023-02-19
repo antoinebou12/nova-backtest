@@ -14,7 +14,7 @@ with open("README.md", "r") as fh:
 
 setup(
     name="novalabs-backtest",
-    version="1.1.2",
+    version="1.1.3",
     author="Nova Labs",
     author_email="devteam@novalabs.ai",
     description="Wrappers around Nova Labs utilities focused on safety and testability",
