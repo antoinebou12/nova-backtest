@@ -1,2 +1,8 @@
 # nova-backtest
-Built in client interaction with the Centralized Exchange Platform API. Nova Labs aims to facilitate the development of algorithmic trading and this package help to backtest technical strategies on Crypto Market.
+
+**NovaLabs backtest** is a Python library for backtesting algorithmic trading 
+strategies. It aims to facilitate the development of algorithmic trading on the
+**crypto market** by downloading historical data prices on the biggest centralized
+exchanges (Binance, Bybit, OKX, KuCoin & more) and simulates the trades of
+a given strategy throughout past years. It returns a bunch of statistics, giving a
+strong evaluation of your strategies performances.
