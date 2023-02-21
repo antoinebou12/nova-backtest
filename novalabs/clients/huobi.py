@@ -9,14 +9,15 @@ import pandas as pd
 import time
 
 from novalabs.utils.helpers import interval_to_milliseconds, retry_requests
+from novalabs.clients.client_interface import BackTestClientInterface
 
 
-class Huobi:
+class Huobi(BackTestClientInterface):
 
     def __init__(self,
-                 key: str,
-                 secret: str,
-                 testnet: bool):
+                 key: str = '',
+                 secret: str = '',
+                 testnet: bool = False):
 
         self.api_key = key
         self.api_secret = secret
@@ -25,6 +26,7 @@ class Huobi:
         self._session = Session()
 
         self.historical_limit = 2000
+        self.pairs_info = {}
 
     def generate_signature(self, method: str, request_path: str, _params: dict):
 
@@ -49,6 +51,7 @@ class Huobi:
         sign_params['Signature'] = signature.decode()
         return sign_params
 
+    @retry_requests
     def _send_request(self, end_point: str, request_type: str, params: dict = None, is_signed: bool = False):
 
         uri = f'{self.based_endpoint}{end_point}'
@@ -78,7 +81,8 @@ class Huobi:
 
         return int(ts)
 
-    def get_pairs_info(self) -> dict:
+    def get_pairs_info(self,
+                       quote_asset: str) -> dict:
         """
         Returns:
             All pairs available and tradable on the exchange.
@@ -95,7 +99,7 @@ class Huobi:
         for contract in contracts:
             tradable = contract['contract_status'] == 1
 
-            if tradable:
+            if tradable and quote_asset == contract['trade_partition']:
                 pairs_info[contract['contract_code']] = {}
 
                 pairs_info[contract['contract_code']]['quote_asset'] = contract['trade_partition']
@@ -168,7 +172,6 @@ class Huobi:
 
         return data['data']
 
-
     def _get_earliest_timestamp(self, pair: str, interval: str) -> int:
 
         kline = []
@@ -214,6 +217,7 @@ class Huobi:
         df['close_time'] = df['open_time'] + interval_ms - 1
 
         return df
+
     def get_historical_data(self,
                             pair: str,
                             interval: str,
@@ -290,5 +294,3 @@ class Huobi:
                                       end_ts=now_date_ts)
 
         return pd.concat([current_df, df], ignore_index=True).drop_duplicates(subset=['open_time'])
-
-

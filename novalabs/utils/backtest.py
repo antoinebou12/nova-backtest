@@ -100,6 +100,7 @@ class BackTest:
                 self.list_pairs = raw_list_pairs
 
         self._verify_all_pairs()
+        self.client.pairs_info = self.client.get_pairs_info(quote_asset=quote_asset)
 
         # Initialize DataFrames
         self.df_all_positions = {}

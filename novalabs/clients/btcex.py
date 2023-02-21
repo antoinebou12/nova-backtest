@@ -1,18 +1,18 @@
-import numpy as np
-
 from novalabs.utils.helpers import interval_to_milliseconds, retry_requests
 from novalabs.utils.constant import DATA_FORMATING
+from novalabs.clients.client_interface import BackTestClientInterface
 from requests import Request, Session
 from urllib.parse import urlencode
 import time
 import pandas as pd
+import numpy as np
 
 
-class BTCEX:
+class BTCEX(BackTestClientInterface):
 
     def __init__(self,
-                 key: str,
-                 secret: str,
+                 key: str = "",
+                 secret: str = "",
                  testnet: bool = False):
 
         self.api_key = key
@@ -29,10 +29,9 @@ class BTCEX:
         self.end_connection_date = np.Inf
         self.connected = False
         if key != '' and secret != '':
-            self.connected = True
             self.connect()
 
-        self.pairs_info = self.get_pairs_info()
+        self.pairs_info = {}
 
     # API REQUEST FORMAT
     @retry_requests
@@ -41,6 +40,11 @@ class BTCEX:
                       request_type: str,
                       params: dict = None,
                       signed: bool = False):
+
+        if self.connected and self.end_connection_date - time.time() < 86400:
+            self.connected = False
+
+            self.refresh_connection()
 
         if params is None:
             params = {}
@@ -58,7 +62,8 @@ class BTCEX:
         if signed:
             prepared.headers['Authorization'] = f"bearer {self.access_token}"
 
-        response = self._session.send(prepared)
+        response = self._session.send(prepared,
+                                      timeout=5)
 
         data = response.json()
 
@@ -82,6 +87,7 @@ class BTCEX:
         self.access_token = data['access_token']
         self.refresh_token = data['refresh_token']
         self.end_connection_date = int(time.time()) + data['expires_in']
+        self.connected = True
 
     def logout(self):
 
@@ -107,6 +113,7 @@ class BTCEX:
         self.access_token = data['access_token']
         self.refresh_token = data['refresh_token']
         self.end_connection_date = int(time.time()) + data['expires_in']
+        self.connected = True
 
     def get_server_time(self) -> int:
         """
@@ -120,7 +127,8 @@ class BTCEX:
         )['usOut']
         return int(ts)
 
-    def get_pairs_info(self) -> dict:
+    def get_pairs_info(self,
+                       quote_asset: str) -> dict:
 
         pairs_info = {}
 
@@ -131,17 +139,17 @@ class BTCEX:
         )['result']
 
         for info in data:
-            if info['is_active']:
+            if info['is_active'] and info['base_currency'] == quote_asset:
                 pair_name = info['instrument_name']
                 pairs_info[pair_name] = {}
 
                 pairs_info[pair_name]['quote_asset'] = info['base_currency']
 
-                pairs_info[pair_name]['maxQuantity'] = np.Inf
+                pairs_info[pair_name]['maxLimitQuantity'] = np.Inf
+                pairs_info[pair_name]['maxMarketQuantity'] = np.Inf
                 pairs_info[pair_name]['minQuantity'] = float(info['min_qty'])
 
                 pairs_info[pair_name]['tick_size'] = float(info['tick_size'])
-
                 pairs_info[pair_name]['step_size'] = float(info['min_trade_amount'])
 
                 pairs_info[pair_name]['creation_timestamp'] = int(info['creation_timestamp'])
@@ -170,7 +178,8 @@ class BTCEX:
                      pair: str,
                      interval: str,
                      start_time: int,
-                     end_time: int = None) -> list:
+                     end_time: int = None,
+                     limit: int = None) -> list:
 
         """
 
@@ -200,7 +209,7 @@ class BTCEX:
 
         return data
 
-    def _get_earliest_timestamp(self, pair: str) -> int:
+    def _get_earliest_timestamp(self, pair: str, interval: str = None) -> int:
 
         return int(self.pairs_info[pair]['creation_timestamp'])
 
@@ -313,4 +322,3 @@ class BTCEX:
                                            end_ts=now_date_ts)
 
         return pd.concat([current_df, df_temp], ignore_index=True).drop_duplicates(subset=['open_time'])
-

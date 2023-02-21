@@ -6,18 +6,19 @@ from datetime import datetime
 from novalabs.utils.helpers import interval_to_milliseconds
 import time
 from novalabs.utils.constant import DATA_FORMATING
+from novalabs.clients.client_interface import BackTestClientInterface
 import pandas as pd
 import numpy as np
 from typing import Union
 
 
-class OKX:
+class OKX(BackTestClientInterface):
 
     def __init__(self,
-                 key: str,
-                 secret: str,
-                 pass_phrase: str,
-                 testnet: bool):
+                 key: str = '',
+                 secret: str = '',
+                 pass_phrase: str = '',
+                 testnet: bool = False):
 
         self.api_key = key
         self.api_secret = secret
@@ -26,9 +27,7 @@ class OKX:
         self.based_endpoint = "https://www.okx.com"
         self._session = Session()
 
-        self.quote_asset = 'USDT'
-
-        self.pairs_info = self.get_pairs_info()
+        self.pairs_info = {}
 
         self.historical_limit = 90
 
@@ -76,7 +75,8 @@ class OKX:
             request_type="GET",
         )['data'][0]['ts'])
 
-    def get_pairs_info(self) -> dict:
+    def get_pairs_info(self,
+                       quote_asset: str) -> dict:
 
         data = self._send_request(
             end_point=f"/api/v5/public/instruments?instType=SWAP",
@@ -87,7 +87,7 @@ class OKX:
 
         for pair in data:
 
-            if pair['settleCcy'] == self.quote_asset and pair['state'] == 'live' and pair['instType'] == 'SWAP' and pair['ctType'] == 'linear':
+            if pair['settleCcy'] == quote_asset and pair['state'] == 'live' and pair['instType'] == 'SWAP' and pair['ctType'] == 'linear':
 
                 pairs_info[pair['instId']] = {}
 
@@ -115,7 +115,7 @@ class OKX:
 
         return pairs_info
 
-    def _get_candles(self, pair: str, interval: str, start_time: int, end_time: int) -> Union[dict, list]:
+    def _get_candles(self, pair: str, interval: str, start_time: int, end_time: int, limit: int = None) -> Union[dict, list]:
         """
         Args:
             pair: pair to get information from
@@ -263,4 +263,3 @@ class OKX:
             end_ts=int(time.time() * 1000)
         )
         return pd.concat([current_df, df], ignore_index=True).drop_duplicates(subset=['open_time'])
-
