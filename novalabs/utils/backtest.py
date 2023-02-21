@@ -1236,6 +1236,9 @@ class BackTest:
                                       index=False)
 
             with open(f'results/{self.strategy_name}_overall_stats.json', 'w') as fp:
+                all_statistics['start'] = all_statistics['start'].strftime("%Y-%m-%d %H:%M:%S")
+                all_statistics['end'] = all_statistics['end'].strftime("%Y-%m-%d %H:%M:%S")
+
                 json.dump(all_statistics, fp)
 
         return self.df_all_pairs_positions, all_statistics
