@@ -13,8 +13,8 @@ def telegram_information(list_telegram_group_name: list, max_nb_messages: int = 
     Returns: return a final dataframe that contains all the information from
     """
 
-    api_id = 3182923
-    api_hash = '3b3f693feb16f5c32f3cf5d77b9a8fd3'
+    api_id = 1
+    api_hash = ''
 
     final_telegram_df = pd.DataFrame(columns=['date', 'hour', 'nb_messages', 'nb_unique_ids_talking',
                                               'last_msg_time_in_hour', 'first_msg_time_in_hour', 'all_msg_in_hour',
