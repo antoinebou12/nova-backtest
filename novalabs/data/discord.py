@@ -16,7 +16,7 @@ def discord_information(list_channel_id, max_nb_extraction):
                                              'total_nb_of_reaction', 'maximum_nb_of_reaction', 'messages_full',
                                              'coin_discord_id'])
 
-    auth_key = 'ODE1NjAyMzY0MDk3ODg4Mjg2.YDu0Tw.sDgjJsvtS3jFfWAFKzXYbbr87P8'
+    auth_key = ''
 
     header = {
         'authorization': auth_key
