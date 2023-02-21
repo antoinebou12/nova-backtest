@@ -84,3 +84,9 @@ DATA_FORMATING = {
 
 }
 
+FEES = {'binance': 0.0002,
+        'btcex': 0.0002,
+        'bybit': 0.0001,
+        'okx': 0.00015}
+
+
