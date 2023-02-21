@@ -1,22 +1,20 @@
-from novalabs.utils.helpers import interval_to_milliseconds
+from novalabs.utils.helpers import interval_to_milliseconds, retry_requests
 from novalabs.utils.constant import DATA_FORMATING
+from novalabs.clients.client_interface import BackTestClientInterface
 from requests import Request, Session
 from urllib.parse import urlencode
 import pandas as pd
-import numpy as np
 import hashlib
 import time
 import hmac
-from multiprocessing import Pool
-from typing import Union
 
 
-class Binance:
+class Binance(BackTestClientInterface):
 
     def __init__(self,
-                 key: str,
-                 secret: str,
-                 testnet: bool
+                 key: str = '',
+                 secret: str = '',
+                 testnet: bool = False
                  ):
 
         self.api_key = key
@@ -28,15 +26,15 @@ class Binance:
 
         self.historical_limit = 1000
 
-        self.pairs_info = self.get_pairs_info()
+        self.pairs_info = {}
 
     # API REQUEST FORMAT
+    @retry_requests
     def _send_request(self, end_point: str, request_type: str, params: dict = None, signed: bool = False):
 
         if params is None:
             params = {}
         if signed:
-
             params['timestamp'] = int(time.time() * 1000)
             query_string = urlencode(params, True).replace("%40", "@")
             m = hmac.new(self.api_secret.encode("utf-8"), query_string.encode("utf-8"), hashlib.sha256)
@@ -49,7 +47,8 @@ class Binance:
         prepared.headers['Content-Type'] = "application/json;charset=utf-8"
         prepared.headers['User-Agent'] = "NovaLabs"
         prepared.headers['X-MBX-APIKEY'] = self.api_key
-        response = self._session.send(prepared)
+        response = self._session.send(prepared,
+                                      timeout=5)
         data = response.json()
 
         if isinstance(data, dict) and 'code' in data.keys() and data['code'] not in [200, -2011]:
@@ -225,7 +224,8 @@ class Binance:
         )
         return pd.concat([current_df, df], ignore_index=True).drop_duplicates(subset=['open_time'])
 
-    def get_pairs_info(self) -> dict:
+    def get_pairs_info(self,
+                       quote_asset: str) -> dict:
         """
         Note: This output is used for standardization purpose because binance order api has
         decimal restriction per pair.
@@ -241,7 +241,8 @@ class Binance:
         output = {}
 
         for symbol in info['symbols']:
-            if symbol['contractType'] == 'PERPETUAL':
+            if symbol['contractType'] == 'PERPETUAL' and symbol['status'] == 'TRADING' and symbol[
+                'quoteAsset'] == quote_asset:
 
                 pair = symbol['symbol']
 
@@ -252,22 +253,12 @@ class Binance:
                     if fil['filterType'] == 'PRICE_FILTER':
                         output[pair]['tick_size'] = float(fil['tickSize'])
 
-                        price_increment = np.format_float_positional(float(fil['tickSize']), trim='-')
-                        price_precision = int(str(price_increment)[::-1].find('.')) if float(fil['tickSize']) < 1 else 1
-                        output[pair]['pricePrecision'] = min([price_precision, symbol['pricePrecision']])
-
-                    if fil['filterType'] == 'LOT_SIZE':
+                    elif fil['filterType'] == 'LOT_SIZE':
                         output[pair]['step_size'] = float(fil['stepSize'])
+                        output[pair]['maxLimitQuantity'] = float(fil['maxQty'])
 
-                        if output[pair]['step_size'] < 1:
-                            step_size = int(str(fil['stepSize'])[::-1].find('.'))
-                            output[pair]['quantityPrecision'] = min([step_size, symbol['quantityPrecision']])
-                        else:
-                            output[pair]['quantityPrecision'] = int(symbol['quantityPrecision'])
-
+                    elif fil['filterType'] == 'MARKET_LOT_SIZE':
+                        output[pair]['maxMarketQuantity'] = float(fil['maxQty'])
                         output[pair]['minQuantity'] = float(fil['minQty'])
-                        output[pair]['maxQuantity'] = float(fil['maxQty'])
 
         return output
-
-

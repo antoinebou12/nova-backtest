@@ -4,20 +4,21 @@ import base64
 import json
 import time
 import hashlib
-from novalabs.utils.helpers import interval_to_minutes, interval_to_milliseconds, milliseconds_to_interval, format_precision
+from novalabs.utils.helpers import interval_to_minutes, interval_to_milliseconds, milliseconds_to_interval
 from novalabs.utils.constant import DATA_FORMATING
+from novalabs.clients.client_interface import BackTestClientInterface
 import pandas as pd
 from datetime import datetime
 import numpy as np
 
 
-class Kucoin:
+class Kucoin(BackTestClientInterface):
 
     def __init__(self,
-                 key: str,
-                 secret: str,
-                 pass_phrase: str,
-                 testnet: bool):
+                 key: str = '',
+                 secret: str = '',
+                 pass_phrase: str = '',
+                 testnet: bool = False):
         self.api_key = key
         self.api_secret = secret
         self.pass_phrase = pass_phrase
@@ -28,11 +29,9 @@ class Kucoin:
 
         self.historical_limit = 190
 
-        self.pairs_info = self.get_pairs_info()
+        self.pairs_info = {}
 
-        self.leverage = 2
-
-    def _send_request(self, end_point: str, request_type: str, params: dict = {}, signed: bool = False):
+    def _send_request(self, end_point: str, request_type: str, params: dict = None, signed: bool = False):
 
         request = Request(request_type, f'{self.based_endpoint}{end_point}', data=json.dumps(params))
         prepared = request.prepare()
@@ -73,7 +72,8 @@ class Kucoin:
             request_type="GET"
         )['data']
 
-    def get_pairs_info(self):
+    def get_pairs_info(self,
+                       quote_asset: str):
 
         data = self._send_request(
             end_point=f"/api/v1/contracts/active",
@@ -85,7 +85,7 @@ class Kucoin:
 
         for pair in data:
 
-            if pair['status'] == "Open":
+            if pair['status'] == "Open" and pair['quoteCurrency'] == quote_asset:
 
                 if pair['multiplier'] > 0:
                     step_size = pair['lotSize'] * pair['multiplier']
@@ -117,7 +117,7 @@ class Kucoin:
 
         return pairs_info
 
-    def _get_candles(self, pair: str, interval: str, start_time: int, end_time: int):
+    def _get_candles(self, pair: str, interval: str, start_time: int, end_time: int, limit: int = None):
         """
         Args:
             pair: pair to get information from

@@ -133,20 +133,6 @@ def limit_to_start_date(interval: str, nb_candles: int):
     return now_timestamp - (nb_candles + 1) * number_of_milliseconds
 
 
-def get_timedelta_unit(interval: str) -> timedelta:
-    """
-    Returns: timedelta
-    """
-    multi = int(float(re.findall(r'\d+', interval)[0]))
-
-    if 'm' in interval:
-        return timedelta(minutes=multi)
-    elif 'h' in interval:
-        return timedelta(hours=multi)
-    elif 'd' in interval:
-        return timedelta(days=multi)
-
-
 def is_opening_candle(interval: str,
                       current_date: datetime):
     multi = int(float(re.findall(r'\d+', interval)[0]))

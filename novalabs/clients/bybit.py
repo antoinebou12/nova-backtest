@@ -1,5 +1,6 @@
 from novalabs.utils.helpers import interval_to_milliseconds, retry_requests
 from novalabs.utils.constant import DATA_FORMATING
+from novalabs.clients.client_interface import BackTestClientInterface
 from requests import Request, Session
 from urllib.parse import urlencode
 import hashlib
@@ -8,11 +9,12 @@ import hmac
 import json
 import pandas as pd
 
-class Bybit:
+
+class Bybit(BackTestClientInterface):
 
     def __init__(self,
-                 key: str,
-                 secret: str,
+                 key: str = '',
+                 secret: str = '',
                  testnet: bool = False):
 
         self.api_key = key
@@ -23,8 +25,7 @@ class Bybit:
         self._session = Session()
 
         self.historical_limit = 200
-
-        self.pairs_info = self.get_pairs_info()
+        self.pairs_info = {}
 
     # API REQUEST FORMAT
     @retry_requests
@@ -59,7 +60,8 @@ class Bybit:
 
         prepared = request.prepare()
         prepared.headers['Content-Type'] = "application/json"
-        response = self._session.send(prepared)
+        response = self._session.send(prepared,
+                                      timeout=5)
         data = response.json()
 
         if data['ret_msg'] != "OK" and data['ret_code'] != 20001:
@@ -113,7 +115,8 @@ class Bybit:
         )
         return data['result']
 
-    def get_pairs_info(self) -> dict:
+    def get_pairs_info(self,
+                       quote_asset: str) -> dict:
         """
         Returns:
             All pairs available and tradable on the exchange.
@@ -128,23 +131,16 @@ class Bybit:
         for pair in data:
             tradable = pair['status'] == 'Trading'
 
-            if tradable:
+            if tradable and (pair['quote_currency'] == quote_asset):
                 pairs_info[pair['name']] = {}
                 pairs_info[pair['name']]['quote_asset'] = pair['quote_currency']
 
-                pairs_info[pair['name']]['maxQuantity'] = float(pair['lot_size_filter']['max_trading_qty'])
+                pairs_info[pair['name']]['maxLimitQuantity'] = float(pair['lot_size_filter']['post_only_max_trading_qty'])
+                pairs_info[pair['name']]['maxMarketQuantity'] = float(pair['lot_size_filter']['max_trading_qty'])
                 pairs_info[pair['name']]['minQuantity'] = float(pair['lot_size_filter']['min_trading_qty'])
 
                 pairs_info[pair['name']]['tick_size'] = float(pair['price_filter']['tick_size'])
-                pairs_info[pair['name']]['pricePrecision'] = pair['price_scale']
-
                 pairs_info[pair['name']]['step_size'] = float(pair['lot_size_filter']['qty_step'])
-
-                if float(pair['lot_size_filter']['qty_step']) < 1:
-                    step_size = str(pair['lot_size_filter']['qty_step'])[::-1].find('.')
-                    pairs_info[pair['name']]['quantityPrecision'] = int(step_size)
-                else:
-                    pairs_info[pair['name']]['quantityPrecision'] = 1
 
         return pairs_info
 
@@ -291,20 +287,3 @@ class Bybit:
                                       end_ts=now_date_ts)
 
         return pd.concat([current_df, df], ignore_index=True).drop_duplicates(subset=['open_time'])
-
-    def get_token_balance(self, quote_asset: str) -> float:
-        """
-        Args:
-            quote_asset: asset used for the trades (USD, USDT, BUSD, ...)
-
-        Returns:
-            Available quote_asset amount.
-        """
-        data = self._send_request(
-            end_point=f"/v2/private/wallet/balance",
-            request_type="GET",
-            signed=True
-        )['result']
-
-        return float(data[quote_asset]['available_balance'])
-

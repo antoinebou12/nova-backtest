@@ -69,7 +69,7 @@ DATA_FORMATING = {
     "okx": {
         "columns": [
             'open_time', 'open', 'high', 'low', 'close', 'volume_contract',
-            'volume' , 'quote_asset_volume'
+            'volume' , 'quote_asset_volume', 'confirm'
         ],
         "num_var": [
             'open', 'high', 'low', 'close', 'volume', 'volume_contract',
@@ -83,4 +83,12 @@ DATA_FORMATING = {
     }
 
 }
+
+FEES = {'binance': 0.0002,
+        'btcex': 0.0002,
+        'bybit': 0.0001,
+        'okx': 0.00015,
+        'huobi': 0.0002,
+        'kucoin': 0.0002}
+
 
