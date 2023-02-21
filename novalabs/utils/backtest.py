@@ -22,7 +22,7 @@ class BackTest:
     Complete Python class for backtesting trading strategies.
 
     Args:
-        exchange (str): exchange to backtest on ('bybit', 'binance', 'okx', 'huobi', 'kucoin', 'oanda' or 'btcex').
+        exchange (str): exchange to backtest on (bybit, binance, okx, huobi, kucoin, oanda or btcex).
         strategy_name (str): name of the strategy.
         candle (str): candle size / timeframe with format %m or %h or %d (ex: 5m for five minutes candles).
         list_pairs (list): list of pairs to backtest.
@@ -122,7 +122,7 @@ class BackTest:
             df (DataFrame): DataFrame returned by get_historical_data().
 
         Note:
-            Must be re-written to fit with your strategy (cf. documentation Usage -> Write build_indicators()).
+            Must be re-written to fit with your strategy (cf. documentation -> Usage -> Example -> Write build_indicators()).
 
         Returns:
             DataFrame returned by get_historical_data() with all the indicators (new columns added) neccessary to the strategy.
@@ -135,12 +135,12 @@ class BackTest:
             df (DataFrame): DataFrame returned by build_indicators().
 
         Note:
-            Must be re-written to fit with your strategy (cf. documentation Usage -> Write entry_strategy()).
+            Must be re-written to fit with your strategy (cf. documentation -> Usage -> Example -> Write entry_strategy()).
 
         Returns:
             DataFrame returned by build_indicators() with 4 new columns.
                 - entry_signal (int): **-1** for entering short at the next open, **+1** for long.
-                - position_size (float): **float between 0 and 1**. Position size in quote asset = position_size * (self.leverage / self.max_pos)
+                - position_size (float): **float between 0 and 1**. Position size in quote asset = bankroll * position_size * (self.leverage / self.max_pos)
                 - stop_loss (float): stop loss price.
                 - take_profit (float): take profit price.
         """
@@ -152,7 +152,7 @@ class BackTest:
             df (DataFrame): DataFrame returned by entry_strategy().
 
         Note:
-            Must be re-written to fit with your strategy (cf. documentation Usage -> Write exit_strategy()).
+            Must be re-written to fit with your strategy (cf. documentation -> Usage -> Example -> Write exit_strategy()).
 
         Returns:
             DataFrame returned by entry_strategy() with 1 new column.
@@ -193,7 +193,9 @@ class BackTest:
         Download (if necessary), save locally and return historical price data for a given trading pair.
 
         Note:
-            Automatically request all available data, then save data into ./database/{exchange}/hist_{pair}_{self.candle}.csv.
+            When running for the first time on this pair, it automatically downloads all available historical data on the exchange,
+            then save data into ./database/{exchange}/hist_{pair}_{self.candle}.csv. After the data has been downloaded, the method will
+            read saved data.
         Args:
             pair (str): pair to retrieve data (ex: BTCUSDT on binance).
 
