@@ -10,8 +10,6 @@ import time
 import requests
 import numpy as np
 
-from novalabs.utils.constant import EXCEPTION_LIST_BINANCE
-
 import warnings
 
 warnings.filterwarnings("ignore")
@@ -28,7 +26,7 @@ class SaveOrderBook:
         self.exchange = exchange
         self.limit = limit
         self.client = self.initiate_client()
-        self.exception_pair = EXCEPTION_LIST_BINANCE
+        self.exception_pair = []
 
         self.list_pair = list_pair
         if not list_pair:

@@ -1,7 +1,7 @@
 pandas
 requests
 numpy
-pytz
-setuptools
 decouple
 pytest
+aiohttp
+matplotlib
