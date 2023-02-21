@@ -1,7 +1,13 @@
 pandas
-requests
 numpy
+pytz
+setuptools
 decouple
 pytest
-aiohttp
 matplotlib
+typing
+aiohttp
+asyncio
+psaw
+telethon
+requests
