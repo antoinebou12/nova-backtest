@@ -57,16 +57,19 @@ class BackTest:
                  plot_all_pairs_charts: bool = False,
                  plot_exposure: bool = False,
                  key: str = "",
-                 secret: str = ""):
+                 secret: str = "",
+                 passphrase: str = "",
+                 backtest_id: str = ""):
 
         self.exchange = exchange
         self.quote_asset = quote_asset
         self.strategy_name = strategy_name
+        self.backtest_id = backtest_id
         self.positions_size = leverage / max_pos
         self.geometric_sizes = geometric_sizes
         self.leverage = leverage
 
-        self.client = clients(exchange=exchange, key=key, secret=secret)
+        self.client = clients(exchange=exchange, key=key, secret=secret, passphrase=passphrase)
 
         self.start_bk = start_bk
         self.actual_bk = self.start_bk
