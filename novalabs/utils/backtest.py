@@ -13,9 +13,10 @@ from novalabs.clients.clients import clients
 from novalabs.utils.helpers import get_timedelta_unit, convert_max_holding_to_candle_nb, convert_candle_to_timedelta, \
     interval_to_milliseconds
 
-
 import warnings
+
 warnings.filterwarnings("ignore")
+
 
 class BackTest:
     """BackTest
@@ -56,16 +57,19 @@ class BackTest:
                  plot_all_pairs_charts: bool = False,
                  plot_exposure: bool = False,
                  key: str = "",
-                 secret: str = ""):
+                 secret: str = "",
+                 passphrase: str = "",
+                 backtest_id: str = ""):
 
         self.exchange = exchange
         self.quote_asset = quote_asset
         self.strategy_name = strategy_name
+        self.backtest_id = backtest_id
         self.positions_size = leverage / max_pos
         self.geometric_sizes = geometric_sizes
         self.leverage = leverage
 
-        self.client = clients(exchange=exchange, key=key, secret=secret)
+        self.client = clients(exchange=exchange, key=key, secret=secret, passphrase=passphrase)
 
         self.start_bk = start_bk
         self.actual_bk = self.start_bk
@@ -174,7 +178,6 @@ class BackTest:
         all_pairs = self.get_list_pairs()
 
         for pair in self.list_pairs:
-
             assert pair in all_pairs, f"{pair} is not a valid trading pair.\nHere is the list of all available pairs on {self.exchange}:\n{all_pairs}"
 
     def update_all_data(self):
@@ -322,7 +325,7 @@ class BackTest:
 
         nb_candle = convert_max_holding_to_candle_nb(candle=self.candle, max_holding=self.max_holding)
 
-        for i in range(1, nb_candle):
+        for i in range(nb_candle):
             condition_sl_long = (df.low.shift(-i) <= df.stop_loss) & (df.entry_signal == 1)
             condition_sl_short = (df.high.shift(-i) >= df.stop_loss) & (df.entry_signal == -1)
             condition_tp_short = (df.low.shift(-i) <= df.take_profit) & (df.high.shift(-i) <= df.stop_loss) & (
@@ -735,6 +738,16 @@ class BackTest:
                 # Append exit times
                 exit_times += entry_t['exit_time'].tolist()
 
+            if t in exit_times:
+                if self.geometric_sizes:
+                    # actualize current bankroll
+                    current_bk += self.df_all_pairs_positions[self.df_all_pairs_positions['exit_time'] == t][
+                        'PL_amt_realized'].sum()
+
+                # quit positions
+                actual_nb_pos -= exit_times.count(t)
+                exit_times = list(filter(t.__ne__, exit_times))
+
             # Compute position size
             if self.geometric_sizes and (nb_signals > 0):
                 self.df_all_pairs_positions['position_size'] = np.where(self.df_all_pairs_positions['entry_time'] == t,
@@ -1091,6 +1104,8 @@ class BackTest:
             df = self.build_indicators(df)
 
             df = self.entry_strategy(df)
+
+            df = self._max_stop_loss(df)
 
             last_row = df.iloc[-1]
 
