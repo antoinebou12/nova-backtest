@@ -322,7 +322,7 @@ class BackTest:
 
         nb_candle = convert_max_holding_to_candle_nb(candle=self.candle, max_holding=self.max_holding)
 
-        for i in range(nb_candle):
+        for i in range(1, nb_candle):
             condition_sl_long = (df.low.shift(-i) <= df.stop_loss) & (df.entry_signal == 1)
             condition_sl_short = (df.high.shift(-i) >= df.stop_loss) & (df.entry_signal == -1)
             condition_tp_short = (df.low.shift(-i) <= df.take_profit) & (df.high.shift(-i) <= df.stop_loss) & (
@@ -735,6 +735,7 @@ class BackTest:
                 # Append exit times
                 exit_times += entry_t['exit_time'].tolist()
 
+            # If TP or SL hit during the opening candle
             if t in exit_times:
                 if self.geometric_sizes:
                     # actualize current bankroll
@@ -1101,6 +1102,8 @@ class BackTest:
             df = self.build_indicators(df)
 
             df = self.entry_strategy(df)
+
+            df = self._create_entry_prices_times(df)
 
             df = self._max_stop_loss(df)
 
