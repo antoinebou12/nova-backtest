@@ -147,7 +147,7 @@ class Binance(BackTestClientInterface):
         df = self._get_long_short_ratio_global(pair=pair,
                                                interval=interval)
 
-        # add long short ratio positions top traders
+        # add long short ratio top traders
         df = pd.merge(df, self._get_long_short_ratio_top_traders(pair=pair,
                                                                  interval=interval),
                       on='open_time', how='left')
