@@ -126,6 +126,21 @@ class Binance(BackTestClientInterface):
 
         return df[['open_time', 'buySellRatio']]
 
+    def _get_open_interest(self, pair: str, interval: str, limit: int = 500):
+
+        data = self._send_request(end_point='/futures/data/openInterestHist',
+                                  request_type='GET',
+                                  params={'symbol': pair,
+                                          'period': interval,
+                                          'limit': limit})
+
+        df = pd.DataFrame.from_dict(data)
+        df['openInterestClose'] = df['sumOpenInterest'].shift(-1)
+
+        df = df.rename(columns={'timestamp': 'open_time'})
+
+        return df[['open_time', 'openInterestClose']]
+
     def _get_market_data(self, pair: str, interval: str, limit: int = 500) -> pd.DataFrame:
 
         # add long short ratio global
@@ -135,7 +150,7 @@ class Binance(BackTestClientInterface):
         # add long short ratio positions top traders
         df = pd.merge(df, self._get_long_short_ratio_top_traders(pair=pair,
                                                                  interval=interval),
-                         on='open_time', how='left')
+                      on='open_time', how='left')
 
         # add long short ratio positions top traders
         df = pd.merge(df, self._get_long_short_ratio_pos_top_traders(pair=pair,
@@ -146,6 +161,13 @@ class Binance(BackTestClientInterface):
         df = pd.merge(df, self._get_taker_buy_sell_ratio(pair=pair,
                                                          interval=interval),
                       on='open_time', how='left')
+
+        # add open interest
+        df = pd.merge(df, self._get_open_interest(pair=pair,
+                                                  interval=interval),
+                      on='open_time', how='left')
+
+        df = df.ffill()
 
         return df
 
@@ -285,7 +307,7 @@ class Binance(BackTestClientInterface):
         # format OHLC + vol data in dataframe
         df = self._format_data(all_data=output_data, historical=True)
 
-        # add market/sentiments data
+        # add market data
         df = pd.merge(df, self._get_market_data(pair=pair,
                                                 interval=interval),
                       on='open_time', how='left')
