@@ -67,6 +67,110 @@ class Binance(BackTestClientInterface):
         )
         return int(data['serverTime'])
 
+    def _format_long_short_ratio(self,
+                                 data: list) -> pd.DataFrame:
+
+        df = pd.DataFrame.from_dict(data)
+
+        df['longShortRatio'] = pd.to_numeric(df['longShortRatio'], downcast="float")
+
+        df = df.rename(columns={'timestamp': 'open_time'})
+
+        df['longShortRatio'] = df['longShortRatio'].shift(-1)
+
+        return df[['open_time', 'longShortRatio']]
+
+    def _get_long_short_ratio_global(self, pair: str, interval: str, limit: int = 500):
+
+        data = self._send_request(end_point='/futures/data/globalLongShortAccountRatio',
+                                  request_type='GET',
+                                  params={'symbol': pair,
+                                          'period': interval,
+                                          'limit': limit})
+
+        return self._format_long_short_ratio(data=data).rename(columns={'longShortRatio': 'globalLongShortRatio'})
+
+    def _get_long_short_ratio_top_traders(self, pair: str, interval: str, limit: int = 500):
+
+        data = self._send_request(end_point='/futures/data/topLongShortAccountRatio',
+                                  request_type='GET',
+                                  params={'symbol': pair,
+                                          'period': interval,
+                                          'limit': limit})
+
+        return self._format_long_short_ratio(data=data).rename(columns={'longShortRatio': 'topLongShortRatio'})
+
+    def _get_long_short_ratio_pos_top_traders(self, pair: str, interval: str, limit: int = 500):
+
+        data = self._send_request(end_point='/futures/data/topLongShortPositionRatio',
+                                  request_type='GET',
+                                  params={'symbol': pair,
+                                          'period': interval,
+                                          'limit': limit})
+
+        return self._format_long_short_ratio(data=data).rename(columns={'longShortRatio': 'topLongShortRatioPositions'})
+
+    def _get_taker_buy_sell_ratio(self, pair: str, interval: str, limit: int = 500):
+
+        data = self._send_request(end_point='/futures/data/takerlongshortRatio',
+                                  request_type='GET',
+                                  params={'symbol': pair,
+                                          'period': interval,
+                                          'limit': limit})
+
+        df = pd.DataFrame.from_dict(data)
+
+        df['buySellRatio'] = pd.to_numeric(df['buySellRatio'], downcast="float")
+
+        df = df.rename(columns={'timestamp': 'open_time'})
+
+        return df[['open_time', 'buySellRatio']]
+
+    def _get_open_interest(self, pair: str, interval: str, limit: int = 500):
+
+        data = self._send_request(end_point='/futures/data/openInterestHist',
+                                  request_type='GET',
+                                  params={'symbol': pair,
+                                          'period': interval,
+                                          'limit': limit})
+
+        df = pd.DataFrame.from_dict(data)
+        df['openInterestClose'] = df['sumOpenInterest'].shift(-1)
+
+        df = df.rename(columns={'timestamp': 'open_time'})
+
+        return df[['open_time', 'openInterestClose']]
+
+    def _get_market_data(self, pair: str, interval: str, limit: int = 500) -> pd.DataFrame:
+
+        # add long short ratio global
+        df = self._get_long_short_ratio_global(pair=pair,
+                                               interval=interval)
+
+        # add long short ratio top traders
+        df = pd.merge(df, self._get_long_short_ratio_top_traders(pair=pair,
+                                                                 interval=interval),
+                      on='open_time', how='left')
+
+        # add long short ratio positions top traders
+        df = pd.merge(df, self._get_long_short_ratio_pos_top_traders(pair=pair,
+                                                                     interval=interval),
+                      on='open_time', how='left')
+
+        # add taker buy sell volume ratio
+        df = pd.merge(df, self._get_taker_buy_sell_ratio(pair=pair,
+                                                         interval=interval),
+                      on='open_time', how='left')
+
+        # add open interest
+        df = pd.merge(df, self._get_open_interest(pair=pair,
+                                                  interval=interval),
+                      on='open_time', how='left')
+
+        df = df.ffill()
+
+        return df
+
     def _get_candles(self, pair: str, interval: str, start_time: int, end_time: int, limit: int = None):
         """
         Args:
@@ -200,7 +304,15 @@ class Binance(BackTestClientInterface):
             if idx % 3 == 0:
                 time.sleep(1)
 
-        return self._format_data(all_data=output_data, historical=True)
+        # format OHLC + vol data in dataframe
+        df = self._format_data(all_data=output_data, historical=True)
+
+        # add market data
+        df = pd.merge(df, self._get_market_data(pair=pair,
+                                                interval=interval),
+                      on='open_time', how='left')
+
+        return df
 
     def update_historical(self, pair: str, interval: str, current_df: pd.DataFrame) -> pd.DataFrame:
         """
