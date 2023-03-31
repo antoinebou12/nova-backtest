@@ -11,6 +11,11 @@ VERSION = package_version[:-1] + str(int(package_version[-1])+1)
 
 with open("README.md", "r") as fh:
     long_description = fh.read()
+    
+with open('requirements.txt', 'r') as file:
+    requirements = file.read().replace('\n', ' ')
+
+dependencies = requirements.split()
 
 setup(
     name="novalabs-backtest",
@@ -21,6 +26,7 @@ setup(
     long_description=long_description,
     url="https://github.com/Nova-DevTeam/nova-backtest",
     packages=find_packages(),
+    install_requires=dependencies,  # Specify your dependencies here
     classifiers=[
         "Programming Language :: Python :: 3",
         "License :: OSI Approved :: MIT License",
