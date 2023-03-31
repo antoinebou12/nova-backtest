@@ -11,3 +11,4 @@ asyncio
 psaw
 telethon
 requests
+ta
