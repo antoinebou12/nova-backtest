@@ -318,7 +318,7 @@ class TechnicalIndicatorsCreation:
         new_var_created.append(f'volume_wap_{name_ext}')
 
         dataset[f'volatility_atr_{name_ext}'] = atr_ind.average_true_range()
-        new_var_created.append(f'volume_mfi_{name_ext}')
+        new_var_created.append(f'volatility_atr_{name_ext}')
         dataset[f'volatility_bbh_{name_ext}'] = bb_ind.bollinger_hband()
         dataset[f'volatility_bbl_{name_ext}'] = bb_ind.bollinger_lband()
         dataset[f'volatility_bb_pct_{name_ext}'] = bb_ind.bollinger_pband()
