@@ -8,7 +8,6 @@ from ta.trend import ADXIndicator, CCIIndicator, MACD, MassIndex, VortexIndicato
 from ta.momentum import (AwesomeOscillatorIndicator, ROCIndicator, RSIIndicator, TSIIndicator,
                          UltimateOscillator)
 
-
 warnings.filterwarnings("ignore")
 
 
@@ -132,14 +131,16 @@ class TechnicalIndicatorsCreation:
 
     def __init__(self, based_df, add_df, candle_name: str, only_ta: bool = True):
         """
-        This class is used to build the technical indicators from different time frame.
+        This class is used to build the technical indicators from different timeframe.
         Note, if we used the method create_based_ta() first before we call the create_high_df(), we execute a drop na
         on the base_df that contains na from the first creation of the technical indicators (this is why we will not
         have the same number of observation.
+        
         Args:
             based_df: The base dataset is a pandas dataframe that represents the based candlestick that you
             want to use.
-            add_df: The add_df argument is a pandas dataframe from the same coin but on a different time frame. The
+            
+            add_df: The add_df argument is a pandas dataframe from the same coin but on a different timeframe. The
             time frame could be higher or lower time frame
             candle_name: The candle name is a string that identify the add_df candle stick. The possible values are:
             5m, 15m, 30m, 1h, 2h and 4h
@@ -162,16 +163,13 @@ class TechnicalIndicatorsCreation:
         # here we declare some static values to build the update logic
         self.list_starting_15min = [30, 45, 0, 15]
         self.list_starting_30min = [30, 0]
-
         self.list_hours_min = [0]
-
         self.list_2h_hours = [14, 16, 18, 20, 22, 0, 2, 4, 6, 8, 10, 12]
         self.list_4h_hours = [16, 20, 0, 4, 8, 12]
-
         self.list_1d_hours = [0]
 
         # we need the minimum number of prices to build every technical indicators
-        self.nb_of_obs_needed = self.get_buffer_length()
+        self.nb_of_obs_needed = self._get_buffer_length()
 
         # create the empty list that will contains the price evolution
         self.last_open = [np.nan] * self.nb_of_obs_needed
@@ -180,12 +178,13 @@ class TechnicalIndicatorsCreation:
         self.last_close = [np.nan] * self.nb_of_obs_needed
         self.last_volume = [np.nan] * self.nb_of_obs_needed
 
-        self.new_variables = {f'{self.candle_name}_open',
+        self.new_variables = [f'{self.candle_name}_open',
                               f'{self.candle_name}_high',
                               f'{self.candle_name}_low',
                               f'{self.candle_name}_close',
-                              f'{self.candle_name}_volume'}
-
+                              f'{self.candle_name}_volume']
+        
+        # set empty dataframe
         self.full_df = pd.DataFrame()
 
     def format_time_for_df(self):
@@ -210,11 +209,22 @@ class TechnicalIndicatorsCreation:
         self.add_df = self.add_df.sort_values(by=['open_time'])
         print('Dataframe format is updated')
 
-    def get_buffer_length(self):
-
+    def _get_buffer_length(self):
+        """_summary_
+        
+        Method that is only used to 
+        
+        Returns:
+            _type_: _description_
+            
+        """
+        
         # Add ta features filling NaN values
-        ind_df, var_name = self.get_selected_indicators(dataset=self.add_df,
-                                                        name_ext=self.candle_name)
+        ind_df, _ = self.get_selected_indicators(
+            dataset=self.add_df,
+            name_ext=self.candle_name
+        )
+        
         nb_needed = pd.DataFrame(ind_df.isna().sum(), columns=['missing'])['missing'].max() + 1
 
         print(f'Number of observation needed is {nb_needed}')
@@ -349,8 +359,15 @@ class TechnicalIndicatorsCreation:
 
         return dataset, new_var_created
 
-    def create_price_columns(self):
+    def _create_price_columns(self):
+        
+        """
+        This method new column
 
+        Returns:
+            _type_: _description_
+        """
+        
         print("Create the time series for the higher time dataframe")
 
         for k in self.new_variables:
@@ -388,12 +405,12 @@ class TechnicalIndicatorsCreation:
     def buffer_cleaning(self, df_clean):
 
         # create the condition
-        if self.candle_name == '15min':
+        if self.candle_name == '15m':
             if df_clean['minute'] in self.list_starting_15min:
                 self.high_buffer = []
                 self.low_buffer = []
                 self.volume_buffer = []
-        elif self.candle_name == '30min':
+        elif self.candle_name == '30m':
             if df_clean['minute'] in self.list_starting_30min:
                 self.high_buffer = []
                 self.low_buffer = []
@@ -500,8 +517,14 @@ class TechnicalIndicatorsCreation:
         return clean_df_ta, ta_var_name
 
     def create_high_df(self):
-
-        self.create_price_columns()
+        
+        """
+        This method uses the self.add_df dataframe with higher candles to be added
+        to the base dataframe 
+        """
+        
+        # create 
+        self._create_price_columns()
 
         df_merging = self.add_df[['open_time',
                                   f'{self.candle_name}_open',
@@ -551,3 +574,71 @@ class TechnicalIndicatorsCreation:
             final_result = final_result[output_list]
 
         return final_result
+    
+    
+def get_candlestick_name(df):
+    
+    df['candlestick_name'] = 'Undefined'
+    
+    df['candlestick_name'] = np.where(np.multiply((df.high - df.low) , 0.05) > np.absolute(df.open-df.close), 'Doji', df['candlestick_name'])
+    
+    df['candlestick_name'] = np.where( (np.multiply((df.high - df.low) , 0.05) > np.absolute(df.open-df.close)) & \
+        (df.open < (df.low + np.multiply((df.high - df.low), 0.05))), 'Gravestone',  df['candlestick_name']) 
+    
+    df['candlestick_name'] = np.where( (np.multiply((df.high - df.low) , 0.05) > np.absolute(df.open-df.close)) & \
+        (df.open > (df.high - np.multiply((df.high - df.low), 0.05))), 'Dragonfly',  df['candlestick_name']) 
+    
+    var_df = df.copy(deep=True)
+    var_df['l10'] = np.multiply((var_df.high - var_df.low), 0.1)
+    var_df['l30'] = np.multiply((var_df.high - var_df.low), 0.3)
+    var_df['isupper'] = np.where(( ((var_df.high - var_df.l10) > var_df.open) & ( (var_df.high - var_df.l30) < var_df.open )  ), True, False)
+    var_df['islower'] = np.where(( ((var_df.low + var_df.l10) < var_df.open) & ( (var_df.low + var_df.l30) > var_df.open )  ), True, False)
+        
+    df['candlestick_name'] = np.where( (np.multiply((df.high - df.low) , 0.05) > np.absolute(df.open-df.close)) & (var_df.isupper | var_df.islower), 'LongLeg',  df['candlestick_name'])
+    
+    del var_df
+    
+    df['candlestick_name'] = np.where( ((((df.close - df.low) > (df.high - df.open) * 2) & (df.close >= df.open)) |\
+        (((df.open - df.low) > (df.high - df.close) * 2) & (df.open >= df.close))  ) , 'Hammer', df['candlestick_name'])
+
+    df['candlestick_name'] = np.where( (( ((df.high - df.close) > (df.close - df.low) * 2) & (df.close > df.open)) |\
+        (((df.high - df.open) > (df.open - df.low) * 2) & (df.open > df.close))  ) , 'Inv_Hammer', df['candlestick_name'])
+    
+    df['candlestick_name'] = np.where(( (df.close >= ( df.low + ((df.high - df.low) / 3 ))) & \
+        (df.open >= ( df.low + ((df.high - df.low) / 3 )))  & \
+            (df.close <= ( df.high - ((df.high - df.low) / 3 ))) &\
+                (df.open <= ( df.high - ((df.high - df.low) / 3 ))) ) , 'Spinning', df['candlestick_name'])
+
+    df['candlestick_name'] = np.where(((df.open < df.close) & (df.open == df.low) & (df.close == df.high)) , 'Bull_Marubozu', df['candlestick_name'])
+    df['candlestick_name'] = np.where(((df.open > df.close) & (df.open == df.high) & (df.close == df.low)), 'Bear_Marubouzu', df['candlestick_name'])
+
+    df['candlestick_name'] = np.where(( (df.close.shift(1) > df.open.shift(1)) & \
+        (df.high.shift(1) < df.high) & (df.low.shift(1) > df.low) & (df.open.shift(1) < df.close) &\
+            (df.close.shift(1) > df.open) ), 'BullEngulf', df['candlestick_name'])
+    
+    df['candlestick_name'] = np.where(( (df.open.shift(1) > df.close.shift(1)) &\
+        (df.high.shift(1) < df.high) & (df.low.shift(1) > df.low) & (df.close.shift(1) < df.open) &\
+            (df.open.shift(1)) > df.close  ), 'BearEngulf', df['candlestick_name'])
+
+    df['candlestick_name'] = np.where(( (df.close.shift(1) > df.open.shift(1)) & \
+        (df.high.shift(1) < df.close) & (df.low.shift(1) > df.open)  ), 'SBullEngulf', df['candlestick_name'])
+    df['candlestick_name'] = np.where(( (df.open.shift(1) > df.close.shift(1)) &\
+        (df.high.shift(1) < df.open) & (df.low.shift(1) > df.open)   ), 'SBearEngulf', df['candlestick_name'])
+
+    df['candlestick_name'] = np.where( ((df.high <= df.open.shift(1)) &\
+        (df.low >= df.close.shift(1)) & (df.close > df.open) ) , 'BullHarami', df['candlestick_name'])
+    df['candlestick_name'] = np.where( ((df.high <= df.close.shift(1)) & \
+        (df.low >= df.open.shift(1)) & (df.close < df.open) ) , 'BearHarami', df['candlestick_name'])
+
+    df['candlestick_name'] = np.where( ((df.close.shift(1) > df.open.shift(1)) &\
+        (((df.close.shift(1) + df.open.shift(1)) / 2 ) > df.close) & (df.open > df.close) &\
+            (df.open > df.close.shift(1)) & (df.close > df.open.shift(1)) &
+            ((df.open - df.close)/ (0.001 + (df.high - df.low)) > 0.6 ) ) , 'DarkCloud', df['candlestick_name'])
+
+    df['candlestick_name'] = np.where( ((df.close.shift(1) < df.open.shift(1)) &\
+        (((df.close.shift(1) + df.open.shift(1)) / 2 ) < df.close) & (df.open < df.close) &\
+            (df.open < df.close.shift(1)) & (df.close < df.open.shift(1)) &
+            ((df.open - df.close)/ (0.001 + (df.high - df.low)) < 0.6 ) ) , 'Piercing', df['candlestick_name'])
+    
+
+    return df
