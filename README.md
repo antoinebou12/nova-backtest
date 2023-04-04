@@ -1,13 +1,13 @@
 # Nova Backtest
 
 
-![PyPI](https://img.shields.io/pypi/v/novelabs-backtest)
-![PyPI - Python Version](https://img.shields.io/pypi/pyversions/novelabs-backtest)
-![PyPI - License](https://img.shields.io/pypi/l/novelabs-backtest)
-![PyPI - Downloads](https://img.shields.io/pypi/dm/novelabs-backtest)
-![GitHub last commit](https://img.shields.io/github/last-commit/Nova-DevTeam/novelabs-backtest)
-[![Python Test and Build](https://github.com/Nova-DevTeam/novelabs-backtest/actions/workflows/python-test.yml/badge.svg)](https://github.com/Nova-DevTeam/novelabs-backtest/actions/workflows/python-test.yml)
-![Coverage](https://raw.githubusercontent.com/Nova-DevTeam/novelabs-backtest/main/.github/badge/coverage.svg)
+![PyPI](https://img.shields.io/pypi/v/novalabs-backtest)
+![PyPI - Python Version](https://img.shields.io/pypi/pyversions/novalabs-backtest)
+![PyPI - License](https://img.shields.io/pypi/l/novalabs-backtest)
+![PyPI - Downloads](https://img.shields.io/pypi/dm/novalabs-backtest)
+![GitHub last commit](https://img.shields.io/github/last-commit/Nova-DevTeam/nova-backtest)
+[![Python Test and Build](https://github.com/Nova-DevTeam/nova-backtest/actions/workflows/python-test.yml/badge.svg)](https://github.com/Nova-DevTeam/nova-backtest/actions/workflows/run-test.yml)
+![Coverage](https://raw.githubusercontent.com/Nova-DevTeam/nove-backtest/main/.github/badge/coverage.svg)
 
 NovaLabs backtest is a Python library for backtesting algorithmic trading strategies. It aims to facilitate the development of algorithmic trading on the crypto market by downloading historical data prices on the biggest centralized exchanges (Binance, Bybit, OKX, KuCoin & more) and simulates the trades of a given strategy throughout past years. It returns a bunch of statistics, giving a strong evaluation of your strategies performances.
 
