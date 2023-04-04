@@ -135,11 +135,11 @@ class TechnicalIndicatorsCreation:
         Note, if we used the method create_based_ta() first before we call the create_high_df(), we execute a drop na
         on the base_df that contains na from the first creation of the technical indicators (this is why we will not
         have the same number of observation.
-        
+
         Args:
             based_df: The base dataset is a pandas dataframe that represents the based candlestick that you
             want to use.
-            
+
             add_df: The add_df argument is a pandas dataframe from the same coin but on a different timeframe. The
             time frame could be higher or lower time frame
             candle_name: The candle name is a string that identify the add_df candle stick. The possible values are:
