@@ -2,7 +2,7 @@ pandas
 numpy
 pytz
 setuptools
-decouple
+python-decouple
 pytest
 matplotlib
 typing

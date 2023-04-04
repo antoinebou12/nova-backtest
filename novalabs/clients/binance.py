@@ -10,12 +10,7 @@ import hmac
 
 
 class Binance(BackTestClientInterface):
-
-    def __init__(self,
-                 key: str = '',
-                 secret: str = '',
-                 testnet: bool = False
-                 ):
+    def __init__(self, key: str = '', secret: str = '', testnet: bool = False):
 
         self.api_key = key
         self.api_secret = secret
@@ -40,15 +35,13 @@ class Binance(BackTestClientInterface):
             m = hmac.new(self.api_secret.encode("utf-8"), query_string.encode("utf-8"), hashlib.sha256)
             params['signature'] = m.hexdigest()
 
-        request = Request(request_type, f'{self.based_endpoint}{end_point}',
-                          params=urlencode(params, True).replace("%40", "@"))
+        request = Request(request_type, f'{self.based_endpoint}{end_point}', params=urlencode(params, True).replace("%40", "@"))
 
         prepared = request.prepare()
         prepared.headers['Content-Type'] = "application/json;charset=utf-8"
         prepared.headers['User-Agent'] = "NovaLabs"
         prepared.headers['X-MBX-APIKEY'] = self.api_key
-        response = self._session.send(prepared,
-                                      timeout=5)
+        response = self._session.send(prepared, timeout=5)
         data = response.json()
 
         if isinstance(data, dict) and 'code' in data.keys() and data['code'] not in [200, -2011]:

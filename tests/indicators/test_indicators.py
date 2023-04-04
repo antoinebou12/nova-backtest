@@ -1,10 +1,10 @@
 from novalabs.utils.backtest import BackTest
 from datetime import datetime
 from novalabs.utils.indicators import TechnicalIndicatorsCreation
+from novalabs.utils.indicators import get_candlestick_name
 
 
 def get_data(exchange: str, pair: str, candle: str):
-    
     backtest = BackTest(
         exchange=exchange,
         strategy_name='lgbm',
@@ -22,19 +22,17 @@ def get_data(exchange: str, pair: str, candle: str):
     df = backtest.get_historical_data(
         pair=pair
     )
-    
-    var_to_drop = ['ignore', 'next_open', 'globalLongShortRatio','topLongShortRatio', 
+    var_to_drop = ['ignore', 'next_open', 'globalLongShortRatio','topLongShortRatio',
         'topLongShortRatioPositions', 'buySellRatio', 'openInterestClose']
-    
     return df.drop(var_to_drop, axis=1)
 
-# Get data
-btc_1h = get_data(exchange='binance', pair='BTCUSDT', candle='1h')
-btc_1d = get_data(exchange='binance', pair='BTCUSDT', candle='1d')
+def test_get_candlestick_name():
+    # Arrange
+    expected_counts = {'Marubozu': 45, 'Doji': 30, 'Spinning Top': 25}
 
+    # Act
+    btc_1d = get_data(exchange='binance', pair='BTCUSDT', candle='1d')
+    result = get_candlestick_name(btc_1d)
 
-from novalabs.utils.indicators import get_candlestick_name
-new = get_candlestick_name(btc_1d)
-new['candlestick_name'].value_counts()
-
-
+    # Assert
+    assert result['candlestick_name'].value_counts().to_dict() == expected_counts

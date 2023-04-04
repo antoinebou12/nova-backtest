@@ -11,7 +11,7 @@ VERSION = package_version[:-1] + str(int(package_version[-1])+1)
 
 with open("README.md", "r") as fh:
     long_description = fh.read()
-    
+
 with open('requirements.txt', 'r') as file:
     requirements = file.read().replace('\n', ' ')
 
@@ -29,6 +29,7 @@ setup(
     install_requires=dependencies,  # Specify your dependencies here
     classifiers=[
         "Programming Language :: Python :: 3",
+        "Programming Language :: Python :: 3.6",
         "License :: OSI Approved :: MIT License",
         "Operating System :: OS Independent",
     ],
